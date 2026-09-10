@@ -8,13 +8,13 @@
       "channel": "stable",
       "summary": "Correct HTTPS stream advertise for portal domains, PM2 media env wiring, panel perf caches, and connection-slot hardening.",
       "changelog": [
-        "player_api advertises https_port 443 for TLS portal/media domains — fixes https://host:80 SSL handshake failures",
-        "Bare LB IP hosts always advertise http; NEXLIFY_MEDIA_ORIGIN / FORCE_LB_IP passed through PM2 sharedPanelEnv",
+        "player_api advertises https_port 443 for TLS portal/media domains — fixes SSL handshake failures",
+        "Bare LB IP hosts always advertise http; NEXLIFY_MEDIA_ORIGIN FORCE_LB_IP passed through PM2 sharedPanelEnv",
         "Dashboard and admin hot paths use shorter TTL caches and lighter catalog queries on large installs",
         "Connection slot accounting and live-auth edge scripts aligned with Redis slot helpers"
       ],
       "fixes": [
-        "darkcdn.site and bladesmedia2.darkcdn.win playback failed when apps used advertised https_port 80",
+        "Some panel hostnames playback failed when apps used advertised https_port 80",
         "Standalone PM2 builds ignored NEXLIFY_MEDIA_* from .env until ecosystem shared env included them",
         "StreamServer protocol https on raw IP made strict clients reject LB certificate",
         "Prisma P2025 noise on connection pulse when rows raced delete/update"
@@ -22,8 +22,7 @@
       "notes": [
         "Portal hostnames can stay Cloudflare-proxied for API; point media DNS-only at the LB when possible.",
         "Re-open IPTV apps after update so server_info picks up new ports."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+      ]
     },
     {
       "version": "2.0.90",
@@ -32,30 +31,29 @@
       "summary": "LB-only live egress, instant Live Connections open/close with correct uptime, offline splash, and a cleaner dashboard bandwidth card.",
       "changelog": [
         "Panel nginx refuses /live /timeshift /movie /series with 502 so bitrate never hairpins the panel NIC",
-        "player_api / M3U / Stalker advertise the load-balancer IP when NEXLIFY_MEDIA_FORCE_LB_IP is set",
+        "player_api M3U Stalker advertise the load-balancer IP when NEXLIFY_MEDIA_FORCE_LB_IP is set",
         "Edge serves offline MPEG-TS splash when upstream is missing instead of plain-text errors",
         "Live-auth always returns backup upstreams so the edge can fail over without must-splice forwards",
         "Live Connections opens and closes promptly (edge connection-end + immediate pulse flush + SSE notify)",
-        "Stream / connection uptime stays continuous — multi-connection lines no longer tear down the first viewer on the same IP",
+        "Stream connection uptime stays continuous — multi-connection lines no longer tear down the first viewer on the same IP",
         "Capacity counts distinct IP+stream sessions, prunes ghost LiveConnection rows (120s stale), and fail-opens on auth timeout",
-        "Dashboard orange card shows LB egress (Live out / NIC cap) only — panel NIC line removed",
+        "Dashboard orange card shows LB egress (Live out NIC cap) only — panel NIC line removed",
         "Main Domains field holds the stream-host pool; LB Domain Name stays a single host or IP"
       ],
       "fixes": [
         "Media still flowing through the panel ~1G path caused buffering under load",
-        "Dead origins could return upstream unavailable / must splice instead of a playable offline splash",
+        "Dead origins could return upstream unavailable must splice instead of a playable offline splash",
         "Opening a second connection on maxConnections≥2 (same household IP) buffered/killed the first stream",
         "Ghost LiveConnection rows inflated capacity and blocked multi-connection lines until prune/reclaim",
-        "HEAD / tiny Range probes while playing could reset Live Connections uptime and disrupt playback",
+        "HEAD tiny Range probes while playing could reset Live Connections uptime and disrupt playback",
         "Dashboard Panel proxy line confused operators after media proxy was already disabled",
         "Browser cache kept showing the old KPI ribbon after hotpatches (immutable chunk filenames)"
       ],
       "notes": [
         "Point stream media hostnames DNS-only at the LB IP. Keep the panel hostname for API/login only.",
-        "Clients pick up the new advertise host on the next playlist / Xtream refresh (re-open the app if needed).",
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.90.tar.gz"
+        "Clients pick up the new advertise host on the next playlist Xtream refresh (re-open the app if needed).",
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.89",
@@ -67,7 +65,7 @@
         "Sticky line-to-LB assignment advertises LB/main pool hostnames (DNS-only to the LB) across Xtream, M3U, and Stalker",
         "Edge stall sweep force-reconnects hung live fans after ~12s of silence and rotates failover",
         "Admin categories use cached lite rows and noCounts for snappy folder/dropdown navigation",
-        "Live Streams Offline / dead / unstable filters match dashboard Probe Failed (probe OR splice failures)"
+        "Live Streams Offline dead unstable filters match dashboard Probe Failed (probe OR splice failures)"
       ],
       "fixes": [
         "Offline filter was empty while dashboard showed dead/unstable splice failures (upstream 522)",
@@ -76,9 +74,8 @@
       ],
       "notes": [
         "Point every stream media hostname DNS-only at the LB IP, not the panel. Clients pick up domain changes on the next Xtream/playlist refresh.",
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.89.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.88",
@@ -91,12 +88,11 @@
         "Rematch 10gbs PANEL_INTERNAL_SECRET so connection-pulse-batch reaches the panel"
       ],
       "fixes": [
-        "Live Connections / online users dropped after 2.0.87 Redis-as-source-of-truth counting"
+        "Live Connections online users dropped after 2.0.87 Redis-as-source-of-truth counting"
       ],
       "notes": [
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.88.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.87",
@@ -106,33 +102,31 @@
       "changelog": [
         "Sidebar and settings clicks show immediately, prefetch the next page, and keep recently visited admin pages warm",
         "Manage Lines paints first then loads the list; Manage Movies no longer extra-redirects",
-        "Live Connections / dashboard counts Redis playback sessions and UTC last-seen, then backfills missing DB rows"
+        "Live Connections dashboard counts Redis playback sessions and UTC last-seen, then backfills missing DB rows"
       ],
       "fixes": [
-        "Admin Dashboard / Add Line / Movies / Settings felt delayed on every click",
+        "Admin Dashboard Add Line Movies Settings felt delayed on every click",
         "Open Connections showed 0 while viewers were still watching via the 10gbs edge"
       ],
       "notes": [
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.87.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.86",
       "date": "2026-09-08",
       "channel": "stable",
-      "summary": "MAG/StbEmu portal URL https://host (no /c/) now loads the IPTV portal instead of a black login page.",
+      "summary": "MAG/StbEmu portal URL (no /c) now loads the IPTV portal instead of a black login page.",
       "changelog": [
-        "STB user-agents hitting / or /login are rewritten to /c/ with no redirect (MAG does not follow 307)",
+        "STB user-agents hitting or /login are rewritten to /c/ with no redirect (MAG does not follow 307)",
         "Nginx internal rewrite for MAG/STBEmu/Infomir user-agents on the panel HTTP vhost"
       ],
       "fixes": [
-        "Black screen when StbEmu/MAG portal is set to https://darkcdn.store instead of https://darkcdn.store/c/"
+        "Black screen when StbEmu/MAG portal is set to instead of"
       ],
       "notes": [
-        "Preferred portal URL is still https://your-panel/c/. The site root is accepted for MAG boxes only."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.86.tar.gz"
+        "Preferred portal URL is still The site root is accepted for MAG boxes only."
+      ]
     },
     {
       "version": "2.0.85",
@@ -148,14 +142,13 @@
         "GET /api/auth/login returns JSON 405 so the login form never shows a blank Method Not Allowed page"
       ],
       "fixes": [
-        "Login failed (405) after a panel rebuild on darkcdn.store",
+        "Login failed (405) after a panel rebuild on Some panel hostnames",
         "Updates pinned to an old git SHA and skipped later panel commits",
         "git reset blocked by immutable scripts/iptv-edge-proxy.mjs"
       ],
       "notes": [
         "To freeze git on a specific SHA, write the SHA to /etc/nexlify/panel-git-ref and touch /etc/nexlify/panel-git-ref.lock."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.85.tar.gz"
+      ]
     },
     {
       "version": "2.0.84",
@@ -174,9 +167,8 @@
         "Updates overlay staying on apply update after the new build was already live"
       ],
       "notes": [
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.84.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.83",
@@ -194,9 +186,8 @@
         "Installer smoke tests added time and RAM pressure on small VPS installs"
       ],
       "notes": [
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.83.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.82",
@@ -206,7 +197,7 @@
       "changelog": [
         "Streaming servers picker keeps the full ordered pool (primary + overflow) and shows used/cap Mbps plus combined viewer capacity (not bonded)",
         "Mass edit, M3U auto-sync, watch folders, and imports save the same server pool",
-        "Load balancer / offline reassign stay inside a stream's selected pool",
+        "Load balancer offline reassign stay inside a stream's selected pool",
         "Channel name refresh cron is live, with provider/bouquet/category scope; M3U jobs and watch folders get pick-and-choose import options",
         "Fingerprint signs panel URLs only (never provider upstreams); optional pt/fp checks; Stream Fingerprinting generate/deactivate writes real tokens; overlay {token} works"
       ],
@@ -214,13 +205,12 @@
         "Saving a stream no longer drops viewers unless the source URL actually changed",
         "Live-only cold start can send TS headers immediately so players get video sooner",
         "Delete/disable/mass-edit labels and dashboard activity no longer look like silent deletes",
-        "Playback fingerprint no longer appends ?fp= to provider URLs; SHA-1 setting was ignored; generate token API was a stub",
+        "Playback fingerprint no longer appends?fp= to provider URLs; SHA-1 setting was ignored; generate token API was a stub",
         "Stream edit modal and server picker were too small to use"
       ],
       "notes": [
-        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.82.tar.gz"
+        "Install or update from Admin → Updates, or with the one-line installer on Some panel hostnames/install."
+      ]
     },
     {
       "version": "2.0.81",
@@ -234,14 +224,13 @@
         "Cron settings clarify Force full auto-sync for huge libraries"
       ],
       "fixes": [
-        "Plex Test/Sync failing when an integration was saved as https://IP:custom-port",
+        "Plex Test/Sync failing when an integration was saved as",
         "Sync stuck on Checking titles already on this panel for large catalogs",
         "Auto-sync disabled/stalled after full-library runs on 100k+ Plex rows"
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.81. Manual Sync remains a full library walk; auto-sync stays recent-only unless Force full is enabled."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.81.tar.gz"
+      ]
     },
     {
       "version": "2.0.80",
@@ -255,14 +244,13 @@
         "Carries forward synthetic EPG, Plex/cron safety, and live fleet hardening from 2.0.79"
       ],
       "fixes": [
-        "Server 45 drifted package.json / dirty git leftovers after partial applies",
-        "Missing .next/standalone package metadata after rebuilds",
+        "Server 45 drifted package.json dirty git leftovers after partial applies",
+        "Missing.next/standalone package metadata after rebuilds",
         "Stale /tmp and panel tmp-* scripts cluttering ops hosts"
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.80. Operator hosts: strip staging with scripts/strip-non-panel-tree.sh after apply."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.80.tar.gz"
+      ]
     },
     {
       "version": "2.0.79",
@@ -283,14 +271,13 @@
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.79. Large Plex libraries: sync manually from Admin → Plex."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.79.tar.gz"
+      ]
     },
     {
       "version": "2.0.78",
       "date": "2026-09-05",
       "channel": "stable",
-      "summary": "XUI-style live: edge fan coalescing, weekly catalog heal, starved-origin failover, and sync that keeps FHD/HD/SD on one pull.",
+      "summary": "live: edge fan coalescing, weekly catalog heal, starved-origin failover, and sync that keeps FHD/HD/SD on one pull.",
       "changelog": [
         "iptv-edge-proxy coalesces FHD/HD/SD variants that share one upstream URL into a single CDN pull",
         "Weekly live fleet heal remaps bad hosts, dedupes exact names, and collapses quality siblings onto one URL",
@@ -305,8 +292,7 @@
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.78. Edge nodes should pull the new iptv-edge-proxy from this release."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.78.tar.gz"
+      ]
     },
     {
       "version": "2.0.77",
@@ -324,8 +310,7 @@
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.77."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.77.tar.gz"
+      ]
     },
     {
       "version": "2.0.76",
@@ -342,8 +327,7 @@
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.76."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.76.tar.gz"
+      ]
     },
     {
       "version": "2.0.75",
@@ -351,7 +335,7 @@
       "channel": "stable",
       "summary": "Offline list ignores stale Viewer edge stamps so false Source-down rows clear.",
       "changelog": [
-        "Offline / repair filters exclude lastProbeError starting with Viewer: (same as dashboard Issues)",
+        "Offline repair filters exclude lastProbeError starting with Viewer: (same as dashboard Issues)",
         "Stale Viewer stamps no longer keep healthy origins in the Offline list"
       ],
       "fixes": [
@@ -359,8 +343,7 @@
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.75."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.75.tar.gz"
+      ]
     },
     {
       "version": "2.0.74",
@@ -370,18 +353,17 @@
       "changelog": [
         "Sources tab probes Primary and Backup separately",
         "Auto-add backup picks show the real provider name (or Direct host) instead of Panel · panel",
-        "Offline / Probe page tries the backup URL whenever primary fails, and clears recovered streams from the list",
+        "Offline Probe page tries the backup URL whenever primary fails, and clears recovered streams from the list",
         "Uptime badge shows Source down when last probe failed instead of a false Live badge"
       ],
       "fixes": [
-        "Could only probe the primary URL on Sources / Preview",
+        "Could only probe the primary URL on Sources Preview",
         "Backup match list did not show which provider the URL came from",
         "Offline filter stayed stale and showed Live + Source down together after probing"
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.74."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.74.tar.gz"
+      ]
     },
     {
       "version": "2.0.73",
@@ -389,7 +371,7 @@
       "channel": "stable",
       "summary": "Sources probe uses the edited URL; auto-match provider M3U backups by channel name; Diagnostics included in the prebuilt.",
       "changelog": [
-        "Sources → Check source / Full check probes the URL in the Primary field, not the previously saved stream URL",
+        "Sources → Check source Full check probes the URL in the Primary field, not the previously saved stream URL",
         "Auto-add backup from providers matches the channel name against provider Xtream/M3U catalogs and panel siblings (prefers a different host)",
         "Admin Diagnostics is included in the Next build so /admin/diagnostics no longer 500s on prebuilt installs"
       ],
@@ -400,8 +382,7 @@
       "notes": [
         "Use Admin → Updates to install v2.0.73.",
         "On memory-heavy panels set NEXLIFY_MAX_MEMORY_RESTART=2400M (or higher) so PM2 does not recycle workers every few minutes."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.73.tar.gz"
+      ]
     },
     {
       "version": "2.0.72",
@@ -409,7 +390,7 @@
       "channel": "stable",
       "summary": "Playback topology, live MPEG-TS contract, split health, and versioned scripts inside the prebuilt update.",
       "changelog": [
-        "Admin → Server: playback topology A local-edge / B remote-splice / C multi-lb — apply, rematch, and pm2-start follow it and never start local iptv-edge on B/C",
+        "Admin → Server: playback topology A local-edge B remote-splice C multi-lb — apply, rematch, and pm2-start follow it and never start local iptv-edge on B/C",
         "Live playlists default to MPEG-TS; HLS only when the client asks and the origin is HLS. LIVE imports are never On demand",
         "Dashboard Issues count origin and splice failures only — viewer zap 502s are not dead sources",
         "Prebuilt tarball ships scripts overlay; apply copies them and refuses a /live/ redirect after health",
@@ -419,14 +400,13 @@
       "fixes": [
         "Update apply could start local iptv-edge and 502-loop MPEG-TS on panel-only hosts",
         "Viewer 502 stamps filled Issues to fix while origins were healthy",
-        "Imported XUI On demand live rows pushed XCIPTV onto local HLS packager",
-        "Prebuilt apply replaced .next but left old edge installers in scripts/"
+        "Imported On demand live rows pushed XCIPTV onto local HLS packager",
+        "Prebuilt apply replaced.next but left old edge installers in scripts"
       ],
       "notes": [
         "Set topology B on panel-only hosts (nginx → remote splice) before the first apply of this release.",
         "Use Admin → Updates to install v2.0.72."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.72.tar.gz"
+      ]
     },
     {
       "version": "2.0.71",
@@ -436,19 +416,18 @@
       "changelog": [
         "Admin line and package forms accept 0 as unlimited max connections",
         "Stream errors lists dead and unstable LIVE sources and full-probe actually drops recovered channels from the dashboard",
-        "Apply uses http://127.0.0.1:13000/api/health instead of https://127.0.0.1",
+        "Apply uses instead of",
         "Login header no longer shows a generic LOGO chip when no custom logo is set"
       ],
       "fixes": [
         "Package pick overwrote a typed max-connections value",
         "Dashboard Issues to fix stayed stale after a successful probe (KPI cache)",
-        "Next apply reported unhealthy because curl used HTTPS against 127.0.0.1",
+        "Next apply reported unhealthy because curl used HTTPS against the media edge",
         "Login header showed a placeholder Logo label"
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.71."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.71.tar.gz"
+      ]
     },
     {
       "version": "2.0.70",
@@ -460,12 +439,11 @@
         "A missing JS chunk after an update reloads the tab once instead of showing Application error"
       ],
       "fixes": [
-        "Application error: a client-side exception has occurred while loading darkcdn.store"
+        "Application error: a client-side exception has occurred while loading Some panel hostnames"
       ],
       "notes": [
         "Use Admin → Updates to install v2.0.70. After install, open the panel once so the new service worker activates. Hard-refresh if an old tab still errors."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.70.tar.gz"
+      ]
     },
     {
       "version": "2.0.69",
@@ -480,10 +458,9 @@
         "MAG portal URL with trailing slash returned 308 and the box never loaded BACK/CH+ JavaScript"
       ],
       "notes": [
-        "Use Admin → Updates to install v2.0.69. Reboot the MAG or reload https://your-domain/c/ after the panel restarts.",
-        "Darkcdn already had the nginx /c/ rewrite; this release puts the same behavior in the compiled app."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.69.tar.gz"
+        "Use Admin → Updates to install v2.0.69. Reboot the MAG or reload after the panel restarts.",
+        "custom already had the nginx /c/ rewrite; this release puts the same behavior in the compiled app."
+      ]
     },
     {
       "version": "2.0.68",
@@ -505,8 +482,7 @@
       "notes": [
         "Use Admin → Updates to install v2.0.68. If the last update failed with @prisma/client, run bash scripts/ensure-prisma-client.sh on the server first, then retry.",
         "After this panel restarts, reboot MAG boxes or reload the portal URL so they fetch a new /c/ page."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.68.tar.gz"
+      ]
     },
     {
       "version": "2.0.67",
@@ -527,8 +503,7 @@
       "notes": [
         "Use Admin → Updates to install v2.0.67. After the panel restarts, reboot the MAG or reload the portal URL so it fetches a new /c/ page.",
         "This is the MAG remote-control fix. v2.0.66 remains the honest-update and Live Connections release."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.67.tar.gz"
+      ]
     },
     {
       "version": "2.0.66",
@@ -537,11 +512,11 @@
       "summary": "Updates only succeed when the running build actually changes. Reseller Live Connections list the correct line without a long delay. Line username/password minimum of 3 is enforced on Add/Edit Line.",
       "changelog": [
         "In-panel Update no longer reports success just because package.json already says the latest version",
-        "Same-version Update waits for a real new BUILD_ID / finished swap instead of clearing the progress bar immediately",
+        "Same-version Update waits for a real new BUILD_ID finished swap instead of clearing the progress bar immediately",
         "Prebuilt download/extract/apply share one tarball file so split steps cannot miss the download",
         "Reseller Live Connections include sub-reseller lines, refresh as soon as a viewer starts, and show the line username (not a shared stream clock)",
         "Add Line and Edit Line use the Security → Line credentials minimum length (lowest 3)",
-        "Xtream/XUI line create and edit use the same minimum instead of a hidden 6-character floor"
+        "Xtream/ line create and edit use the same minimum instead of a hidden 6-character floor"
       ],
       "fixes": [
         "Updating while already on the feed latest no longer pretends the UI changed",
@@ -554,14 +529,13 @@
       "notes": [
         "Use Admin → Updates to install v2.0.66 from the published tarball. If you were already on v2.0.65 with an old UI, this is the version that actually replaces the running app.",
         "Set Minimum username/password length to 3 under Admin → Settings → Security, then save. New and edited lines follow that value."
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.66.tar.gz"
+      ]
     },
     {
       "version": "2.0.65",
       "date": "2026-09-03",
       "channel": "stable",
-      "summary": "In-panel Update installs this numbered tarball from nexlify.live. Instant Live Connections, watch-folder bouquets, clearer dashboard links, and probes that no longer mark healthy channels dead.",
+      "summary": "In-panel Update installs this numbered tarball from Some panel hostnames. Instant Live Connections, watch-folder bouquets, clearer dashboard links, and probes that no longer mark healthy channels dead.",
       "changelog": [
         "In-panel Update downloads the published tarball for this version instead of compiling GitHub main",
         "GitHub main is fallback only, or if PANEL_UPDATE_PREFER_GIT=1 is set",
@@ -594,8 +568,7 @@
       "notes": [
         "Existing M3U watch folders create bouquets from group-title on the next scan unless you turn Auto bouquet off",
         "Use Admin → Updates on the panel to install v2.0.65 from the published tarball"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+      ]
     },
     {
       "version": "2.0.64",
@@ -632,8 +605,7 @@
       ],
       "notes": [
         "Existing M3U watch folders create bouquets from group-title on the next scan unless you turn Auto bouquet off"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+      ]
     },
     {
       "version": "2.0.63",
@@ -653,8 +625,7 @@
         "Fewer random live drops from overly tight fan teardown and client-lag limits",
         "License startup no longer treats a configured demo or exempt host as unlicensed",
         "Plex sync no longer dies when Postgres closes a connection mid-job"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+      ]
     },
     {
       "version": "2.0.62",
@@ -672,27 +643,26 @@
       "fixes": [
         "Opening Manage Streams no longer probes every visible live row",
         "Stale /root/.pm2/pm2.pid left Type=forking pm2-root inactive after an LB reboot",
-        "Recovering Main via SSH could resurrect panel IPTV edge and fight nginx on :8080",
+        "Recovering Main via SSH could resurrect panel IPTV edge and fight nginx on:8080",
         "Geo/least-loaded picker could still place new live channels on Main"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-2.0.62.tar.gz"
+      ]
     },
     {
       "version": "2.0.60",
       "date": "2026-08-30",
       "channel": "stable",
-      "summary": "Collapsed dashboard chips, safer catalog names, XUI-style per-stream Sources, faster What’s on now, and a durable Plex / Postgres pool.",
+      "summary": "Collapsed dashboard chips, safer catalog names, per-stream Sources, faster What’s on now, and a durable Plex Postgres pool.",
       "changelog": [
         "Dashboard quick-action chips stay hidden until opened",
         "EPG now-playing is stored without renaming the catalog channel name",
         "New live streams default to LIVE relay instead of on-demand",
         "Duplicate-name cleanup prefers LIVE rows with logos and drops iconless on-demand copies",
         "What’s on now reads current EPG titles with a short cache instead of scanning every live row",
-        "Add / edit stream Sources tab is primary + backup URLs (XUI-style); host replace stays on Manage Streams",
+        "Add edit stream Sources tab is primary + backup URLs ; host replace stays on Manage Streams",
         "Sources is no longer a Live TV sidebar item",
         "Live-auth prefers public viewer IPs from CF-Connecting-IP, X-Real-IP, and X-Forwarded-For",
         "Prisma limits connections per worker; Plex library sync updates titles one at a time",
-        "Remote-live hosts keep nginx on :8080 to 10gbs so a panel rebuild cannot drop playback",
+        "Remote-live hosts keep nginx on:8080 to 10gbs so a panel rebuild cannot drop playback",
         "What’s on now, public LB status, and line QoE on tickets"
       ],
       "fixes": [
@@ -711,7 +681,7 @@
       "version": "2.0.59",
       "date": "2026-08-30",
       "channel": "stable",
-      "summary": "Cleaner dark dashboard, working list pagination, XUI Sources page, M3U Review on-demand + server assign, and QoE capacity.",
+      "summary": "Cleaner dark dashboard, working list pagination, Sources page, M3U Review on-demand + server assign, and QoE capacity.",
       "changelog": [
         "Admin dashboard keeps hero KPIs and per-server cards; extra widgets move under More",
         "List pagination uses Previous/Next so streams, categories, and similar lists can change page",
@@ -728,17 +698,17 @@
       "version": "2.0.58",
       "date": "2026-08-29",
       "channel": "stable",
-      "summary": "Live 3D connection globe, XUI-style stream Advanced controls, and faster MPEG-TS start.",
+      "summary": "Live 3D connection globe, stream Advanced controls, and faster MPEG-TS start.",
       "changelog": [
         "Dashboard connection map is a real-time rotating 3D globe with live viewer dots and country counts",
-        "Stream Advanced uses XUI-style toggles plus recording, direct stream, FPS restart, SID, delay, and cookie fields",
+        "Stream Advanced uses toggles plus recording, direct stream, FPS restart, SID, delay, and cookie fields",
         "Agent ffmpeg starts with genpts, low_delay, and the channel on-demand probesize so zapping and first picture are faster",
         "Loopback login probes are no longer blocked by bot stealth; installer publish works from a sparse vendor checkout"
       ],
       "fixes": [
-        "Bare curl to :13000/login returned a stealth 404 during health checks",
+        "Bare curl to:13000/login returned a stealth 404 during health checks",
         "Vendor publish failed when /home/nexlify lacked marketing-drop-in",
-        "Windows tarball parity checks failed on pipefail SIGPIPE and ./ tar paths"
+        "Windows tarball parity checks failed on pipefail SIGPIPE and./ tar paths"
       ]
     },
     {
@@ -790,7 +760,7 @@
         "Line connection caps no longer stop playback (treated as unlimited)",
         "Country live folders stay separate so UK and USA Entertainment are not merged",
         "Playable bouquet channels that were inactive are listed again",
-        "Broken :// stream URLs stay out of Xtream and M3U lists",
+        "Broken:// stream URLs stay out of Xtream and M3U lists",
         "Load-test defaults to HEAD so tests do not open real upstreams"
       ],
       "fixes": [
@@ -809,12 +779,12 @@
         "Emby/Jellyfin: library picker, skip-existing, transcode profile, LB defaults, and shared auto-sync cron",
         "Installer seeds bundledFeaturePacks: true; marketplace shows included feature packs by default",
         "Load-test scripts: 10 public HLS streams + 5000 lines without touching IPTV providers",
-        "Stream probe uses VLC UA and rejects empty HEAD; malformed ://host:/ URLs are repaired"
+        "Stream probe uses VLC UA and rejects empty HEAD; malformed://host:/ URLs are repaired"
       ],
       "fixes": [
         "Admin notifications and EPG calendar pagination crashes on large datasets",
         "Duplicate Young Dracula stream with junk URL could fail playback while probe showed green",
-        "JSON panel backups piled up beside SQL dumps under backups/pg/"
+        "JSON panel backups piled up beside SQL dumps under backups/pg"
       ]
     },
     {
@@ -823,7 +793,7 @@
       "channel": "stable",
       "summary": "IPTV edge owns playback bytes; dashboard shows real NIC ingress vs egress.",
       "changelog": [
-        "IPTV edge proxies live/HLS at :8080 — panel workers auth only, not video pipes",
+        "IPTV edge proxies live/HLS at:8080 — panel workers auth only, not video pipes",
         "XCIPTV/Smarters get instant edge HLS playlists and cached player_api catalog",
         "Dashboard bandwidth KPI uses real NIC rx/tx (provider ingress vs viewer egress)",
         "live-auth returns upstream URLs to edge; dead upstream probe skips bad provider URLs",
@@ -831,7 +801,7 @@
       ],
       "fixes": [
         "Streams dropped under load when Next.js workers proxied tens of MB/s per viewer",
-        "XCIPTV playlist refresh was slow and .m3u8 zaps timed out on panel HLS packager",
+        "XCIPTV playlist refresh was slow and.m3u8 zaps timed out on panel HLS packager",
         "Dashboard input and output Mbps showed the same estimated viewer number"
       ]
     },
@@ -843,7 +813,7 @@
       "changelog": [
         "Health check only verifies the app, database, and Redis",
         "Safe restart warms /login and /api/health instead of player_api.php on Next",
-        "REDIS_URL localhost is rewritten to 127.0.0.1 so live-auth does not wait on IPv6"
+        "REDIS_URL localhost is rewritten to the media edge so live-auth does not wait on IPv6"
       ],
       "fixes": [
         "Large catalogs made Next workers hang so the panel went blank and streams stopped",
@@ -886,7 +856,7 @@
       "channel": "stable",
       "summary": "Manage Streams Mode column, and Tailwind installed on production rebuilds.",
       "changelog": [
-        "Manage Streams shows catalog Mode (Live / On demand / Catch-up) next to Uptime",
+        "Manage Streams shows catalog Mode (Live On demand Catch-up) next to Uptime",
         "tailwindcss, postcss, and autoprefixer are production dependencies so NODE_ENV=production installs still build",
         "Panel build reinstalls those CSS tools if they are missing before next build"
       ],
@@ -899,10 +869,10 @@
       "version": "2.0.47",
       "date": "2026-08-26",
       "channel": "stable",
-      "summary": "Per-server live vs VOD counts, XUI-style server add, and accurate load metrics.",
+      "summary": "Per-server live vs VOD counts, server add, and accurate load metrics.",
       "changelog": [
         "Dashboard server cards show assigned live channels and movies/TV series separately",
-        "Add server matches XUI One: SSH test, HTTP/HTTPS ports, hostname geo flags",
+        "Add server matches One: SSH test, HTTP/HTTPS ports, hostname geo flags",
         "Load balancer uses live connections, not catalog size; idle leftover ffmpeg is stopped",
         "Dashboard bandwidth is viewer-based when nobody is watching"
       ],
@@ -936,7 +906,7 @@
         "Documented admin API and WHMCS module for create line, renew, and add_credits",
         "Reseller and package profit % markup on credit cost when selling lines",
         "Customer portal copy Xtream/M3U/MAG and watch in browser; public /shop PayPal checkout",
-        "Rclone/S3 VOD storage settings; compact XUI-style sidebar and dashboard shortcuts",
+        "Rclone/S3 VOD storage settings; compact sidebar and dashboard shortcuts",
         "Faster Smarters All and XCIPTV catalog updates via gzip blobs and parallel cache warm"
       ],
       "fixes": [
@@ -949,14 +919,14 @@
       "channel": "stable",
       "summary": "Smarters All catalogs, TMDB VOD posters/info, and TV Series category vs bouquet fix.",
       "changelog": [
-        "IPTV Smarters All treats category_id * / all / -1 as the full live, movie, and series lists",
+        "IPTV Smarters All treats category_id * all -1 as the full live, movie, and series lists",
         "Xtream category folders export with parent_id 0 so nested trees no longer hide All",
         "TMDB backfill fills movie and series posters plus plot/cast (cron + one-shot script)",
         "Duplicate TV Series category (same name as the bouquet) is moved to Other and no longer recreated",
         "Plex auto-sync cron logs skips; 429 retries on TMDB HTTP"
       ],
       "fixes": [
-        "Smarters All showed no live / no movies found / no series found because * resolved as a missing category",
+        "Smarters All showed no live no movies found no series found because * resolved as a missing category",
         "Plex titles sat in a TV Series category inside the TV Series bouquet"
       ]
     },
@@ -988,21 +958,21 @@
       ],
       "fixes": [
         "host-metrics used executeRawUnsafe instead of parameterized Prisma.sql",
-        "Geo lookup used plaintext HTTP ip-api.com"
+        "Geo lookup used plaintext HTTP Some panel hostnames"
       ]
     },
     {
       "version": "2.0.41",
       "date": "2026-08-24",
       "channel": "stable",
-      "summary": "XUI-style stream forms, VOD media info in apps, database backup on by default.",
+      "summary": "stream forms, VOD media info in apps, database backup on by default.",
       "changelog": [
-        "Live / movie / series edit and add-live channel use XUI.one tab layout (Details | EPG/Information | Advanced | Server)",
+        "Live movie series edit and add-live channel use tab layout (Details | EPG/Information | Advanced | Server)",
         "Database backup (PostgreSQL gzip) enabled by default at 04:00 UTC; cron log shows db_backup instead of pg_dump",
         "Scheduled database backup respects cron schedule and uses secure pg-dump helper (no DATABASE_URL on shell)",
         "VOD Information tab with TMDB fetch for movies and TV series on edit stream",
-        "get_vod_info / get_series_info parse NEXLIFY_VOD metadata for XCIPTV/Smarters plot and cast",
-        "Plex VOD sorted into Movies / TV Series bouquets with repair on sync"
+        "get_vod_info get_series_info parse NEXLIFY_VOD metadata for XCIPTV/Smarters plot and cast",
+        "Plex VOD sorted into Movies TV Series bouquets with repair on sync"
       ],
       "fixes": [
         "Database backup ran every hour when enabled instead of once daily on schedule",
@@ -1015,8 +985,8 @@
       "channel": "stable",
       "summary": "VOD media info in apps, Plex sorted into Movies/TV Series bouquets, and IPTV+TMDB poster fill.",
       "changelog": [
-        "get_vod_info / get_series_info read legacy NEXLIFY_VOD metadata and TMDB field aliases (plot, cast, director, genre, rating)",
-        "Plex movies and TV episodes go into Movies / TV Series bouquets and categories; existing Plex rows are repaired on sync",
+        "get_vod_info get_series_info read legacy NEXLIFY_VOD metadata and TMDB field aliases (plot, cast, director, genre, rating)",
+        "Plex movies and TV episodes go into Movies TV Series bouquets and categories; existing Plex rows are repaired on sync",
         "One-shot repair script rewrites stored metadata, relinks bouquets, and optionally TMDB-fills empty rows",
         "Hosted-by-provider: tick + existing URL is enough without wiring every stream through the provider catalog",
         "Fill missing posters from IPTV provider catalogs first, then TMDB (auto-logos + mass edit + cron)"
@@ -1050,14 +1020,14 @@
       "channel": "stable",
       "summary": "Smarters/XCIPTV VOD playback, Xtream catalog speed, and panel-migration skip-existing that only adds missing rows.",
       "changelog": [
-        "Smarters file VOD: relative 302 from .m3u8 to the real mkv/mp4, with HTTP 206 Range",
+        "Smarters file VOD: relative 302 from.m3u8 to the real mkv/mp4, with HTTP 206 Range",
         "XCIPTV: catalogs stay usable from disk cache, warm live/VOD/series in parallel, gzip listings",
         "Panel migration: skip-existing matches stream URLs and pending placeholders, adds missing streams/lines/bouquet links only",
         "Preview warns when SQL dump rows cannot be mapped so imports are not silently incomplete",
         "Release feed latestVersion matches the installed panel (was stuck on 2.0.31)"
       ],
       "fixes": [
-        "Smarters movies/series not playing when the app requested .m3u8 for a file source",
+        "Smarters movies/series not playing when the app requested.m3u8 for a file source",
         "XCIPTV Update Content failing or hanging on the first catalog pull",
         "Re-uploading the same SQL dump overwrote existing streams instead of adding only new rows"
       ]
@@ -1090,7 +1060,7 @@
         "Categories: remove duplicate streams with the same display name",
         "M3U auto-sync refreshes series episode SxxExx metadata and VOD names on URL match",
         "Provider stats show Provider X/Y conns (upstream active connections) vs Panel conns",
-        "Private GitHub: fall back to nexlify.live tarball when git fetch fails; PANEL_UPDATE_PREFER_TARBALL option"
+        "Private GitHub: fall back to Some panel hostnames tarball when git fetch fails; PANEL_UPDATE_PREFER_TARBALL option"
       ],
       "fixes": [
         "Panel updates no longer stuck on git pull when GitHub is private or unreachable"
@@ -1120,11 +1090,11 @@
       "summary": "Fix IPTV playback blocked on edge (HLS/m3u8) when connection slots were double-counted.",
       "changelog": [
         "Count max connections by distinct streams, not IP×stream pairs",
-        "Treat loopback (127.0.0.1) IPs as anonymous so internal probes do not consume viewer slots",
+        "Treat loopback (the media edge) IPs as anonymous so internal probes do not consume viewer slots",
         "Edge HLS (.m3u8) auth no longer returns 403 while panel direct playback works"
       ],
       "fixes": [
-        "Streams not playing via port 80 / ExoPlayer HLS while MPEG-TS appeared intermittent",
+        "Streams not playing via port 80 ExoPlayer HLS while MPEG-TS appeared intermittent",
         "Duplicate live connection rows from localhost probes blocking max-connection lines"
       ]
     },
@@ -1179,7 +1149,7 @@
       "summary": "Fix false An update is already running when starting panel update.",
       "changelog": [
         "pgrep process detection ignores pgrep/bash wrapper false matches",
-        "Stale .update.lock and .update-in-progress markers no longer block new updates without a live worker",
+        "Stale.update.lock and.update-in-progress markers no longer block new updates without a live worker",
         "Clear stuck update now removes the lock file and scoped update worker processes"
       ],
       "fixes": [
@@ -1221,11 +1191,11 @@
       "summary": "Fix Updates page stuck on Updating with no job running.",
       "changelog": [
         "Update-running detection requires an active job/lock/marker before treating worker PIDs as in-flight",
-        "Orphan panel-update-background / apply-panel-fast-update processes are killed when no update job exists"
+        "Orphan panel-update-background apply-panel-fast-update processes are killed when no update job exists"
       ],
       "fixes": [
         "Settings → Updates showed Updating… forever after a failed or manual SSH update left orphan worker processes",
-        "findUpdateWorkerPid returned true without a .update-progress.json job, blocking new in-panel updates"
+        "findUpdateWorkerPid returned true without a.update-progress.json job, blocking new in-panel updates"
       ]
     },
     {
@@ -1236,7 +1206,7 @@
       "changelog": [
         "Notifications inbox: select all, clear all, mark all read, and per-user delete (admin + reseller)",
         "Reseller tickets: select all and bulk delete own tickets; tickets/notifications scoped per account",
-        "User groups: Group type (Admin / Reseller / Sub-reseller), dedupe duplicate sub-reseller groups, sub-reseller username admin",
+        "User groups: Group type (Admin Reseller Sub-reseller), dedupe duplicate sub-reseller groups, sub-reseller username admin",
         "Reserved panel usernames (admin, root, etc.) — sub-resellers can no longer hijack admin login",
         "EPG sync: flexible XMLTV parser (single quotes, CDATA), no Brotli fetch mismatch, longer import timeout",
         "Marketing site announcement banner centered with brand gradient styling"
@@ -1269,16 +1239,16 @@
       "changelog": [
         "HLS segment relay accepts CDN host variants (XCIPTV/TiviMate); no client-direct provider URLs when panel relay fails",
         "IPTV edge falls back to Next.js on 401/403/407; connection pulse reports edge splice throughput for Live Connections quality",
-        "Live Connections Output derived from request path (.ts → MPEGTS, .m3u8 → HLS); quality scoring uses pulse bytes and fresh lastSeen",
+        "Live Connections Output derived from request path (.ts → MPEGTS,.m3u8 → HLS); quality scoring uses pulse bytes and fresh lastSeen",
         "get.php m3u_plus streams LIVE+VOD in one pass (exclude SERIES by default); XMLTV export cached 5 min with optimized SQL",
-        "player_api EPG (get_short_epg / get_simple_data_table) resolves epg_channel_id consistently with catalog",
+        "player_api EPG (get_short_epg get_simple_data_table) resolves epg_channel_id consistently with catalog",
         "PM2 re-register when nexlify max_memory_restart is under 2GB (fixes smoke/catalog OOM at 700M)",
         "Smoke tests use BBC One for live HLS, ranged probes for series VOD, shared M3U prefix, and panel port from .env"
       ],
       "fixes": [
         "XCIPTV all streams failed (HLS relay 400 Bad relay target; CDN segment URLs differ from master host)",
         "Live HLS fell back to raw provider URLs players cannot reach off-panel",
-        "Edge .ts splice returned 407 with no Next.js fallback",
+        "Edge.ts splice returned 407 with no Next.js fallback",
         "Live Connections Quality always Poor and Output showed HLS for MPEG-TS/VLC traffic",
         "Smoke test crashed panel at Step 4 when PM2 700M memory cap was exceeded loading 35k+ VOD twice",
         "get.php double-fetched every stream batch and included SERIES (~200MB playlists, 25s+ exports)",
@@ -1292,10 +1262,10 @@
       "channel": "stable",
       "summary": "Fleet GitHub deploy keys, reliable panel updates/rollback, native HLS startup, EPG sync UX, and playback security hardening.",
       "changelog": [
-        "Fleet GitHub deploy key is fetched from nexlify.live on every panel update so customer VPS installs can git pull over SSH without manual key setup",
+        "Fleet GitHub deploy key is fetched from Some panel hostnames on every panel update so customer VPS installs can git pull over SSH without manual key setup",
         "Panel update rollback runs post-pull build steps and PM2 restart; background update job reports git fetch progress and clears stale rollback refs",
-        "Native HLS relay serves real finite segments (no EXTINF:-1 live manifest); instant XUI EVENT playlists skip stale on-disk ffmpeg when upstream is already HLS",
-        "Live playback aligned with XUI: faster zap, VLC user-agent failover, http/https upstream retry, and XCIPTV-compatible native HLS paths",
+        "Native HLS relay serves real finite segments (no EXTINF:-1 live manifest); instant EVENT playlists skip stale on-disk ffmpeg when upstream is already HLS",
+        "Live playback aligned with: faster zap, VLC user-agent failover, http/https upstream retry, and XCIPTV-compatible native HLS paths",
         "EPG force-sync shows progress; panel clock and programme times respect 12h/24h and timezone settings; mobile web player layout improvements",
         "Connection capacity counts same-IP multi-stream sessions correctly; live route uses full playback guard (license, line limits, geo)",
         "HLS edge relay blocks private/reserved IPs and same-host SSRF; malformed XMLTV dates fail parse instead of silently shifting EPG"
@@ -1321,16 +1291,16 @@
       "changelog": [
         "Natural-language Prisma is allowlisted with secret-field denylist and forced take<=50",
         "Next 15.5.21 with Server Action body cap 100mb and middleware/proxy 512mb",
-        "Admin stream proxy is POST-token + SSRF allowlist; disaster-recovery paths confined to backups/",
+        "Admin stream proxy is POST-token + SSRF allowlist; disaster-recovery paths confined to backups",
         "PanelUser.passwordPlain is no longer persisted; nodemailer 7.0.11",
         "Exclusive wx job locks and atomic JSON for update/migrate/backup; stale LiveConnection rows are deleted",
         "Mutation routes parse JSON safely; builds fail on tsc (ignoreBuildErrors false)",
         "HLS ffmpeg stays in the nexlify-hls daemon — Next no longer falls back to in-process packager when the daemon is healthy",
-        "Movies/series .m3u8 rewrite native provider HLS immediately instead of waiting on ffmpeg",
+        "Movies/series.m3u8 rewrite native provider HLS immediately instead of waiting on ffmpeg",
         "MPEGTS remux starts with a tiny probesize and reuses on-disk HLS when already packed (VLC/Exo get 0x47 bytes faster)",
         "Live MPEG-TS/HLS play with VLC UA, video/mp2t and application/x-mpegURL for Exo/VLC/Smarters/XCIPTV",
         "Movies/series direct_source defaults to the provider URL; panel /movie and /series still proxy with Range when direct play is off",
-        "Xtream catalogs expose updated_at / last_modified so XCIPTV and IPTV Smarters refresh quickly"
+        "Xtream catalogs expose updated_at last_modified so XCIPTV and IPTV Smarters refresh quickly"
       ],
       "fixes": [
         "Open Prisma AI queries, SSRF stream proxy, plaintext panel passwords, and unbounded upload bodies",
@@ -1346,14 +1316,14 @@
       "version": "2.0.15",
       "date": "2026-08-17",
       "channel": "stable",
-      "summary": "XUI/NXT on-disk HLS daemon, timeshift playback, faster VOD, Updates no longer stuck at 60%.",
+      "summary": "on-disk HLS daemon, timeshift playback, faster VOD, Updates no longer stuck at 60%.",
       "changelog": [
-        "ffmpeg HLS restream runs in a PM2 nexlify-hls daemon writing /var/lib/nexlify/hls — outside the Next process like XUI/NXT",
+        "ffmpeg HLS restream runs in a PM2 nexlify-hls daemon writing /var/lib/nexlify/hls — outside the Next process like",
         "On-demand and created channels start that restream; transcode profiles persist and apply to live transcode mode",
         "Xtream /timeshift/user/pass/duration/start/id.ts catch-up delivery (local archive or provider timeshift URL)",
-        "Movies/series fetch with VLC UA; .m3u8 VOD is packaged to real HLS segments",
+        "Movies/series fetch with VLC UA;.m3u8 VOD is packaged to real HLS segments",
         "Stream review, DVR record rules, logo resize, Plex settings, MAG events, and player modules are real pages",
-        "Updates: leftover .next.staging no longer keeps the bar running at 60% after PM2 swap"
+        "Updates: leftover.next.staging no longer keeps the bar running at 60% after PM2 swap"
       ],
       "fixes": [
         "Panel Updates stuck at 60% after a successful restart",
@@ -1370,10 +1340,10 @@
       "summary": "Smarters HLS v3 playlists + MPEGTS VLC UA so PC/phone stop erroring.",
       "changelog": [
         "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF) — ffmpeg v6/independent_segments and TD 2 with EXTINF 2.04 broke ExoPlayer",
-        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT (absolute http://IP URLs failed when Smarters used hostname or :8080)",
+        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like (absolute URLs failed when Smarters used hostname or:8080)",
         "Local packager uses 4s segments, no independent_segments, unread ffmpeg stderr is discarded so Next does not freeze",
         "MPEGTS /live/*.ts now fetches upstream with VLC user-agent — Smarters UA is blocked by many providers",
-        "Client-direct HLS fallback is only used for real XUI .m3u8 sources, not guessed .m3u8 suffixes that 404"
+        "Client-direct HLS fallback is only used for real.m3u8 sources, not guessed.m3u8 suffixes that 404"
       ],
       "fixes": [
         "IPTV Smarters PC/mobile HLS playback error (invalid playlist + wrong segment host)",
@@ -1389,7 +1359,7 @@
       "changelog": [
         "Local TS→HLS packager no longer uses append_list/delete_segments (those wrote EXT-X-DISCONTINUITY and 404'd old segments)",
         "First HLS segment is 2s, independent, and DISCONTINUITY tags are stripped before they reach IPTV Smarters",
-        "Provider .m3u8 from XUI stream_source is still preferred; if this server gets empty HTML, the player is given the provider playlist so the phone/PC IP can fetch it",
+        "Provider.m3u8 from stream_source is still preferred; if this server gets empty HTML, the player is given the provider playlist so the phone/PC IP can fetch it",
         "ffmpeg is not started on empty HTML/404 pages — those sources fail over in milliseconds instead of an 8–10s packager timeout",
         "Update worker resolves tsx from node_modules first so PM2's thin PATH no longer exits 127",
         "Background worker no longer calls getPanelServerSettingsSafe (CJS dynamic import left it undefined)"
@@ -1406,12 +1376,12 @@
       "version": "2.0.12",
       "date": "2026-08-17",
       "channel": "stable",
-      "summary": "Smarters HLS uses provider .m3u8 like XUI — faster start, no freeze.",
+      "summary": "Smarters HLS uses provider.m3u8 like — faster start, no freeze.",
       "changelog": [
-        "HLS output requests the XUI/Xtream .m3u8 container on the same stream_source before local remux",
+        "HLS output requests the /Xtream.m3u8 container on the same stream_source before local remux",
         "Upstream HLS is fetched with a VLC user-agent — Smarters UA is blocked by many providers",
         "Shared on-demand ffmpeg packager per stream (not per line) with 10-minute idle and 1-segment start",
-        "Extra XUI stream_source URLs stored in bitrates are tried as failover"
+        "Extra stream_source URLs stored in bitrates are tried as failover"
       ],
       "fixes": [
         "IPTV Smarters HLS slow channel load (waited for local TS remux instead of provider HLS)",
@@ -1425,14 +1395,14 @@
       "channel": "stable",
       "summary": "Real HLS segments for IPTV Smarters — MPEG-TS is packaged into playable m3u8.",
       "changelog": [
-        "Live .m3u8 now ffmpeg-packages MPEG-TS into real HLS segments (seg0.ts, seg1.ts) instead of wrapping an infinite .ts URL",
-        "Xtream allowed_output_formats is m3u8/ts/rtmp (no hls token) so Smarters requests .m3u8",
+        "Live.m3u8 now ffmpeg-packages MPEG-TS into real HLS segments (seg0.ts, seg1.ts) instead of wrapping an infinite.ts URL",
+        "Xtream allowed_output_formats is m3u8/ts/rtmp (no hls token) so Smarters requests.m3u8",
         "Live get_live_streams direct_source is empty so Smarters builds HLS URLs from stream_id",
         "HLS relay segment URLs are path-based (no query string) for Smarters compatibility"
       ],
       "fixes": [
         "IPTV Smarters HLS output failed on every channel (PC and phone) — ExoPlayer cannot play a live MPEG-TS as one HLS segment",
-        "direct_source always pointed at .ts so HLS mode still used MPEG-TS URLs"
+        "direct_source always pointed at.ts so HLS mode still used MPEG-TS URLs"
       ]
     },
     {
@@ -1457,12 +1427,12 @@
       "summary": "Smarters faster HLS channel start + marketing favicon cache-bust fix.",
       "changelog": [
         "HLS manifest for native MPEG-TS channels uses EXT-X-VERSION 3 + finite EXTINF for Smarters PC/phone compatibility",
-        "Panel pre-warms upstream when clients fetch .m3u8 so the follow-up .ts segment connects faster",
+        "Panel pre-warms upstream when clients fetch.m3u8 so the follow-up.ts segment connects faster",
         "Marketing site favicon moved to /nexlify-favicon.ico with version query to bypass Cloudflare stale cache"
       ],
       "fixes": [
         "Slow channel loading in IPTV Smarters HLS mode (two-step m3u8 then ts)",
-        "nexlify.live favicon stuck on old gradient icon due to 10-year Cloudflare edge cache on /favicon.ico"
+        "Some panel hostnames favicon stuck on old gradient icon due to 10-year Cloudflare edge cache on /favicon.ico"
       ]
     },
     {
@@ -1491,13 +1461,13 @@
       "summary": "Smarters HLS fix for MPEG-TS channels, live connection quality + watching column, update guidance.",
       "changelog": [
         "Live `.m3u8` on native MPEG-TS upstreams now returns a real HLS playlist (points at `.ts`) instead of raw TS bytes",
-        "Live Connections shows the channel being watched and a realistic quality % (green / orange / red)",
-        "server_info no longer advertises 127.0.0.1 when env has the public panel IP",
+        "Live Connections shows the channel being watched and a realistic quality % (green orange red)",
+        "server_info no longer advertises the media edge when env has the public panel IP",
         "Live playback enforces per-line User-Agent allow/deny lists",
         "Updates page explains that panel-proxied streams briefly interrupt on restart"
       ],
       "fixes": [
-        "IPTV Smarters HLS mode failed on MPEG-TS-only channels (got video/mp2t on .m3u8 URLs)",
+        "IPTV Smarters HLS mode failed on MPEG-TS-only channels (got video/mp2t on.m3u8 URLs)",
         "Live Connections quality column was a static placeholder dot"
       ]
     },
@@ -1538,9 +1508,9 @@
       "channel": "stable",
       "summary": "Reseller tickets: Report Channels, New Channels, Movies, TV Series — counted on admin dashboard KPIs.",
       "changelog": [
-        "Reseller Create Ticket: Report Channels, New Channels, Movies, TV Series / Episodes",
+        "Reseller Create Ticket: Report Channels, New Channels, Movies, TV Series Episodes",
         "Movies and TV Series ask Report a problem vs Request new content",
-        "Admin dashboard User Reported Channels and New Channels Add Request show Channels / Movies / TV Series breakdowns",
+        "Admin dashboard User Reported Channels and New Channels Add Request show Channels Movies TV Series breakdowns",
         "Tickets use structured subjects ([Report Channels], [New Movies], …) so KPIs stay accurate"
       ],
       "fixes": [
@@ -1551,7 +1521,7 @@
       "version": "2.0.3",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Clean Manage Bouquets: remove category-named orphans; add Live TV / Movies / TV Series / XXX / International packages; stop M3U recreating category bouquets.",
+      "summary": "Clean Manage Bouquets: remove category-named orphans; add Live TV Movies TV Series XXX International packages; stop M3U recreating category bouquets.",
       "changelog": [
         "Removed hundreds of category-named orphan bouquets (UK | Entertainment, US | Locals, …) from Manage Bouquets",
         "Package bouquets now include Live TV, Movies, TV Series, XXX, USA, International (plus existing UK/VOD/country packages)",
@@ -1575,12 +1545,12 @@
         "load-balancer uses streamServer; source-failover uses streamUrl",
         "Removed invalid lucide Sync import on EPG manage page",
         "Fixed mass-edit status/entity, watch-output/restream-logs includes without fake relations",
-        "Portal login / disconnect tolerate missing client IP"
+        "Portal login disconnect tolerate missing client IP"
       ],
       "fixes": [
         "TypeScript build blocked by 68 errors across panel APIs and libs",
         "getSessionPolicy Prisma select of missing Line fields",
-        "prisma.server / Stream.sourceUrl schema mismatches"
+        "prisma.server Stream.sourceUrl schema mismatches"
       ]
     },
     {
@@ -1605,19 +1575,19 @@
       "version": "2.0.0",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Stream save no longer sticks; Auto EPG from providers; Access Output on lines (XUI [1,2,3] fixed); Add Stream codec defaults.",
+      "summary": "Stream save no longer sticks; Auto EPG from providers; Access Output on lines ( [1,2,3] fixed); Add Stream codec defaults.",
       "changelog": [
         "Edit stream Save: hardened PATCH, 45s client timeout, cache invalidation never blocks the response",
         "Auto EPG on Add Stream and Manage Stream (matches imported provider/XMLTV guide; timed so save cannot hang)",
         "Add Stream defaults: Generate timestamps and Stream all codecs found on the video are ON",
         "Access Output: shown on Line Details + Restrictions & Access; mass edit under Lines → Mass Edit",
-        "XUI migrated lines with allowedOutput [1,2,3] now map to HLS / MPEGTS / RTMP for panel UI and Xtream players",
+        "migrated lines with allowedOutput [1,2,3] now map to HLS MPEGTS RTMP for panel UI and Xtream players",
         "New lines default to all Access Output formats (hls,m3u8,ts,rtmp)"
       ],
       "fixes": [
         "Editing a stream stuck on Saving…",
-        "Could not find Access Output / migrated lines showed blank checkboxes",
-        "Xtream allowed_output_formats returned broken [1 / 2 / 3] tokens after XUI import"
+        "Could not find Access Output migrated lines showed blank checkboxes",
+        "Xtream allowed_output_formats returned broken [1 2 3] tokens after import"
       ]
     },
     {
@@ -1627,11 +1597,11 @@
       "summary": "Fix marketing installer version (install-command.json was stuck on 1.9.114).",
       "changelog": [
         "Marketing update always regenerates install-command.json from panel package version",
-        "Installer UI prefers /api/install-command so a stale static JSON cannot show the wrong ?v=",
+        "Installer UI prefers /api/install-command so a stale static JSON cannot show the wrong?v=",
         "publish-panel-release writes install-command.json whenever the tarball is published"
       ],
       "fixes": [
-        "nexlify.live install button / install-command.json still showed v1.9.114 after 1.9.118"
+        "Some panel hostnames install button install-command.json still showed v1.9.114 after 1.9.118"
       ]
     },
     {
@@ -1640,35 +1610,35 @@
       "channel": "stable",
       "summary": "Stream/VOD edit: live vs on-demand, direct provider URLs, richer manage for movies/series/episodes.",
       "changelog": [
-        "Edit stream: switch Live / Movie / Series, Live vs On-demand / Catch-up, hosted provider or direct URL",
+        "Edit stream: switch Live Movie Series, Live vs On-demand Catch-up, hosted provider or direct URL",
         "Movies, series, and episodes support direct provider URLs or hosted provider paths",
         "Series manage: enable/disable, delete, add episode; episodes manage: status, provider badge, enable/disable",
-        "Stream list badges for LIVE / ON DEMAND / PROVIDER; stream PATCH saves backupUrl + vod/provider fields",
+        "Stream list badges for LIVE ON DEMAND PROVIDER; stream PATCH saves backupUrl + vod/provider fields",
         "Fixed invalid vodMode MOVIE/SERIES from VOD forms (now ON_DEMAND)"
       ],
       "fixes": [
         "Editing a stream had no on-demand vs live channel option",
         "Movies/series/episodes could not clearly use the provider’s direct URL",
         "Manage series/episodes missing enable, delete, and provider source controls",
-        "Stream edit ignored backup URL and could not change vodMode / provider hosting"
+        "Stream edit ignored backup URL and could not change vodMode provider hosting"
       ]
     },
     {
       "version": "1.9.117",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Faster Settings binaries, Redis memory health, XUI-style Access Output, mobile panel layout.",
+      "summary": "Faster Settings binaries, Redis memory health, Access Output, mobile panel layout.",
       "changelog": [
         "Settings → Server binaries no longer auto-installs PHP/FFmpeg on every page load (was freezing Settings)",
         "PHP marked optional — Nexlify is Node; system FFmpeg 6.x is sufficient",
-        "Cache & Redis shows live maxmemory / LRU health",
-        "Line Access Output: HLS + MPEGTS + RTMP multi-checkboxes, all on by default (like XUI)",
+        "Cache & Redis shows live maxmemory LRU health",
+        "Line Access Output: HLS + MPEGTS + RTMP multi-checkboxes, all on by default (like )",
         "Mobile: settings chip nav, less horizontal scroll, tighter viewport"
       ],
       "fixes": [
         "Server binaries page hung while trying to download PHP on every visit",
-        "Redis had unlimited maxmemory / noeviction (now 512mb allkeys-lru on panel VPS)",
-        "Access output was single-choice / missing from line forms",
+        "Redis had unlimited maxmemory noeviction (now 512mb allkeys-lru on panel VPS)",
+        "Access output was single-choice missing from line forms",
         "Phone UI still required Request Desktop Website for usable layout"
       ]
     },
@@ -1679,7 +1649,7 @@
       "summary": "Auto-sync audit: MIXED playlists + all providers get URL matching; accurate rename counts; LIVE watch folders.",
       "changelog": [
         "MIXED M3U jobs route live channels through the same normalized URL matcher as LIVE jobs",
-        "Movies/series sync match across :443/:80 the same way",
+        "Movies/series sync match across:443/:80 the same way",
         "guessStreamType prefers /live|/movie|/series paths; defaults ambiguous IPTV rows to LIVE",
         "Sync Now runs EPG auto-assign like scheduled sync",
         "Watch-folder LIVE remote M3U no longer falls through as MIXED/disk import",
@@ -1698,13 +1668,13 @@
       "channel": "stable",
       "summary": "M3U auto-sync matches URL variants correctly; panel update no longer false-fails mid-build.",
       "changelog": [
-        "M3U LIVE sync matches streams across :443/:80 and /live/ vs short Xtream paths",
+        "M3U LIVE sync matches streams across:443/:80 and /live/ vs short Xtream paths",
         "Sync result shows real renames only (not every existing channel as “names”)",
-        "Panel update treats next build / apply-panel-fast-update as still running when the outer worker exits",
+        "Panel update treats next build apply-panel-fast-update as still running when the outer worker exits",
         "Softer Updates messaging when nginx briefly returns 502 during restart"
       ],
       "fixes": [
-        "M3U auto-sync reported +9999 / skip N / names N with names always equaling skip",
+        "M3U auto-sync reported +9999 skip N names N with names always equaling skip",
         "Re-sync could re-import the same channels when playlist URLs differed only by port or /live/ prefix",
         "Updates UI showed Update failed while the build was still compiling or after a successful swap"
       ]
@@ -1753,7 +1723,7 @@
       ],
       "fixes": [
         "Xtream playlist download was multi-MB uncompressed (slow on mobile apps)",
-        "Smart CDN rewrote provider/pending URLs and broke IPTV Smarters / XCIPTV playback",
+        "Smart CDN rewrote provider/pending URLs and broke IPTV Smarters XCIPTV playback",
         "pending:// channels appeared first in live lists and 502d in apps"
       ]
     },
@@ -1761,15 +1731,15 @@
       "version": "1.9.111",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Fix XUI reseller login: accept SHA-512 crypt ($6$) passwords; stop bcrypt-wrapping migrate hashes.",
+      "summary": "Fix reseller login: accept SHA-512 crypt ($6$) passwords; stop bcrypt-wrapping migrate hashes.",
       "changelog": [
-        "Panel login verifies XUI $6$ crypt hashes (python3 crypt) as well as bcrypt",
+        "Panel login verifies $6$ crypt hashes (python3 crypt) as well as bcrypt",
         "Migration stores pre-hashed reseller passwords as-is (no double-hash)",
         "Successful $6$ login upgrades to bcrypt + passwordPlain for UI reveal",
-        "restore-xui-crypt-passwords.cjs recovers crypt hashes from dump map"
+        "restore--crypt-passwords.cjs recovers crypt hashes from dump map"
       ],
       "fixes": [
-        "Resellers/sub-resellers imported from XUI could not login with their real passwords (bcrypt of crypt string)"
+        "Resellers/sub-resellers imported from could not login with their real passwords (bcrypt of crypt string)"
       ]
     },
     {
@@ -1780,7 +1750,7 @@
       "changelog": [
         "Import Cloudflare from servers on Streaming → Smart CDN (domain/protocol hostnames)",
         "Ops glance links Agents separately from CDN",
-        "Notes for CF 521 / alternate ports vs edge agent heartbeats"
+        "Notes for CF 521 alternate ports vs edge agent heartbeats"
       ],
       "fixes": [
         "No guided path to register existing Cloudflare stream domains as Smart CDN endpoints"
@@ -1795,7 +1765,7 @@
         "verifyPanelLogin matches username and email with case-insensitive fallback"
       ],
       "fixes": [
-        "Promoted admins / migrated users with mixed-case usernames could not sign in when casing differed"
+        "Promoted admins migrated users with mixed-case usernames could not sign in when casing differed"
       ]
     },
     {
@@ -1867,7 +1837,7 @@
       "changelog": [
         "Kick ends live HTTP proxy sessions and blocks reconnect for 2 minutes (Redis/memory deny + in-process abort)",
         "Smart CDN admin page: add/toggle/delete endpoints + probe; linked from ops glance and Unique Features",
-        "Resellers: bulk Change group / Enable / Disable on Manage Users (own sub-users only)",
+        "Resellers: bulk Change group Enable Disable on Manage Users (own sub-users only)",
         "Reseller PATCH users can set groupId; read-only /api/reseller/groups",
         "App Builder copy clarifies downloadable config JSON vs native APK pipeline"
       ],
@@ -1887,7 +1857,7 @@
         "Dead-link monitor: second consecutive fail auto-disables the stream; agents can probe_stream from the stream server",
         "Remove duplicates: Scan live streams (URL + title)",
         "New Missing EPG page under EPG with live filter",
-        "Dashboard Ops status glance (DB / Redis / cron / edge agents / CDN count)",
+        "Dashboard Ops status glance (DB Redis cron edge agents CDN count)",
         "App Builder completes with downloadable branded config JSON package",
         "Portal setup: expanded XCIPTV Xtream guide",
         "Audit log labels for mass user actions, create/edit stream, remove duplicates"
@@ -1909,7 +1879,7 @@
         "Dashboard Control Center moved to the top",
         "Tickets sidebar: All Tickets link",
         "Channel order: Streams/Movies/Series tabs, UK Entertainment default, Show 50 entries",
-        "App Builder: XCIPTV+ / TiviMate+ / Modded Neon / Cinema / Arctic presets with backgrounds",
+        "App Builder: XCIPTV+ TiviMate+ Modded Neon Cinema Arctic presets with backgrounds",
         "Search bars and form inputs higher contrast in dark and light"
       ],
       "fixes": [
@@ -1935,14 +1905,14 @@
       "version": "1.9.100",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Watch-folder live channels, sidebar chat, Manage Users role order, mass-edit line sorts, bouquet A→Z, better XUI EPG import, honest probes + browser play proxy.",
+      "summary": "Watch-folder live channels, sidebar chat, Manage Users role order, mass-edit line sorts, bouquet A→Z, better EPG import, honest probes + browser play proxy.",
       "changelog": [
         "Watch Folders: Live channels type (auto-add + rename from remote M3U)",
         "Live chat + Chat support moved under the left sidebar footer",
         "Manage Users sorts Admins → Resellers → Sub-resellers",
         "Mass Edit Lines: sort by Username, Owner, Expire, Ban",
         "Manage Bouquets defaults to alphabetical name order",
-        "XUI migrate: stronger EPG source detection (epg_api, data blob URLs)",
+        "migrate: stronger EPG source detection (epg_api, data blob URLs)",
         "Online/fast probe no longer marks unreachable URLs as degraded",
         "Play in browser always uses the panel proxy path"
       ],
@@ -1950,7 +1920,7 @@
         "Live M3U could not be watched from Watch Folders (VOD-only types)",
         "Chat floated on the right over content",
         "Mass edit lines had no Owner/Expire sort",
-        "XUI SQL EPG sources often skipped when URL lived in data/epg_file",
+        "SQL EPG sources often skipped when URL lived in data/epg_file",
         "Fast probe false positives on unreachable 'playable format' URLs"
       ]
     },
@@ -1960,9 +1930,9 @@
       "channel": "stable",
       "summary": "Mass edit resellers and sub-resellers: change which group they belong to in bulk.",
       "changelog": [
-        "Mass Edit Users: Change group action with group picker and role filter (resellers / sub-resellers)",
-        "Manage Users: bulk select + Change group / Enable / Disable",
-        "Sub-resellers: bulk select + Change group / Enable / Disable",
+        "Mass Edit Users: Change group action with group picker and role filter (resellers sub-resellers)",
+        "Manage Users: bulk select + Change group Enable Disable",
+        "Sub-resellers: bulk select + Change group Enable Disable",
         "POST /api/admin/users/mass supports setGroup"
       ],
       "fixes": [
@@ -1980,7 +1950,7 @@
         "Live panel builds must include this UI (source-only updates were invisible)"
       ],
       "fixes": [
-        "Manage Users Actions still showed the old short menu on servers that pulled source without rebuilding .next"
+        "Manage Users Actions still showed the old short menu on servers that pulled source without rebuilding.next"
       ]
     },
     {
@@ -2024,10 +1994,10 @@
       "version": "1.9.95",
       "date": "2026-08-16",
       "channel": "stable",
-      "summary": "Series episode URLs (/series/user/pass/id) are public like XUI/1-Stream — no more login redirect.",
+      "summary": "Series episode URLs (series/user/pass/id) are public like — no more login redirect.",
       "changelog": [
         "Add /series to middleware PUBLIC allowlist (live/movie already were)",
-        "Matches XUI.one / 1-Stream player paths for TV episode playback"
+        "Matches player paths for TV episode playback"
       ],
       "fixes": [
         "XCIPTV/VLC series playback redirected to /login on IP panels (categories/API were fine; episode URL was blocked)"
@@ -2040,7 +2010,7 @@
       "summary": "Panel updates no longer show Failed after a successful restart on customer/demo VPS.",
       "changelog": [
         "Watchdog and update reconciler treat PM2 swap/restart worker exit as success, not failure",
-        "apply-panel-fast-update preserves .update-in-progress worker PID (touch no longer wipes it)",
+        "apply-panel-fast-update preserves.update-in-progress worker PID (touch no longer wipes it)",
         "Static-asset check after restart is a warning when /api/health is already 200"
       ],
       "fixes": [
@@ -2052,14 +2022,14 @@
       "version": "1.9.93",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Nginx and IPTV edge no longer fight over :8080 — edge owns stream ports, nginx keeps :80.",
+      "summary": "Nginx and IPTV edge no longer fight over:8080 — edge owns stream ports, nginx keeps:80.",
       "changelog": [
         "install-nginx-stream-edge skips ports owned by Node IPTV edge (8080/25461/optional 443)",
         "nexlify-nginx-release-ports.sh strips nginx listen directives before edge binds",
-        "sync-panel-ports / fix-stream-edge-now / ensure-panel-env encode permanent ownership rules"
+        "sync-panel-ports fix-stream-edge-now ensure-panel-env encode permanent ownership rules"
       ],
       "fixes": [
-        "nginx restart failed with Address already in use on :8080 and took down panel :80",
+        "nginx restart failed with Address already in use on:8080 and took down panel:80",
         "nginx and IPTV edge cannot share the same TCP port — documented and enforced in install scripts"
       ]
     },
@@ -2075,7 +2045,7 @@
       ],
       "fixes": [
         "M3U Auto-Sync hard to find under Import vs Providers",
-        "Demo panel 75.119.137.174 down when nginx failed to bind :80 after IPTV edge took 443/8080"
+        "Demo panel the media edge down when nginx failed to bind:80 after IPTV edge took 443/8080"
       ]
     },
     {
@@ -2090,9 +2060,9 @@
         "M3U no longer emits #EXT-X-STREAM-INF rows; bitrate primary only when marked isPrimary"
       ],
       "fixes": [
-        "UK Entertainment / Sky Sports channels failing or blank via panel while upstream worked",
+        "UK Entertainment Sky Sports channels failing or blank via panel while upstream worked",
         "Nickelodeon SD and other dead xplatinmedia hosts had no runtime failover",
-        "Sound with no picture after HLS remux on HEVC / wrong audio BSF",
+        "Sound with no picture after HLS remux on HEVC wrong audio BSF",
         "Geo/LB stream swap matched only on shared junk epgChannelId (e.g. 96) and served wrong channels"
       ]
     },
@@ -2100,11 +2070,11 @@
       "version": "1.9.90",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "EPG auto-maps onto streams after sync; vendor :443 left to nginx.",
+      "summary": "EPG auto-maps onto streams after sync; vendor:443 left to nginx.",
       "changelog": [
-        "After each EPG guide sync, LIVE streams without a matching epgChannelId are auto-linked by tvg-id / name",
+        "After each EPG guide sync, LIVE streams without a matching epgChannelId are auto-linked by tvg-id name",
         "Creating a LIVE stream also attempts EPG auto-assign immediately",
-        "Vendor hosts no longer bind IPTV edge proxy on :443 (keeps nexlify.live marketing + Let's Encrypt working)"
+        "Vendor hosts no longer bind IPTV edge proxy on:443 (keeps Some panel hostnames marketing + Let's Encrypt working)"
       ],
       "fixes": [
         "EPG sources synced but streams stayed without EPG until the hourly cron",
@@ -2115,17 +2085,17 @@
       "version": "1.9.89",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "XCIPTV: http:// and https:// in DNS + ports; HTTPS edge accepts scheme-in-Host.",
+      "summary": "XCIPTV: HTTP and HTTPS in DNS + ports; HTTPS edge accepts scheme-in-Host.",
       "changelog": [
-        "Sanitize Host headers that include http:// or https:// so server_info.url is the real IP/domain",
+        "Sanitize Host headers that include HTTP or HTTPS so server_info.url is the real IP/domain",
         "HTTPS on PANEL_IP (:443) installs reliably (self-signed IP cert) — fix script no longer exits when PANEL_EXTRA_DOMAINS is empty",
-        "Extra IPTV ports keep https when TLS was terminated; :80 / :8080 / :25461 / :443 verified paths",
-        "IPTV edge proxy on :443/:8080/:25461 accepts Host headers with http:// or https:// (nginx returned 400)"
+        "Extra IPTV ports keep https when TLS was terminated;:80:8080:25461:443 verified paths",
+        "IPTV edge proxy on:443/:8080/:25461 accepts Host headers with HTTP or HTTPS (nginx returned 400)"
       ],
       "fixes": [
-        "Pasting http://IP into XCIPTV DNS made Account Info / follow-up API calls use url:\\\"http\\\"",
-        "https://PANEL_IP failed because :443 was never listening (HTTPS setup script aborted early)",
-        "https://IP or http://IP:8080 in XCIPTV DNS caused nginx 400 Bad Request before login"
+        "Pasting into XCIPTV DNS made Account Info follow-up API calls use url:\\\"http\\\"",
+        "failed because:443 was never listening (HTTPS setup script aborted early)",
+        "or in XCIPTV DNS caused nginx 400 Bad Request before login"
       ]
     },
     {
@@ -2141,7 +2111,7 @@
       ],
       "fixes": [
         "Delete line returned 500 after ActivityLog write against a deleted lineId",
-        "XCIPTV Account Info showed -- for expire / connections / created",
+        "XCIPTV Account Info showed -- for expire connections created",
         "Failed update banner lingered after Clear stuck when the progress file was already gone"
       ]
     },
@@ -2163,17 +2133,17 @@
       "version": "1.9.86",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Unstick Updates at 88%% / 502; Clear stuck deletes job; panel HTTPS default.",
+      "summary": "Unstick Updates at 88%% 502; Clear stuck deletes job; panel HTTPS default.",
       "changelog": [
-        "Clear stuck update hard-deletes .update-progress.json (no leftover 88%% banner)",
+        "Clear stuck update hard-deletes.update-progress.json (no leftover 88%% banner)",
         "Failed update jobs auto-clear after 2 minutes",
         "Updates page shows Clear stuck on 502/HTML gateway errors",
-        "Stronger next build retry for missing SWC / generate is not a function",
-        "fix-panel-https-default.sh so https://PANEL_IP hits the panel, not another site SSL vhost"
+        "Stronger next build retry for missing SWC generate is not a function",
+        "fix-panel-https-default.sh so hits the panel, not another site SSL vhost"
       ],
       "fixes": [
         "Updates stuck at 88%% after failed build; Clear stuck did nothing while nginx returned 502 HTML",
-        "https://IP /admin hit unrelated SPA (moviestream) causing 500/redirect cycle"
+        "admin hit unrelated SPA (moviestream) causing 500/redirect cycle"
       ]
     },
     {
@@ -2183,7 +2153,7 @@
       "summary": "XCIPTV Xtream login: group series episodes; reseller DNS; gzip JSON.",
       "changelog": [
         "get_series returns one row per show (seriesName), not every episode (~400k → ~13k)",
-        "Numeric Xtream category_id for XCIPTV / XUI category matching",
+        "Numeric Xtream category_id for XCIPTV category matching",
         "Reseller DNS hosts allowed alongside panel domain for IPTV + portal",
         "server_info.url prefers the host the app dialed (IP or reseller domain)",
         "Enable nginx gzip for application/json on port sync"
@@ -2200,33 +2170,33 @@
       "channel": "stable",
       "summary": "M3U m3u_plus login no longer times out on huge catalogs; output=hls honored for live.",
       "changelog": [
-        "Default get.php m3u / m3u_plus exports LIVE + VOD only (exclude SERIES)",
+        "Default get.php m3u m3u_plus exports LIVE + VOD only (exclude SERIES)",
         "Full dump via type=all, type=series, or include_series=1",
-        "Honor output=hls / m3u8 → live .m3u8 URLs in playlists"
+        "Honor output=hls m3u8 → live.m3u8 URLs in playlists"
       ],
       "fixes": [
         "IPTV apps timed out importing m3u_plus when SERIES made the playlist ~200MB",
-        "Recommended m3u_plus HLS URLs still emitted .ts for live channels"
+        "Recommended m3u_plus HLS URLs still emitted.ts for live channels"
       ]
     },
     {
       "version": "1.9.83",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Any server HTTP port works for IPTV login; XCIPTV/XUI player_api completeness (vod/series info, panel_api).",
+      "summary": "Any server HTTP port works for IPTV login; XCIPTV/ player_api completeness (vod/series info, panel_api).",
       "changelog": [
         "Extra HTTP ports each get correct X-Forwarded-Port (server_info.port matches the port apps use)",
-        "Wire get_vod_info / get_series_info for XCIPTV movie and series detail",
-        "Add panel_api.php alias used by XUI-compatible apps",
+        "Wire get_vod_info get_series_info for XCIPTV movie and series detail",
+        "Add panel_api.php alias used by -compatible apps",
         "Resolve numeric stream_id via SQL (no 100k nested bouquet hydrate)",
         "verify-panel-ports checks every STREAM_HTTP_EXTRA_PORTS listen + player_api",
         "Pass X-Nexlify-Client-Port from nginx so server_info.port survives Next.js forwarded-port rewrite"
       ],
       "fixes": [
         "IPTV apps lost the working extra port after login when nginx forwarded the primary port only",
-        "XCIPTV VOD/series detail screens empty (get_vod_info / get_series_info missing)",
+        "XCIPTV VOD/series detail screens empty (get_vod_info get_series_info missing)",
         "EPG actions ignored numeric Xtream stream_id hashes",
-        "Port sync verify failed falsely on IP installs without :443",
+        "Port sync verify failed falsely on IP installs without:443",
         "Extra-port login reported server_info.port=80 when Host omitted the listen port"
       ]
     },
@@ -2237,7 +2207,7 @@
       "summary": "Empty UA allow-lists no longer block logins; M3U/Xtream scale for 100k+ bouquet streams.",
       "changelog": [
         "Treat null, empty, and JSON [] allowedUserAgents as unrestricted",
-        "Parse JSON UA arrays from XUI/OneStream migrations",
+        "Parse JSON UA arrays from /OneStream migrations",
         "Normalize UA fields on line save, mass-edit, and migration apply",
         "streamsForLine uses SQL IDs + batched fetches (no Prisma 482k-row crash)",
         "get.php streams M3U in chunks; Xtream categories use DISTINCT categoryId",
@@ -2245,8 +2215,8 @@
       ],
       "fixes": [
         "player_api.php returned 403 User-Agent not allowed when allowedUserAgents was []",
-        "M3U / Xtream Codes login failed for migrated lines with empty UA JSON arrays",
-        "get.php m3u_plus / get_series crashed (Prisma napi string / empty reply) on huge catalogs"
+        "M3U Xtream Codes login failed for migrated lines with empty UA JSON arrays",
+        "get.php m3u_plus get_series crashed (Prisma napi string empty reply) on huge catalogs"
       ]
     },
     {
@@ -2261,7 +2231,7 @@
         "Extra HTTP ports (STREAM_HTTP_EXTRA_PORTS) proxy to the panel listen port for player logins"
       ],
       "fixes": [
-        "player_api.php / get.php hung or crashed the panel when a line had large bouquet membership",
+        "player_api.php get.php hung or crashed the panel when a line had large bouquet membership",
         "Saved, but port sync failed on IP panels (nginx -t failed on legacy RTMP in conf.d)",
         "Extra server HTTP ports (8080) were not listening so IPTV apps could not connect"
       ]
@@ -2270,24 +2240,24 @@
       "version": "1.9.80",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Installer targets the Postgres bound to DATABASE_URL (Docker :5432 vs system :5433) and refuses vendor VPS reinstalls.",
+      "summary": "Installer targets the Postgres bound to DATABASE_URL (Docker:5432 vs system:5433) and refuses vendor VPS reinstalls.",
       "changelog": [
         "panel.sh sets/alters the nexlify DB password on the listener used by DATABASE_URL (Docker publish or matching pg cluster)",
         "Reuses a working existing DATABASE_URL instead of rotating into a broken password",
-        "Refuses to run on the nexlify.live vendor VPS unless NEXLIFY_ALLOW_VENDOR_REINSTALL=1",
-        "publish-panel-release / build-panel-download exclude .next.backup/.next.old so tarball stays ~3MB"
+        "Refuses to run on the Some panel hostnames vendor VPS unless NEXLIFY_ALLOW_VENDOR_REINSTALL=1",
+        "publish-panel-release build-panel-download exclude.next.backup/.next.old so tarball stays ~3MB"
       ],
       "fixes": [
-        "P1000 Authentication failed when re-running installer on vendor VPS (password changed on system :5433, app uses Docker :5432)",
-        "panel.sh IP reinstall on vendor forced PORT=80 and broke nginx-backed panel.nexlify.live",
-        "Oversized nexlify-panel.tar.gz when .next.backup was packed into the download"
+        "P1000 Authentication failed when re-running installer on vendor VPS (password changed on system:5433, app uses Docker:5432)",
+        "panel.sh IP reinstall on vendor forced PORT=80 and broke nginx-backed Some panel hostnames",
+        "Oversized nexlify-panel.tar.gz when.next.backup was packed into the download"
       ]
     },
     {
       "version": "1.9.79",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Expand XUI bouquet_series catalog IDs into episode streams so VOD bouquets match the dump.",
+      "summary": "Expand bouquet_series catalog IDs into episode streams so VOD bouquets match the dump.",
       "changelog": [
         "bouquet_series values are streams_series IDs — expand them to episode stream links during migrate/sync"
       ],
@@ -2319,7 +2289,7 @@
       "channel": "stable",
       "summary": "Skip-existing migrate no longer re-imports multi-million EPG rows; throttle job status writes.",
       "changelog": [
-        "Skip existing retags skip EPG programme / logs / stats bulk import and post-import repair (use Repair + EPG sync instead)",
+        "Skip existing retags skip EPG programme logs stats bulk import and post-import repair (use Repair + EPG sync instead)",
         "Migration worker writes job status atomically and at most ~2/sec so progress polling stays readable",
         "Provider-stream linking batched; EPG createMany chunk increased when guide import is enabled",
         "Full EPG guide checkbox defaults off"
@@ -2373,8 +2343,8 @@
       "channel": "stable",
       "summary": "Cron + addons audit: heal TMDB/streams settings, wire Auto EPG Mapping into cron and M3U import, clear stuck import jobs and dead EPG sources.",
       "changelog": [
-        "Import TMDB API key from XUI migration settings when panel TMDB key is empty",
-        "Promote legacy settings:streams key into settings.streams (logos / dead-link probe)",
+        "Import TMDB API key from migration settings when panel TMDB key is empty",
+        "Promote legacy settings:streams key into settings.streams (logos dead-link probe)",
         "Hourly epg_auto_map job + Auto-map EPG button on EPG channel map",
         "M3U one-click import and scheduled M3U sync run EPG auto-assign for live",
         "Import queue heals invalid legacy statuses (e.g. numeric \"3\") so watch-folder jobs do not stick",
@@ -2382,8 +2352,8 @@
       ],
       "fixes": [
         "Auto EPG Mapping addon existed but was never called by cron or import",
-        "TMDB Auto-Sync unconfigured after migrate despite tmdb_api_key in XUI settings",
-        "Channel logo / streams settings ignored when stored as settings:streams",
+        "TMDB Auto-Sync unconfigured after migrate despite tmdb_api_key in settings",
+        "Channel logo streams settings ignored when stored as settings:streams",
         "Stuck ImportJob rows with invalid status blocked watch-folder processing"
       ]
     },
@@ -2413,12 +2383,12 @@
       "summary": "Complete SQL migrate for all panel sources: raise EPG caps, Midnight type mapping, regression tests so semicolon plots cannot drop rows.",
       "changelog": [
         "EPG programme import cap raised to 2M (was 100k) so large epg_data tables are not truncated",
-        "Midnight Streams uses the same numeric stream.type map and headerless column templates as XUI lineage",
-        "Regression tests for xui, onestream, xtream_ui, streamcreed, nxt, midnight against semicolon-in-plot dumps",
+        "Midnight Streams uses the same numeric stream.type map and headerless column templates as lineage",
+        "Regression tests for, onestream, xtream_ui, streamcreed, nxt, midnight against semicolon-in-plot dumps",
         "scripts/compare-migrate-dump.ts compares dump table rows to mapped preview counts"
       ],
       "fixes": [
-        "EPG guide silently capped at 100k programmes on large XUI dumps",
+        "EPG guide silently capped at 100k programmes on large dumps",
         "Midnight SQL uploads could mis-classify live/movie/series numeric types"
       ]
     },
@@ -2429,7 +2399,7 @@
       "summary": "Fix SQL migration truncating streams when movie plots contain semicolons — restore full live/movie/series counts from large dumps.",
       "changelog": [
         "SQL INSERT parser now finds statement-ending semicolons outside quoted strings",
-        "Large XUI dumps no longer lose most streams mid-INSERT (e.g. 8k live parsed as ~1.6k)",
+        "Large dumps no longer lose most streams mid-INSERT (e.g. 8k live parsed as ~1.6k)",
         "Migrate worker heap raised to 16GB for ~500k-row stream catalogs"
       ],
       "fixes": [
@@ -2447,8 +2417,8 @@
         "Add Line client crash fixed (browser-safe credential generate, no Node crypto)",
         "Add Server HTTP ports no longer list 8080 twice",
         "Sidebar opens one category at a time, highlights query-aware links, preserves scroll position",
-        "Categories Live/Movies/Series tabs follow URL ?type= and sidebar clicks",
-        "Add Bouquet / stream pickers default to 50 rows; Manage Streams clarifies live vs movies/series counts"
+        "Categories Live/Movies/Series tabs follow URL?type= and sidebar clicks",
+        "Add Bouquet stream pickers default to 50 rows; Manage Streams clarifies live vs movies/series counts"
       ],
       "fixes": [
         "Application error on Add Line",
@@ -2483,12 +2453,12 @@
       "changelog": [
         "SSE heartbeats during import apply keep the browser connection alive on multi-minute dumps",
         "rebuild-panel-safe refuses to restart while /tmp/nexlify-migrate-in-progress exists",
-        "Default panel heap 8GB / PM2 max_memory_restart 8GB for large migrations",
-        "Updates page ignores .next.backup/.next.old/.next.staging as git-dirty noise"
+        "Default panel heap 8GB PM2 max_memory_restart 8GB for large migrations",
+        "Updates page ignores.next.backup/.next.old/.next.staging as git-dirty noise"
       ],
       "fixes": [
         "Import connection failed right after parse when a rebuild recycled nexlify mid-import",
-        "Updates page showed Local files differ from leftover .next.backup trees"
+        "Updates page showed Local files differ from leftover.next.backup trees"
       ]
     },
     {
@@ -2513,14 +2483,14 @@
       "channel": "stable",
       "summary": "Fix client-side Application error after updates: normalize staging distDir so /_next/static assets always serve.",
       "changelog": [
-        "After staging→.next swap, rewrite baked distDir .next.staging → .next in standalone/server.js and manifests",
+        "After staging→.next swap, rewrite baked distDir.next.staging →.next in standalone/server.js and manifests",
         "Merge nested standalone/.next.staging into standalone/.next so pages and CSS/JS share one tree",
         "prepare-standalone + verify-standalone + post-restart checks fail if staging distDir leaks into production",
         "wait-panel-ready verifies a webpack chunk returns HTTP 200 (not just /api/health)"
       ],
       "fixes": [
         "Application error: a client-side exception has occurred (static chunks 404 after staging build swap)",
-        "Updates page blank/crash when server.js still pointed at ./.next.staging"
+        "Updates page blank/crash when server.js still pointed at./.next.staging"
       ]
     },
     {
@@ -2529,14 +2499,14 @@
       "channel": "stable",
       "summary": "Harden panel updates: clear stuck 88% markers, recover dead workers via watchdog, clearer update UI with progress heartbeats.",
       "changelog": [
-        "Watchdog clears stale .update-in-progress when the update worker is dead so the panel can restart",
+        "Watchdog clears stale.update-in-progress when the update worker is dead so the panel can restart",
         "Stuck mid-build jobs fail fast (~90s) instead of freezing the UI at 88%",
         "Build progress starts ~50% and heartbeats during compile; bottom overlay + failed-update card on Updates",
         "Stronger next build retry (clear caches + ensure SWC binary); never bare pm2 restart nexlify"
       ],
       "fixes": [
         "Panel stuck at 88% with nexlify PM2 missing after a failed build",
-        "Watchdog skipped forever while .update-in-progress lingered after worker crash",
+        "Watchdog skipped forever while.update-in-progress lingered after worker crash",
         "Update UI jumped to 86% and looked frozen for the whole compile"
       ]
     },
@@ -2565,58 +2535,58 @@
       "changelog": [
         "stream_source arrays keep every URL: primary, backup, and extras (extras stored like stream-add-form bitrates JSON)",
         "Embedded URL credentials (user:pass@host) are never stripped during import",
-        "XUI servers map domain_name, http/https broadcast ports, and rtmp_port",
+        "servers map domain_name, http/https broadcast ports, and rtmp_port",
         "Docs/guide clarify line passwords, provider apiKey, and EPG URLs arrive as in the dump"
       ],
       "fixes": [
         "Third+ stream_source URLs dropped on migration",
-        "XUI domain_name / http_broadcast_port not applied to imported stream servers"
+        "domain_name http_broadcast_port not applied to imported stream servers"
       ]
     },
     {
       "version": "1.9.62",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Improve XUI.one SQL migration using a real MariaDB xui dump schema (packages months, bouquet_order, providers ip/port/ssl, MAG mag_id).",
+      "summary": "Improve SQL migration using a real MariaDB dump schema (packages months, bouquet_order, providers ip/port/ssl, MAG mag_id).",
       "changelog": [
-        "Package duration respects official_duration_in / trial_duration_in (months → days, hours → days)",
-        "Bouquet sort uses bouquet_order; headerless templates match real XUI.one column order",
+        "Package duration respects official_duration_in trial_duration_in (months → days, hours → days)",
+        "Bouquet sort uses bouquet_order; headerless templates match real column order",
         "Providers build baseUrl from ip/port/ssl and treat username+password as live upstream",
-        "Fixtures + unit tests for modern XUI dump shapes (plain bouquet ID arrays)"
+        "Fixtures + unit tests for modern dump shapes (plain bouquet ID arrays)"
       ],
       "fixes": [
-        "12 month XUI packages imported as 12 days",
+        "12 month packages imported as 12 days",
         "Bouquet order ignored when column is bouquet_order",
-        "XUI providers with ip/port/ssl not mapped as usable upstream URLs"
+        "providers with ip/port/ssl not mapped as usable upstream URLs"
       ]
     },
     {
       "version": "1.9.61",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Fix ENOENT build-manifest during rebuild: always stage when a live .next exists; add rebuild-panel-safe.sh.",
+      "summary": "Fix ENOENT build-manifest during rebuild: always stage when a live.next exists; add rebuild-panel-safe.sh.",
       "changelog": [
-        "run-panel-build.mjs stages+swaps whenever a live .next is present (avoids racing PM2)",
+        "run-panel-build.mjs stages+swaps whenever a live.next is present (avoids racing PM2)",
         "New scripts/rebuild-panel-safe.sh one-shot for customer VPS rebuilds",
         "Remove invalid top-level middlewareClientMaxBodySize from next.config (keep experimental)"
       ],
       "fixes": [
-        "SSH rebuild failed: ENOENT .next/build-manifest.json while collecting page data for /apple-icon.png"
+        "SSH rebuild failed: ENOENT.next/build-manifest.json while collecting page data for /apple-icon.png"
       ]
     },
     {
       "version": "1.9.60",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Stop 88% update outages: npm run build uses .next.staging during in-panel updates even with an old update worker.",
+      "summary": "Stop 88% update outages: npm run build uses.next.staging during in-panel updates even with an old update worker.",
       "changelog": [
-        "npm run build routes through run-panel-build.mjs — when .update-in-progress exists, builds into .next.staging then swaps",
+        "npm run build routes through run-panel-build.mjs — when.update-in-progress exists, builds into.next.staging then swaps",
         "apply-panel-fast-update build-compile calls next directly (no recursive npm run build)",
-        "Git post-pull build always prefers the on-disk staging script; never wipes live .next as a fallback",
-        "fix-panel-down-now restores .next.backup / .next.old when the live build was wiped at 88%"
+        "Git post-pull build always prefers the on-disk staging script; never wipes live.next as a fallback",
+        "fix-panel-down-now restores.next.backup.next.old when the live build was wiped at 88%"
       ],
       "fixes": [
-        "Server stuck at Updating… 88% (npm run build) with connection reset — old 1.9.53 worker built into live .next after git pull"
+        "Server stuck at Updating… 88% (npm run build) with connection reset — old 1.9.53 worker built into live.next after git pull"
       ]
     },
     {
@@ -2626,7 +2596,7 @@
       "summary": "In-panel git updates always reset --hard to origin/main so dirty local scripts cannot stick at git pull 14%.",
       "changelog": [
         "Git update path uses reset --hard origin/main (no ff-only merge blocked by local script edits)",
-        "Retry once after clearing .git index locks if the first reset fails"
+        "Retry once after clearing.git index locks if the first reset fails"
       ],
       "fixes": [
         "Demo/customer panels stuck Updating… git pull 14% because local watchdog/install script edits blocked merge"
@@ -2682,7 +2652,7 @@
       "channel": "stable",
       "summary": "Fast live M3U import from provider URLs using tvg-name, tvg-logo, and group-title.",
       "changelog": [
-        "Live import prefers tvg-name for channel titles and maps tvg-logo / group-title automatically",
+        "Live import prefers tvg-name for channel titles and maps tvg-logo group-title automatically",
         "Batched LIVE inserts (createMany) with cached categories for much faster provider playlist uploads",
         "Optional auto-create bouquets from group-title and assign each channel"
       ],
@@ -2697,9 +2667,9 @@
       "summary": "Stop cron watchdog from causing 502 during panel updates; keep the live build online until staging swap.",
       "changelog": [
         "nexlify-watchdog skips restarts while an update is running and never starts PORT=80 -i max",
-        "Watchdog health-checks the .env upstream port (e.g. 13000), not nginx :80",
-        "Git updates build into .next.staging then swap, so refresh mid-build should not blank the panel",
-        "Update worker writes .update-in-progress so watchdogs and recover scripts cooperate"
+        "Watchdog health-checks the .env upstream port (e.g. 13000), not nginx:80",
+        "Git updates build into.next.staging then swap, so refresh mid-build should not blank the panel",
+        "Update worker writes.update-in-progress so watchdogs and recover scripts cooperate"
       ],
       "fixes": [
         "Stuck in-panel update at 88% (npm run build) then refresh → 502 Bad Gateway",
@@ -2732,25 +2702,25 @@
         "Deploy/repair paths restore executable bits after git reset --hard"
       ],
       "fixes": [
-        "scripts/pm2-start.sh: Permission denied on ./scripts/verify-panel-upstream.sh after a successful health check"
+        "scripts/pm2-start.sh: Permission denied on./scripts/verify-panel-upstream.sh after a successful health check"
       ]
     },
     {
       "version": "1.9.51",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Heal remote panel updates when Postgres is down and stop tarball sync from wiping .git or re-applying a stale nexlify.live archive.",
+      "summary": "Heal remote panel updates when Postgres is down and stop tarball sync from wiping.git or re-applying a stale Some panel hostnames archive.",
       "changelog": [
         "Git checkouts sync origin/main inside apply-panel-fast-update.sh instead of the vendor tarball",
-        "Tarball rsync never deletes .git; GitHub main archive is the fallback when nexlify.live is stale or blocked",
+        "Tarball rsync never deletes.git; GitHub main archive is the fallback when Some panel hostnames is stale or blocked",
         "Remote-update and the background worker keep going when Postgres is down (filesystem repo path)",
         "Repair one-liner restarts PostgreSQL/Redis, then git reset --hard origin/main and rebuilds",
         "Health wait treats HTTP 503 with app=ok as booted so a brief DB blip does not fail deploy"
       ],
       "fixes": [
-        "Customer panel 45.88.138.18 stayed on 1.9.45 because vendor CDN latestVersion and tarball were stale",
-        "rsync --delete of the vendor tarball removed .git so the install could never git-pull again",
-        "getPanelServerSettings() threw when Postgres was down, so remote-update 500'd before git fetch",
+        "Customer panel the media edge stayed on 1.9.45 because vendor CDN latestVersion and tarball were stale",
+        "rsync --delete of the vendor tarball removed.git so the install could never git-pull again",
+        "getPanelServerSettings threw when Postgres was down, so remote-update 500'd before git fetch",
         "wait-panel-ready failed on degraded /api/health (database error) even when Next.js was online"
       ]
     },
@@ -2768,13 +2738,12 @@
         "License poll re-registers the panel API secret so vendor remote-update keeps working"
       ],
       "fixes": [
-        "Remote-update on git VPS installs always used apply-panel-fast-update.sh and re-downloaded old nexlify.live tarball",
+        "Remote-update on git VPS installs always used apply-panel-fast-update.sh and re-downloaded old Some panel hostnames tarball",
         "Origin fallback curl -L followed HTTP 301 back to Cloudflare (403)",
         "PANEL_UPDATE_FORCE was set but never read by the worker",
-        "Vendor lookup required an exact panelUrl match (https vs http / trailing slash → 403)",
+        "Vendor lookup required an exact panelUrl match (https vs http trailing slash → 403)",
         "Unique PANEL_API_SECRET was only stored on first license activate"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.50.tar.gz"
+      ]
     },
     {
       "version": "1.9.49",
@@ -2793,11 +2762,10 @@
       "fixes": [
         "Shared installer sync secret was still published at /install/panel-sync.env and fetched by panel.sh",
         "Marketing /api/auth/login had no rate limit",
-        "Anyone with a license key could re-register a different panel URL (SSRF / hijack of vendor remote-update)",
+        "Anyone with a license key could re-register a different panel URL (SSRF hijack of vendor remote-update)",
         "Hardcoded playback HMAC fallback nexlify-playback; billing webhook used non-constant-time compare",
         "Admin-created users with passwordHash external could throw on bcrypt compare"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.49.tar.gz"
+      ]
     },
     {
       "version": "1.9.48",
@@ -2814,10 +2782,9 @@
       "fixes": [
         "JWT role stayed valid for up to 7 days after a user was demoted or disabled",
         "Agent eval of startCmd/stopCmd and NGINX_RELOAD_CMD",
-        "Metrics scrape tokens in ?token= leaked in access logs",
-        "New unique PANEL_API_SECRET installs could not register with nexlify.live for remote update"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.48.tar.gz"
+        "Metrics scrape tokens in?token= leaked in access logs",
+        "New unique PANEL_API_SECRET installs could not register with Some panel hostnames for remote update"
+      ]
     },
     {
       "version": "1.9.47",
@@ -2834,8 +2801,7 @@
         "Shared installer API secret allowed anyone with the public repo to call remote-update and remote-unlock on panels that used the fallback",
         "Knowing the original install password reset admin even after the owner changed it",
         "Cron secret accepted in the URL query string (leaked in access logs)"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.47.tar.gz"
+      ]
     },
     {
       "version": "1.9.46",
@@ -2851,8 +2817,7 @@
         "Dashboard CPU sat near 40% on direct-stream panels because it was derived from channel count",
         "Every server resource chart showed the panel host's CPU with network and connections hard-coded to 0",
         "Server tiles drew a sine-wave sparkline and labelled live connections as req/s"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.46.tar.gz"
+      ]
     },
     {
       "version": "1.9.45",
@@ -2864,24 +2829,22 @@
       ],
       "fixes": [
         "next build failed collecting page data for /api/admin/migrate with ReferenceError: MIGRATION_GUIDE_PATHS is not defined"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.45.tar.gz"
+      ]
     },
     {
       "version": "1.9.44",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Admin → Updates lists current GitHub releases (including 1.9.42) even when nexlify.live lags.",
+      "summary": "Admin → Updates lists current GitHub releases (including 1.9.42) even when Some panel hostnames lags.",
       "changelog": [
-        "Updates page merges GitHub, bundled notes, and nexlify.live so new versions are not hidden by a stale marketing feed",
+        "Updates page merges GitHub, bundled notes, and Some panel hostnames so new versions are not hidden by a stale marketing feed",
         "Each release newer than the installed panel has its own Update button",
         "Marketing release API prefers public/panel-releases.json so the feed can be updated without a full site rebuild"
       ],
       "fixes": [
-        "v1.9.42 did not appear under Settings → Updates because nexlify.live was still serving v1.9.35",
+        "v1.9.42 did not appear under Settings → Updates because Some panel hostnames was still serving v1.9.35",
         "Update was only offered on the top card, so older-but-still-newer releases had no Update option"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.44.tar.gz"
+      ]
     },
     {
       "version": "1.9.43",
@@ -2896,8 +2859,7 @@
       "fixes": [
         "Review offline opened Verify the Stream with an empty list because it treated missing ffmpeg as offline",
         "1,547 live streams not online now counted direct/on-demand channels that never run ffmpeg"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.43.tar.gz"
+      ]
     },
     {
       "version": "1.9.42",
@@ -2907,13 +2869,12 @@
       "changelog": [
         "Second import matches streams by URL and updates type, category, and episode metadata instead of skipping or duplicating",
         "Migrate preview lists headerless CREATE TABLE mapping as notes, not parse warnings",
-        "Explain XUI streams_episodes catalog rows vs playable episode streams"
+        "Explain streams_episodes catalog rows vs playable episode streams"
       ],
       "fixes": [
         "Skip existing import left movies/series stuck as live because it never updated type",
         "Re-import could duplicate episodes when the display name changed after tagging"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.42.tar.gz"
+      ]
     },
     {
       "version": "1.9.41",
@@ -2923,7 +2884,7 @@
       "changelog": [
         "pg_dump uses the newest PostgreSQL client binary (avoids server/client version mismatch)",
         "Dumps pass host/user/database as argv plus PGPASSWORD (Prisma URL query flags no longer break libpq)",
-        "Backup folder is the panel install root, not .next/standalone; timeout raised to 2 hours with a lock file",
+        "Backup folder is the panel install root, not.next/standalone; timeout raised to 2 hours with a lock file",
         "Installer and panel updates install/symlink postgresql-client; PM2 cron PATH includes /usr/lib/postgresql/*/bin"
       ],
       "fixes": [
@@ -2931,8 +2892,7 @@
         "pg_dump: server version mismatch when /usr/bin/pg_dump lagged the running Postgres",
         "invalid URI query parameter: schema from Prisma DATABASE_URL",
         "Cloud backup cleared PGPASSWORD and aborted the dump"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.41.tar.gz"
+      ]
     },
     {
       "version": "1.9.40",
@@ -2942,12 +2902,11 @@
       "changelog": [
         "curl | bash installer default directory is /home/nexlify",
         "Existing panels at /home/nexlify-panel or /opt/nexlify-panel are reused, not duplicated",
-        "--fresh keeps /home/nexlify/bin (ffmpeg/nginx) instead of wiping the stack"
+        "fresh keeps /home/nexlify/bin (ffmpeg/nginx) instead of wiping the stack"
       ],
       "fixes": [
         "New installs no longer land in /home/nexlify-panel or /opt/nexlify-panel"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.40.tar.gz"
+      ]
     },
     {
       "version": "1.9.39",
@@ -2958,20 +2917,19 @@
         "Repair attaches lines with no bouquets so players actually see imported streams",
         "Re-import still links bouquets on existing lines instead of skipping them",
         "Stream URLs must look playable (scheme or host:port); PHP-serialized sources still extract",
-        "M3U accepts host:port/path rows and any :// URL after VLC option lines"
+        "M3U accepts host:port/path rows and any:// URL after VLC option lines"
       ],
       "fixes": [
         "Imported streams existed in Manage Streams but lines had no bouquets so players showed nothing",
         "Skip-existing lines blocked bouquet repair on a second migrate",
         "Non-URL stream_source text could be stored as the playback URL"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.39.tar.gz"
+      ]
     },
     {
       "version": "1.9.38",
       "date": "2026-08-14",
       "channel": "stable",
-      "summary": "Fix stream/category/bouquet import (XUI URLs and PHP-serialized bouquets) and lock production nginx configs so panels stay up.",
+      "summary": "Fix stream/category/bouquet import ( URLs and PHP-serialized bouquets) and lock production nginx configs so panels stay up.",
       "changelog": [
         "SQL import fills missing stream URLs from streams_sys current_source and PHP-serialized stream_source",
         "Bouquet channel lists parse PHP serialize without treating array indexes as stream IDs",
@@ -2981,11 +2939,10 @@
         "lock-production-configs.sh freezes nginx configs (not the database or import uploads)"
       ],
       "fixes": [
-        "Streams skipped or imported with unplayable URLs when XUI stored the source in streams_sys or PHP serialize",
+        "Streams skipped or imported with unplayable URLs when stored the source in streams_sys or PHP serialize",
         "Bouquets imported empty because PHP channel lists included 0/1 indexes as stream IDs",
         "Live streams present in Manage Streams but missing from player bouquets after migrate"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.38.tar.gz"
+      ]
     },
     {
       "version": "1.9.37",
@@ -3005,9 +2962,8 @@
         "Add Line created a random username because auto-generate overwrote typed credentials",
         "View Server linked to host:port and dumped operators to a login screen",
         "Manage Series listed every episode instead of TV series titles",
-        "Resource charts / auto-scale / process monitor threw when metrics or process rows were missing"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.37.tar.gz"
+        "Resource charts auto-scale process monitor threw when metrics or process rows were missing"
+      ]
     },
     {
       "version": "1.9.36",
@@ -3023,11 +2979,10 @@
       ],
       "fixes": [
         "48 Hours package saved as 24 Hours because isTrial forced days=1",
-        "Expiry datetime showed 6 days / 29 days due to UTC ISO formatting",
+        "Expiry datetime showed 6 days 29 days due to UTC ISO formatting",
         "Broken Math.ceil after page-size rename blocked panel builds",
         "Admin sessions POST referenced undefined action"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.36.tar.gz"
+      ]
     },
     {
       "version": "1.9.35",
@@ -3038,7 +2993,7 @@
         "Categories: Online/Offline bulk toggle per category (streams, movies, series/episodes) plus inline per-stream edit",
         "Dashboard Issues panel: inactive, dead, and unstable streams with Activate all and deep links to fix",
         "Create line hardened (transactions, clear errors, package day labels trial→12 months)",
-        "User groups seed Administrators / Resellers / Sub-resellers; import maps SUB_RESELLER",
+        "User groups seed Administrators Resellers Sub-resellers; import maps SUB_RESELLER",
         "Support tickets: select all, bulk open/close/delete; suggestions forward to marketing admin",
         "Cron runs as compiled Node bundle to cut post-import RAM; player categories alphabetical"
       ],
@@ -3047,25 +3002,23 @@
         "Group packages stored months as days (1 month = 1 day)",
         "Create line could fail silently or debit credits without creating the line",
         "Only Administrator user group existed after import",
-        "VOD browser / episodes could load unbounded lists and destabilize the panel"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.35.tar.gz"
+        "VOD browser episodes could load unbounded lists and destabilize the panel"
+      ]
     },
     {
       "version": "1.9.34",
       "date": "2026-08-13",
       "channel": "stable",
-      "summary": "Panel migration now auto-maps headerless SQL dumps (INSERT without column names) using content inference plus the documented 1-Stream/XUI column order.",
+      "summary": "Panel migration now auto-maps headerless SQL dumps (INSERT without column names) using content inference plus the documented column order.",
       "changelog": [
-        "Panel migration: headerless dumps (INSERT INTO ... VALUES with no column list) are now auto-mapped instead of importing 0 rows",
+        "Panel migration: headerless dumps (INSERT INTO... VALUES with no column list) are now auto-mapped instead of importing 0 rows",
         "Content-based column inference (username, password, MAC, URLs, IPs, dates) plus schema-order fallback for ambiguous integer columns",
         "Auto-mapping reports which columns were inferred and warns only when a table is genuinely empty"
       ],
       "fixes": [
-        "XUI.one / 1-Stream backups exported without column names parsed 0 streams/lines/bouquets (silent data loss)",
+        "backups exported without column names parsed 0 streams/lines/bouquets (silent data loss)",
         "Migration preview showed every target table at 0 rows with no actionable message for headerless sources"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.34.tar.gz"
+      ]
     },
     {
       "version": "1.9.33",
@@ -3080,10 +3033,9 @@
       ],
       "fixes": [
         "Admin had to open a stream or panel first before /admin routes were reachable",
-        "XUI.one headerless SQL backups parsed 0 streams/lines/bouquets with no warning",
+        "headerless SQL backups parsed 0 streams/lines/bouquets with no warning",
         "Midnight source showed spurious 'No INSERT for table streams' during preview"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.33.tar.gz"
+      ]
     },
     {
       "version": "1.9.31",
@@ -3091,14 +3043,13 @@
       "channel": "stable",
       "summary": "Fix prebuilt update not updating package.json version on old panels.",
       "changelog": [
-        "Bootstrap the latest apply-prebuilt-update.sh from nexlify.live before running a prebuilt update",
+        "Bootstrap the latest apply-prebuilt-update.sh from Some panel hostnames before running a prebuilt update",
         "Old panels now pick up script fixes (package.json version sync) during prebuilt updates"
       ],
       "fixes": [
         "After prebuilt update the version API still reported the old version",
         "apply-prebuilt-update.sh fixes could not reach panels that only ever used prebuilt updates"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.31.tar.gz"
+      ]
     },
     {
       "version": "1.9.30",
@@ -3113,8 +3064,7 @@
       "fixes": [
         "prisma migrate deploy failed with P3005 because production schema was not baselined",
         "panel_notifications migration could not apply because PanelNotification tables already existed"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.30.tar.gz"
+      ]
     },
     {
       "version": "1.9.29",
@@ -3129,8 +3079,7 @@
       "fixes": [
         "Updates page stuck on sync panel files 24% while bottom overlay showed npm install 32%",
         "Two usePanelUpdateJob hook instances drifted when polls failed or ran out of phase"
-      ],
-      "downloadUrl": "https://nexlify.live/downloads/next-1.9.29.tar.gz"
+      ]
     },
     {
       "version": "1.9.28",
@@ -3153,7 +3102,7 @@
       "channel": "stable",
       "summary": "Reduce panel downtime at 88% update — immediate restart after build swap.",
       "changelog": [
-        "Restart PM2 immediately after .next swap (no broken in-between state)",
+        "Restart PM2 immediately after.next swap (no broken in-between state)",
         "wait-panel-ready after restart before declaring update step done",
         "Progress UI explains 88–98% brief outage is expected"
       ],
@@ -3199,11 +3148,11 @@
         "vps-repair-standalone skips PM2 restart when SKIP_PM2_RESTART=1",
         "fix-customer-panel step 4 no longer restarts PM2 after step 3 already did",
         "verify_panel_ui retries /login up to 30s after PM2 restart",
-        "vps-repair-standalone reads PORT from .env (IP panels use :80 not :13000)"
+        "vps-repair-standalone reads PORT from .env (IP panels use:80 not:13000)"
       ],
       "fixes": [
         "fix-customer-panel Step 5 ERROR /login HTTP 000 after vps-repair-standalone restart",
-        "Health check on wrong port 13000 for IP direct :80 installs",
+        "Health check on wrong port 13000 for IP direct:80 installs",
         "Race: verify ran before panel finished restarting (~15s startup)"
       ]
     },
@@ -3213,13 +3162,13 @@
       "channel": "stable",
       "summary": "Fix customer repair: missing Prisma client breaks password sync and update worker.",
       "changelog": [
-        "ensure-prisma-client.sh runs prisma generate when .prisma/client is missing",
+        "ensure-prisma-client.sh runs prisma generate when.prisma/client is missing",
         "fix-panel-ip-login installs deps + generates Prisma before set-admin-password",
         "fix-update-worker-now generates Prisma client before PM2 restart",
         "fix-customer-panel fetches ensure-prisma-client.sh from vendor install bundle"
       ],
       "fixes": [
-        "Cannot find module .prisma/client/default during fix-customer-panel rebuild",
+        "Cannot find module.prisma/client/default during fix-customer-panel rebuild",
         "Update worker crashed exit 127 — Prisma client not generated after npm ci",
         "set-admin-password.cjs failed before panel rebuild on IP customer VPS"
       ]
@@ -3240,14 +3189,14 @@
         "Build failed: Cannot find module tailwindcss on customer VPS",
         "Panel down on port 80 after failed rebuild (HTTP 000)",
         "404 fetching vps-repair-standalone.sh from vendor install scripts",
-        "vps-fix-everything false FAIL on /api/panel/version (checked marketing :13001 not panel :13000)"
+        "vps-fix-everything false FAIL on /api/panel/version (checked marketing:13001 not panel:13000)"
       ]
     },
     {
       "version": "1.9.21",
       "date": "2026-08-10",
       "channel": "stable",
-      "summary": "Fix nexlify.live marketing site server-side exception (SSR auth + DB).",
+      "summary": "Fix Some panel hostnames marketing site server-side exception (SSR auth + DB).",
       "changelog": [
         "Marketing getSessionUser no longer crashes site when DATABASE_URL missing",
         "fix-marketing-now.sh one-shot repair for vendor VPS",
@@ -3255,9 +3204,9 @@
         "panel-releases.json synced to marketing src/lib on every publish"
       ],
       "fixes": [
-        "Application error: server-side exception on nexlify.live (digest 2269377318)",
+        "Application error: server-side exception on Some panel hostnames (digest 2269377318)",
         "Logged-in users saw full site 500 when marketing PostgreSQL misconfigured",
-        "Stale panel-releases in marketing src/lib vs public/"
+        "Stale panel-releases in marketing src/lib vs public"
       ]
     },
     {
@@ -3272,7 +3221,6 @@
         "verify-release-candidate.sh blocks vendor publish if build fails"
       ],
       "fixes": [
-        "404 on https://nexlify.live/install/fix-panel-down-now.sh",
         "Build failed because of webpack errors on low-memory customer VPS",
         "Auto-apply loop broke panels during unstable releases"
       ]
@@ -3305,7 +3253,7 @@
         "apply-panel-fast-update runs IP env lock before build and verify-standalone after restart"
       ],
       "fixes": [
-        "Application error: client-side exception on IP installs (75.119.137.174 and similar)",
+        "Application error: client-side exception on IP installs (the media edge and similar)",
         "fix-customer-panel.sh updated panel but left wrong NEXT_PUBLIC URLs baked in build",
         "Post-update standalone JS chunks 404 until IP rebuild + prepare-standalone"
       ]
@@ -3323,7 +3271,7 @@
       "fixes": [
         "Customer still on v1.9.7 after vendor commands — repair must run on customer VPS",
         "Auto-apply retried failed update every page load (Cannot access toVersion before initialization)",
-        "curl to nexlify.live returned 403 — scripts now default to origin IP 85.17.162.54"
+        "curl to Some panel hostnames returned 403 — scripts now default to origin IP the media edge"
       ]
     },
     {
@@ -3337,7 +3285,7 @@
         "vps-fix-cloudflare-downloads.sh tests public URLs and documents WAF skip rule"
       ],
       "fixes": [
-        "Customer panel sync failed: curl 403 on nexlify.live/downloads/nexlify-panel.tar.gz",
+        "Customer panel sync failed: curl 403 on Some panel hostnames/downloads/nexlify-panel.tar.gz",
         "Localhost tarball HTTP 200 but public internet got Cloudflare bot challenge",
         "vps-fix-everything passed nginx checks while customers could not download updates"
       ]
@@ -3380,13 +3328,13 @@
       "changelog": [
         "Update worker spawned via scripts/panel-update-background.sh (always cd to install root)",
         "prepare-standalone sets PANEL_REPO_PATH to install root in standalone/.env",
-        "Removes .next/standalone/scripts on every build (prevents MODULE_NOT_FOUND)",
+        "Removes.next/standalone/scripts on every build (prevents MODULE_NOT_FOUND)",
         "fix-update-worker-now.sh hotfix for stuck panels without UI update",
-        "Bootstrap fetches panel-update-background.sh from nexlify.live during sync"
+        "Bootstrap fetches panel-update-background.sh from Some panel hostnames during sync"
       ],
       "fixes": [
         "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
-        "Worker exited with code 127 when PM2 cwd is .next/standalone",
+        "Worker exited with code 127 when PM2 cwd is.next/standalone",
         "Pre-v1.9.11 bundled code used standalone as repo path (package.json copied there)",
         "Customer Admin → Settings → Updates failed immediately before sync could run"
       ]
@@ -3397,9 +3345,9 @@
       "channel": "stable",
       "summary": "Fix customer panel updates failing with Cannot find module panel-server.",
       "changelog": [
-        "Update worker always runs from panel install root, not .next/standalone",
+        "Update worker always runs from panel install root, not.next/standalone",
         "panel-update-background.ts uses dynamic imports after resolving repo root",
-        "Repo path detection skips standalone build dir (requires scripts/ + src/)"
+        "Repo path detection skips standalone build dir (requires scripts/ + src)"
       ],
       "fixes": [
         "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
@@ -3415,13 +3363,13 @@
       "changelog": [
         "Resolve panel package.json from standalone cwd, PANEL_REPO_PATH, and install root",
         "Updates page shows a clear error instead of JSON parse failure on API 500",
-        "panel.demo.nexlify.live nginx proxies to panel (demo mode) instead of redirecting away",
-        "vps-fix-both-sites.sh installs demo vhost alongside panel.nexlify.live"
+        "Some panel hostnames nginx proxies to panel (demo mode) instead of redirecting away",
+        "vps-fix-both-sites.sh installs demo vhost alongside Some panel hostnames"
       ],
       "fixes": [
         "Admin → Settings → Updates: Unexpected token 'I', Internal Server Error is not valid JSON",
-        "panel.demo.nexlify.live not working (nginx redirected to panel.nexlify.live/login)",
-        "Version API failing when PM2 cwd is .next/standalone without repo package.json"
+        "Some panel hostnames not working (nginx redirected to Some panel hostnames/login)",
+        "Version API failing when PM2 cwd is.next/standalone without repo package.json"
       ]
     },
     {
@@ -3437,8 +3385,8 @@
       ],
       "fixes": [
         "Admin → Settings → Updates failing with 'staging build invalid' despite successful compile",
-        "prepare-standalone skipping because .next/standalone/server.js was missing",
-        "Recovery loop: Missing valid .next after failed update on first install / no backup"
+        "prepare-standalone skipping because.next/standalone/server.js was missing",
+        "Recovery loop: Missing valid.next after failed update on first install no backup"
       ]
     },
     {
@@ -3447,8 +3395,8 @@
       "channel": "stable",
       "summary": "Fix panel crash when uploading large SQL database dumps during migration.",
       "changelog": [
-        "Panel migration: large .sql files upload directly to the server (multipart) instead of loading in the browser",
-        "Migration tips callout — prefer PostgreSQL (live) for 1-stream; paste/preview limited to 512KB exports"
+        "Panel migration: large.sql files upload directly to the server (multipart) instead of loading in the browser",
+        "Migration tips callout — prefer PostgreSQL (live) for; paste/preview limited to 512KB exports"
       ],
       "fixes": [
         "Client-side Application error when uploading database SQL dumps on Panel migration",
@@ -3469,7 +3417,7 @@
       ],
       "fixes": [
         "Installer --ip flag was documented but not parsed — fixed",
-        "License delete failed on ActivationCode / AddonEntitlement FK constraints",
+        "License delete failed on ActivationCode AddonEntitlement FK constraints",
         "INSTALLER_VERSION drifted from package.json (v194 vs v193 vs 1.9.3)"
       ]
     },
@@ -3550,7 +3498,8 @@
         "Viewer Heatmap — geographic viewer distribution visualization",
         "Fixed Connections panel layout overflow on smaller screens",
         "Updated marketing site with 15 new feature benefits"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.9.0",
@@ -3651,12 +3600,13 @@
       "changelog": [
         "Fix Smarters replay on same channel (max-connections reconnect for same IP+stream)",
         "HLS remux replaces prior session per viewer on channel replay",
-        "EPG All Countries switched from iptv-org to xtream-masters.com/epg feeds",
+        "EPG All Countries switched from iptv-org to Some panel hostnames/epg feeds",
         "EPG Channel Map: channel_id renamed to Stream ID in UI and CSV export",
         "Remove Direct source option from live streams (movies/series only)",
         "Stream logs: show HLS relay errors, stream names, and empty-state hints",
         "Dark theme: fix unreadable stream names in Manage Streams table"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.8.0",
@@ -3664,12 +3614,13 @@
       "channel": "stable",
       "summary": "Monolithic mode: auto port sync on save, extra HTTP/HTTPS listeners, panel-driven RTMP, --monolithic installer.",
       "changelog": [
-        "Edit Server / Settings save auto-runs sync-panel-ports (nginx + UFW, no manual sync step)",
+        "Edit Server Settings save auto-runs sync-panel-ports (nginx + UFW, no manual sync step)",
         "Advanced tag ports generate extra nginx listen blocks (HTTP stream edge + HTTPS)",
         "RTMP vhost generated from server rtmpPort (install-nginx-rtmp.sh)",
         "Installer --monolithic: main server row + local stream agent on same host",
         "Remote servers: save queues agent Push config instead of panel nginx edits"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.9",
@@ -3682,7 +3633,8 @@
         "PM2 restart dedupes orphan nexlify workers after mode switches",
         "Marketing: licenses/validate + whmcs API routes; licensing exports restored",
         "scripts/full-audit-smoke.sh for vendor/customer health checks"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.8",
@@ -3691,10 +3643,11 @@
       "summary": "Fix Smarters empty LIVE TV when logging in on HTTPS 443; publish bootstrap script.",
       "changelog": [
         "server_info.port now matches the port clients use (443 for HTTPS domains, not forced 8080)",
-        "Smarters no longer redirected to blocked :8080 after successful HTTPS login",
-        "Publish has-valid-next-build.sh to nexlify.live/install/scripts/ (fixes bootstrap 404)",
+        "Smarters no longer redirected to blocked:8080 after successful HTTPS login",
+        "Publish has-valid-next-build.sh to Some panel hostnames/install/scripts/ (fixes bootstrap 404)",
         "Marketing install guide: Smarters use port 443 on domains, port 80 on IP installs"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.7",
@@ -3705,9 +3658,10 @@
         "Installer runs installer-finalize-ports.sh (nginx start, stream edge, UFW 22/80/443/8080/1935/554)",
         "Fast update applies port sync after every panel upgrade",
         "Install complete shows IPTV/Smarters URL and stream port in credentials",
-        "Marketing installer v177; fix-stream-edge-now.sh published to nexlify.live/install/",
+        "Marketing installer v177; fix-stream-edge-now.sh published to Some panel hostnames/install",
         "Publish script ships all port scripts with tarball and one-click installer"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.6",
@@ -3720,7 +3674,8 @@
         "Installer opens all IPTV ports automatically (skip with --skip-firewall)",
         "Admin → Settings → Server: Sync ports & firewall button + port checklist",
         "Stream port changes persist to .env and regenerate nginx on sync"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.5",
@@ -3729,23 +3684,25 @@
       "summary": "Fix Smarters empty categories, port 8080 stream edge, and Xtream server_info.",
       "changelog": [
         "Invalidate Xtream category cache when lines or bouquets change (fixes empty LIVE TV after setup)",
-        "Ship nginx stream edge on :8080 with installer + UFW rule",
+        "Ship nginx stream edge on:8080 with installer + UFW rule",
         "Xtream server_info.port advertises stream HTTP port (8080) for HTTPS panels",
         "IP-only installs use port 80 for Xtream (not 8080) in server_info and env"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.4",
       "date": "2026-06-18",
       "channel": "stable",
-      "summary": "Smarters category fix, XUI-style manage streams, dashboard monitor, and server install UI.",
+      "summary": "Smarters category fix, manage streams, dashboard monitor, and server install UI.",
       "changelog": [
         "Verify the Stream panel on Manage Streams (Active Servers, Stream Sources, Recent Errors)",
         "Dashboard resource monitor with CPU/memory/network charts and service status",
-        "XUI-style server installation wizard with live install log",
+        "server installation wizard with live install log",
         "Backup source URL field on stream edit; failover when primary probe fails",
         "Xtream get_live_categories scoped to line bouquets (fixes empty Entertainment category in Smarters)"
-      ]
+      ],
+      "fixes": []
     },
     {
       "version": "1.7.3",
@@ -3755,7 +3712,8 @@
       "fixes": [
         "IPTV Smarters playback error on HLS channels — /live/…/id.ts now streams real MPEG-TS via ffmpeg remux",
         "HLS segment relay allows CDN hosts beyond the root manifest domain"
-      ]
+      ],
+      "changelog": []
     },
     {
       "version": "1.7.2",
@@ -3777,8 +3735,8 @@
       "channel": "stable",
       "summary": "Panel UX polish, update-banner fix, and IPTV Smarters HLS playback fix.",
       "changelog": [
-        "Streaming Servers nav — Engine, Transcoding Studio, and Health moved below Cache / Redis",
-        "Panel UI zoomed out to 1-Stream / XUI-style density",
+        "Streaming Servers nav — Engine, Transcoding Studio, and Health moved below Cache Redis",
+        "Panel UI zoomed out to density",
         "Update complete banner no longer reappears after Reload now"
       ],
       "fixes": [
@@ -3829,13 +3787,13 @@
       "channel": "stable",
       "summary": "Safe panel updates: automatic rollback and recovery if build fails — panel stays online.",
       "changelog": [
-        "Updates back up .next before building and restore the previous build if npm run build fails",
+        "Updates back up.next before building and restore the previous build if npm run build fails",
         "New panel-update-recover.sh — auto rollback, rebuild, and restart after interrupted updates",
-        "Health watchdog and panel-restart-safe.sh call recover when .next is missing",
+        "Health watchdog and panel-restart-safe.sh call recover when.next is missing",
         "Failed updates always attempt recovery so the panel is not left offline at 82%"
       ],
       "fixes": [
-        "Panel went offline when auto-update stopped PM2 and deleted .next but build never finished",
+        "Panel went offline when auto-update stopped PM2 and deleted.next but build never finished",
         "Repeated crash on customer VPS during v1.6.0 → latest update attempts"
       ]
     },
@@ -3863,8 +3821,8 @@
         "Manage Servers: larger Actions button with full menu — easier to tap on desktop and mobile",
         "Manage Lines: expanded Download line menu — M3U file download, EPG, Stalker, web player, Enigma2, copy credentials",
         "Add Server: example placeholders and primary network interface auto-suggested from existing servers",
-        "Manage Streams: dedicated XUI table at Content → Streams",
-        "Manage Bouquets: XUI-style table with search, pagination, and quick enable/disable",
+        "Manage Streams: dedicated table at Content → Streams",
+        "Manage Bouquets: table with search, pagination, and quick enable/disable",
         "Sub-resellers: richer admin table with credits, lines, group, status, and actions"
       ],
       "fixes": [
@@ -3875,15 +3833,15 @@
       "version": "1.6.1",
       "date": "2026-06-26",
       "channel": "stable",
-      "summary": "XUI-style content management: servers, streams, movies, series, and episodes overhaul.",
+      "summary": "content management: servers, streams, movies, series, and episodes overhaul.",
       "changelog": [
         "Manage Servers: expanded action menu (health, LB, connections, enable/disable, mark online), table default view, server tree removed",
         "Main panel server auto-marked online on fresh installs",
-        "Manage Streams / Movies / Series: XUI toolbar with search, category & status filters, bulk enable/disable/delete, row actions",
+        "Manage Streams Movies Series: toolbar with search, category & status filters, bulk enable/disable/delete, row actions",
         "Manage Episodes: full table with series/season filters and bulk delete",
         "Add Episode & Add Series: collapsible sections matching Add Movie layout",
         "Manage Streams split view: mass edit and stream health shortcuts",
-        "Webplayer CORS + demo playback fix for panel.nexlify.live lines"
+        "Webplayer CORS + demo playback fix for Some panel hostnames lines"
       ],
       "fixes": []
     },
@@ -3893,22 +3851,22 @@
       "channel": "stable",
       "summary": "Major v1.6.0: Anti-Sharing & Scalability, Advanced Monitoring, Mass Operations, Migration Tools, and Security hardening.",
       "changelog": [
-        "ActiveCode / Device-Bound Authentication: bind subscriptions to specific device IDs for strongest anti-sharing protection",
-        "Stream Fingerprint / Invisible Watermarking: trace leaks back to individual subscribers with unique tokens",
-        "Same-IP / Multi-Login Detection + Auto Actions: real-time detection with auto-ban, disable, or notify",
+        "ActiveCode Device-Bound Authentication: bind subscriptions to specific device IDs for strongest anti-sharing protection",
+        "Stream Fingerprint Invisible Watermarking: trace leaks back to individual subscribers with unique tokens",
+        "Same-IP Multi-Login Detection + Auto Actions: real-time detection with auto-ban, disable, or notify",
         "Load Balancer Shared State: unlimited LB sessions with shared state across all load balancers",
         "TMDB Auto-Sync: automatic metadata, posters, descriptions, seasons/episodes for Movies & Series",
-        "Mass Edit / Bulk Operations: bulk update, enable, disable, delete, assign bouquets on Lines, Streams, Movies, Series, MAG/Enigma devices",
+        "Mass Edit Bulk Operations: bulk update, enable, disable, delete, assign bouquets on Lines, Streams, Movies, Series, MAG/Enigma devices",
         "Auto M3U Sync + Auto Channel Mapping: one-click sync from provider URLs with automatic channel-to-EPG mapping",
         "Advanced EPG Auto-Assignment: mass auto-mapping with 95%+ accuracy target, multiple sources, improved cron UI",
         "Auto Issue Fixing: smart analyzer detects audio loss, loops, freezes, and applies zero-downtime source swapping",
         "Real-time Down Source Monitoring + Alerts: health checks, bitrate monitoring, SourceMonitorAlert notifications",
         "Apps Lock: restrict subscriptions to specific player apps (iOS, Android, Web, MAG, Enigma, SmartTV, Kodi)",
         "Reseller API Keys: official external API with granular permissions and IP whitelisting for reseller automation",
-        "xDrive / Encrypted Cloud Backup: encrypted backups with S3/GCS/Azure/xDrive support and configurable retention",
+        "xDrive Encrypted Cloud Backup: encrypted backups with S3/GCS/Azure/xDrive support and configurable retention",
         "Server Cleaner: automated maintenance tasks (orphaned streams, expired lines, old logs, temp files, DB vacuum, broken streams)",
         "Custom Expiry Videos: branded messages when lines expire, suspend, or run low on credits",
-        "Migration Tools: automated import from Xtream UI, XUI, NXT, WHMCS with selectable item types",
+        "Migration Tools: automated import from Xtream UI,, NXT, WHMCS with selectable item types",
         "Connection Geography: live connections world map with country, region, city, bandwidth tracking",
         "Stream Health Dashboard: per-stream health checks with response time, bitrate, audio/video tracks, freeze/loop detection",
         "Live VideoLog: real-time viewer activity logging per stream and line"
@@ -3929,7 +3887,7 @@
         "Sidebar navigation: renamed 'Created Channels' to 'Create 24/7 Channel', added Import M3U link, removed EPG Guide Browser",
         "Sidebar pathActive: parent categories no longer highlight when on action pages (add, edit, settings, etc.)",
         "Manage Lines: wrapped in form with autoComplete=off to prevent Google password save prompts",
-        "EPG sources: updated URLs to .xml.gz format, fixed 404 errors",
+        "EPG sources: updated URLs to.xml.gz format, fixed 404 errors",
         "EPG Calendar: now shows real program data from Prisma EpgProgram database instead of mock data",
         "Manage Streams: added search toolbar, stream count display, improved selected stream header layout",
         "VOD content: redesigned with 3 professional cards (Movies, TV Series, VOD Proxy)",
@@ -3964,7 +3922,7 @@
       "version": "1.5.6",
       "date": "2026-06-18",
       "channel": "stable",
-      "summary": "Fix Settings → Updates crash when loading release notes from nexlify.live.",
+      "summary": "Fix Settings → Updates crash when loading release notes from Some panel hostnames.",
       "changelog": [
         "Normalize marketing and panel release feed formats in fetchNexlifyReleasesFeed",
         "Fall back to bundled panel-releases.json when remote feed fails",
@@ -3980,8 +3938,8 @@
       "channel": "stable",
       "summary": "Manage streams UX, built-in DDoS shield, source probe on Add Stream, and automatic tarball updates for all panels.",
       "changelog": [
-        "Manage Streams under Live / Radio / Channel with split layout and verify panel",
-        "Check / probe source on Add Stream before saving",
+        "Manage Streams under Live Radio Channel with split layout and verify panel",
+        "Check probe source on Add Stream before saving",
         "Built-in DDoS shield on playback and Xtream API paths (Security settings)",
         "Automatic panel updates for tarball installs via apply-panel-fast-update.sh",
         "Hourly auto-update cron applies new releases when enabled (default on)"
@@ -3998,8 +3956,8 @@
       "summary": "IPTV playback, EPG export, migration discoverability, and installer hardening for all customer VPS types.",
       "changelog": [
         "xmltv.php EPG export for subscriber lines (portal + players)",
-        "/movie/ proxy routes public for integration VOD in M3U",
-        "Fix Xtream server_info port to match nginx public URL (not :8080/:3000)",
+        "movie/ proxy routes public for integration VOD in M3U",
+        "Fix Xtream server_info port to match nginx public URL (not:8080/:3000)",
         "ABR multi-bitrate M3U entries use authenticated /live/ URLs",
         "Adult content restriction enforced on playback",
         "Demo sandbox blocks player_api, get.php, live, movie, stalker, xmltv",
@@ -4019,7 +3977,7 @@
       "channel": "stable",
       "summary": "Configure-ready polish, website 50% coupon popup, portal billing links, and operator tooling.",
       "notes": [
-        "Marketing site: NEXLIFY50 coupon popup (50% off, 30 redemptions) on nexlify.live.",
+        "Marketing site: NEXLIFY50 coupon popup (50% off, 30 redemptions) on Some panel hostnames.",
         "Run npm run db:seed or upsert coupon NEXLIFY50 on production after deploy.",
         "Demo panel (panel.demo) blocks all mutations except login/logout."
       ],
@@ -4032,7 +3990,7 @@
         "i18n: login, portal, and key settings strings in en, es, fr, ar",
         "White-label: reseller group logo and accent on login and panel shell",
         "Fix panel update auto-download toggle persistence",
-        "XUI modules: profiles list, hmac/hmacs to API docs, recording to webhooks, mag_events and videolog live",
+        "modules: profiles list, hmac/hmacs to API docs, recording to webhooks, mag_events and videolog live",
         "MAG/Enigma add forms: MAC normalization hints",
         "Stream health browser: clients, logs link, one-click error fix",
         "Server install wizard: certbot and sysctl hints",
@@ -4079,7 +4037,7 @@
         "Stream backup URL failover in resolve-stream-url",
         "Cloud backup: full JSON export and settings restore upload",
         "Scheduled tasks settings UI for EPG, channel refresh, and dead-link probes",
-        "Marketing /features comparison page on nexlify.live"
+        "Marketing /features comparison page on Some panel hostnames"
       ],
       "fixes": []
     },
@@ -4090,7 +4048,7 @@
       "summary": "What's new modal after panel updates and synced release notes across panel and website.",
       "notes": [
         "After updating or reloading, admins see a What's new popup for the installed version.",
-        "Release notes are synced from one source to the panel API and nexlify.live."
+        "Release notes are synced from one source to the panel API and Some panel hostnames."
       ],
       "changelog": [
         "What's new modal: pops once per version after a panel update or first admin login on a new version",
@@ -4102,14 +4060,14 @@
       "version": "1.5.0",
       "date": "2026-06-10",
       "channel": "stable",
-      "summary": "XUI-style VOD import, sidebar persistence, expanded settings, and panel update reliability.",
+      "summary": "VOD import, sidebar persistence, expanded settings, and panel update reliability.",
       "notes": [
         "Import Movies and Import Series default to M3U/URL with dual-list selection and TMDB auto-fetch.",
         "Sidebar sections stay expanded when navigating; no more collapsing the active category.",
         "Panel update polling is lighter; the Updates page no longer hangs on a full reload during background jobs."
       ],
       "changelog": [
-        "Import Movies & Series: XUI-style bulk import: M3U/URL default, dual-listbox picker, auto category, direct source, TMDB auto-fetch, bouquets, preview",
+        "Import Movies & Series: bulk import: M3U/URL default, dual-listbox picker, auto category, direct source, TMDB auto-fetch, bouquets, preview",
         "Sidebar category persistence: expanded groups saved in session storage across navigation",
         "Sub-reseller help: descriptive guidance on groups and admin sub-reseller list",
         "Streaming settings: on-demand probesize with auto recommended value (128000 bytes)",
@@ -4135,7 +4093,7 @@
         "In-panel notification system for admins and resellers",
         "Streaming servers server tree on Manage Servers",
         "M3U and channel imports default to on-demand",
-        "XUI-style admin and reseller dashboards"
+        "admin and reseller dashboards"
       ],
       "fixes": [
         "502 Bad Gateway after deploys when PM2 restart silently failed",
