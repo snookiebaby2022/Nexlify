@@ -42,8 +42,9 @@ Bundled Redis under `/home/nexlify/bin/redis` on stream servers is for **edge da
 
 | Setting | Suggestion |
 |---------|------------|
-| `maxmemory` | 128–256 MB for panel cache |
-| `maxmemory-policy` | `allkeys-lru` |
+| `maxmemory` | 512 MB–2 GB for panel cache (see `install-redis-production.sh`) |
+| `maxmemory-policy` | `allkeys-lru` for **cache** keys (catalog/EPG) |
+| Session / conn slots | Prefer `REDIS_SLOTS_URL=redis://127.0.0.1:6380` on a second Redis with `maxmemory-policy noeviction` (or `volatile-lru`). Panel + edge use the same keys (`nexlify:conn:slots:*`). Falls back to `REDIS_URL` when unset. |
 | Persistence | `save ""` optional — cache can be cold after restart |
 | Firewall | Bind Redis to `127.0.0.1` or private VPC only |
 

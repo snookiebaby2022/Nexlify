@@ -289,6 +289,12 @@ export default function StreamSettingsPage() {
               type: "number",
               hint: "0 = disabled. Signed pt= token on playback URLs.",
             },
+            {
+              key: "requirePlaybackToken",
+              label: "Require playback token (pt=)",
+              type: "yesno",
+              hint: "OFF by default. ON rejects /live/user/pass/id without a valid pt= — only for custom apps that send tokens.",
+            },
             { key: "autoFixDeadLinks", label: "Auto-fix dead links (cron probe)", type: "yesno", hint: "Off by default. Probe a channel when you open it — catalog scans burn Main CPU." },
             {
               key: "autoFixDeadLinksIntervalMin",

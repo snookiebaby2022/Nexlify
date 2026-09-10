@@ -23,5 +23,24 @@ send_timeout ${nginx.readTimeout}s;
 
 # HLS packaging hint (configure in your app block):
 # hls_fragment ${nginx.hlsSegmentDuration}s;
+
+# --- Optional XC API cache (panel host only — never cache /live/ media) ---
+# proxy_cache_path /var/cache/nginx/nexlify_xc levels=1:2 keys_zone=nexlify_xc:64m
+#                  max_size=1g inactive=10m use_temp_path=off;
+# limit_req_zone $binary_remote_addr zone=xc_api:20m rate=30r/s;
+#
+# location ~ ^/(player_api|panel_api|get|xmltv)\\.php$ {
+#     limit_req zone=xc_api burst=60 nodelay;
+#     proxy_cache nexlify_xc;
+#     proxy_cache_valid 200 30s;
+#     proxy_cache_methods GET HEAD;
+#     proxy_cache_key "$scheme$request_method$host$request_uri";
+#     proxy_pass http://127.0.0.1:13000;
+#     add_header X-Cache-Status $upstream_cache_status;
+# }
+#
+# location ~ ^/(live|timeshift|movie|series)/ {
+#     # Media: never proxy_cache; splice on edge or return 502 on panel.
+# }
 `;
 }

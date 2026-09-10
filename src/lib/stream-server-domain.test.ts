@@ -120,6 +120,31 @@ describe("direct media hostname selection", () => {
       "209.237.141.15"
     );
   });
+
+  it("prefers the XC login hostname over LB domain (XUI play-through-login-DNS)", () => {
+    assert.equal(
+      pickAdvertisedMediaHostnameSync({
+        lbHost: "209.237.141.15",
+        lbDomain: "lb.darkcdn.site",
+        mainPoolHosts: ["cdn1.example.com"],
+        loginHost: "streams.customer.tv",
+        panelHost: "45.88.138.18",
+      }),
+      "streams.customer.tv"
+    );
+  });
+
+  it("does not prefer a login hostname that is the panel IP", () => {
+    assert.equal(
+      pickAdvertisedMediaHostnameSync({
+        lbHost: "209.237.141.15",
+        lbDomain: "lb.darkcdn.site",
+        loginHost: "45.88.138.18",
+        panelHost: "45.88.138.18",
+      }),
+      "lb.darkcdn.site"
+    );
+  });
 });
 
 describe("sticky line LB keep predicate", () => {

@@ -11,6 +11,7 @@ import {
   forcedAiTake,
   redactAiRow,
   resolveAiPrismaModel,
+  sanitizeAiOrderBy,
   sanitizeAiSelect,
   sanitizeAiWhere,
 } from "@/lib/ai-prisma-plan";
@@ -84,7 +85,7 @@ async function executeQuery(plan: AiQueryPlan): Promise<{ results: unknown; coun
   } else if (plan.model === "line") {
     findArgs.omit = { password: true };
   }
-  if (plan.orderBy) findArgs.orderBy = plan.orderBy;
+  if (plan.orderBy) findArgs.orderBy = sanitizeAiOrderBy(plan.orderBy);
   if (plan.skip) findArgs.skip = Math.max(0, Math.min(Number(plan.skip) || 0, 10_000));
 
   const results = await model.findMany(findArgs);

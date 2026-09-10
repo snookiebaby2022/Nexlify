@@ -143,6 +143,9 @@ const sharedPanelEnv = {
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
   NEXLIFY_CATALOG_CACHE_DIR: fileEnv.NEXLIFY_CATALOG_CACHE_DIR || "/var/lib/nexlify/catalog-cache",
+  // Media advertise — must be in PM2 env; standalone does not load repo .env for these.
+  NEXLIFY_MEDIA_ORIGIN: fileEnv.NEXLIFY_MEDIA_ORIGIN || "",
+  NEXLIFY_MEDIA_FORCE_LB_IP: fileEnv.NEXLIFY_MEDIA_FORCE_LB_IP || "0",
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=2048",
   PANEL_INSTANCES: String(panelInstances),
   NEXLIFY_STREAMING_OPTIMIZED: fileEnv.NEXLIFY_STREAMING_OPTIMIZED || (streamingOptimized ? "1" : "0"),

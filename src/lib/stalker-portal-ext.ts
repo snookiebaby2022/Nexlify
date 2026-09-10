@@ -3,6 +3,7 @@ import { activeBouquetIds, streamCountForLine, streamsForLineExport } from "./li
 import { StreamType } from "@prisma/client";
 import { getBinPaths } from "./bin-paths";
 import { prisma } from "./prisma";
+import { escapeHtml } from "@/lib/sanitize-text";
 
 /** Ministra / XUI default page size. */
 const STALKER_PAGE_SIZE = 14;
@@ -72,7 +73,7 @@ async function stalkerChannelRows(
   const prefix = `${paths.ffmpegPath.split(/[/\\]/).pop() ?? "ffmpeg"} `;
   return streams.map((s, i) => ({
     id: s.id,
-    name: s.name,
+    name: escapeHtml(s.name),
     number: String(page * STALKER_PAGE_SIZE + i + 1),
     censored: s.isAdult ? 1 : 0,
     cmd: `${prefix}${s.id}`,
@@ -223,7 +224,9 @@ export async function handleStalkerExtendedAction(
 ): Promise<unknown | null> {
   const page = parseInt(extra.page ?? extra.p ?? "0", 10) || 0;
   const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
-  const playbackBaseUrl = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl);
+  const playbackBaseUrl = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl, {
+    loginOrigin: baseUrl,
+  });
 
   switch (action) {
     case "get_modules":

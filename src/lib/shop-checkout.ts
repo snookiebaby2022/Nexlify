@@ -31,6 +31,8 @@ export async function createLineFromShopPackage(opts: {
   packageId: string;
   username?: string;
   password?: string;
+  /** Client IP for trial abuse quotas (shop checkout / PayPal capture). */
+  clientIp?: string | null;
 }): Promise<ShopLineResult> {
   const pkg = await prisma.package.findFirst({
     where: { id: opts.packageId, isActive: true, shopEnabled: true },
@@ -56,7 +58,10 @@ export async function createLineFromShopPackage(opts: {
     creditCost: pkg.creditCost,
     shopPriceCents: pkg.shopPriceCents,
   });
-  const trialGuard = await assertIptvTrialAllowed({ isTrial });
+  const trialGuard = await assertIptvTrialAllowed({
+    isTrial,
+    clientIp: opts.clientIp,
+  });
   if (!trialGuard.ok) throw new Error(trialGuard.error);
 
   const expiresAt = new Date();

@@ -8,6 +8,8 @@ node_modules
 .env.local
 .env.*
 !.env.example
+!.env.test.example
+coverage/
 .playback-topology
 windows/deploy.config.json
 backups/
@@ -21,6 +23,13 @@ tsconfig.tsbuildinfo
 next-env.d.ts
 *.log
 test-results/
+playwright-report/
+blob-report/
+tests/e2e/.auth/
+tests/load/.fixtures.json
+tests/load/reports/*.summary.json
+tests/load/reports/db-slow-queries.json
+tests/load/reports/LOAD-REPORT.md
 __pycache__/
 *.pyc
 build-out.txt

@@ -386,7 +386,9 @@ export async function handleStalkerAction(
     case "get_main_info": {
       const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
       const playOrigin = magHttpPlaybackOrigin(
-        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl, {
+          loginOrigin: baseUrl,
+        })
       );
       return stalkerJsResponse({
         mac: extra.mac ?? "",
@@ -430,7 +432,9 @@ export async function handleStalkerAction(
         }
         const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
         const origin = magHttpPlaybackOrigin(
-          await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+          await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl, {
+            loginOrigin: baseUrl,
+          })
         );
         const url = panelTimeshiftUrl(
           origin,
@@ -450,7 +454,9 @@ export async function handleStalkerAction(
       }
       const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
       const origin = magHttpPlaybackOrigin(
-        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl, {
+          loginOrigin: baseUrl,
+        })
       );
       const url = exportPlaybackUrl(
         origin,

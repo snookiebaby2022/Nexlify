@@ -50,11 +50,11 @@ export function isTestConnectionIp(ip?: string | null): boolean {
   return n.startsWith("203.0.113.") || n.startsWith("198.51.100.") || n.startsWith("192.0.2.");
 }
 
-/** Match rows stored with null or "" when IP was missing on either side. */
+/** Match rows stored with "" when IP was missing (nulls migrated to ""). */
 export function connectionIpPrismaFilter(ip?: string | null) {
   const normalized = normalizeConnectionIp(ip);
   if (normalized) return { ip: normalized };
-  return { OR: [{ ip: null }, { ip: "" }] };
+  return { ip: "" };
 }
 
 type LiveProxyHandle = { abort: () => void };
@@ -230,7 +230,6 @@ export function connectionCapacityAllows(
 function anonymousIpNotFilter() {
   return {
     OR: [
-      { ip: null },
       { ip: "" },
       { ip: "127.0.0.1" },
       { ip: "::1" },
@@ -408,6 +407,12 @@ async function countCapacitySessions(lineId: string, staleMs: number = CAPACITY_
   return result.length;
 }
 
+/** Prefer fail-closed under load (XUI proxy model). Opt into legacy fail-open with NEXLIFY_CAPACITY_FAIL_OPEN=1. */
+function capacityFailOpenEnabled(): boolean {
+  const v = process.env.NEXLIFY_CAPACITY_FAIL_OPEN?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 export async function lineHasConnectionCapacity(
   lineId: string,
   maxConnections: number,
@@ -419,14 +424,17 @@ export async function lineHasConnectionCapacity(
   // Never block live-auth / zap on housekeeping.
   void pruneTestConnectionRows(lineId).catch(() => {});
   void pruneLineStaleConnections(lineId, CAPACITY_STALE_MS).catch(() => {});
+
+  const failOpen = capacityFailOpenEnabled();
   try {
     return await Promise.race([
       lineHasConnectionCapacityInner(lineId, maxConnections, opts),
-      // Fail-open: a slow capacity DB must not 403 live playback (reconnect thrash).
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 800)),
+      new Promise<boolean>((resolve) =>
+        setTimeout(() => resolve(failOpen), 800)
+      ),
     ]);
   } catch {
-    return true;
+    return failOpen;
   }
 }
 
@@ -439,14 +447,30 @@ async function lineHasConnectionCapacityInner(
   const clientIp = normalizeConnectionIp(opts?.clientIp);
   if (isTestConnectionIp(clientIp)) return true;
 
+  // Redis atomic slots first (edge/panel admit path).
+  const { tryAcquireConnSlot } = await import("@/lib/connection-slots");
+  const slot = await tryAcquireConnSlot(lineId, maxConnections, {
+    streamId: opts?.streamId,
+    clientIp,
+  });
+  if (slot === "denied") return false;
+
   const { cacheGet, cacheSet } = await import("@/lib/cache");
   const cacheKey = `conn:cap:${lineId}:${clientIp ?? ""}:${opts?.streamId ?? ""}`;
   // Only cache allows — caching denies leaves a freed slot blocked for the TTL.
   const cached = await cacheGet<boolean>(cacheKey);
   if (cached === true) return true;
   const allowed = await lineHasConnectionCapacityDb(lineId, maxConnections, opts);
-  if (allowed) await cacheSet(cacheKey, true, 1);
-  return allowed;
+  if (allowed) {
+    await cacheSet(cacheKey, true, 1);
+    return true;
+  }
+  // DB says full — only release a newly acquired Redis member (not an existing session).
+  if (slot === "acquired") {
+    const { releaseConnSlot } = await import("@/lib/connection-slots");
+    await releaseConnSlot(lineId, { streamId: opts?.streamId, clientIp });
+  }
+  return false;
 }
 
 async function lineHasConnectionCapacityDb(
@@ -556,13 +580,13 @@ export async function trackConnection(opts: {
   /** When true, drop other streams for this viewer (channel zap). Default false — heartbeats must not prune. */
   pruneOthers?: boolean;
 }): Promise<string | null> {
-  const clientIp = normalizeConnectionIp(opts.ip);
+  const clientIp = normalizeConnectionIp(opts.ip) || "";
   // Deploy smoke tests must not occupy real viewer slots or Live Connections rows.
-  if (isTestConnectionIp(clientIp ?? opts.ip)) {
+  if (isTestConnectionIp(clientIp || opts.ip)) {
     return null;
   }
   // Hard kick: do not revive a session that was just kicked
-  if (await isSessionKicked(opts.lineId, clientIp ?? opts.ip)) {
+  if (await isSessionKicked(opts.lineId, clientIp || opts.ip)) {
     return null;
   }
 
@@ -635,7 +659,6 @@ export async function trackConnection(opts: {
         lineId: opts.lineId,
         streamId,
         OR: [
-          { ip: null },
           { ip: "" },
           { ip: "127.0.0.1" },
           { ip: "::1" },
@@ -653,7 +676,7 @@ export async function trackConnection(opts: {
     await prisma.liveConnection.deleteMany({
       where: {
         lineId: opts.lineId,
-        OR: [{ ip: null }, { ip: "" }],
+        OR: [{ ip: "" }],
         streamId: { not: streamId },
       },
     });
@@ -699,7 +722,6 @@ export async function trackConnection(opts: {
         lineId: opts.lineId,
         streamId,
         OR: [
-          { ip: null },
           { ip: "" },
           { ip: "127.0.0.1" },
           { ip: "::1" },

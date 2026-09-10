@@ -85,15 +85,38 @@ export function writeWatchM3uFile(folderId: string, content: string): string {
   return dest;
 }
 
+/** True when resolvedPath is strictly inside rootDir (no `..` escape). */
+export function isPathInsideDir(resolvedPath: string, rootDir: string): boolean {
+  const root = path.resolve(rootDir);
+  const target = path.resolve(resolvedPath);
+  const rel = path.relative(root, target);
+  return Boolean(rel) && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+/** Allowlist local M3U reads to upload dir and optional MEDIA_IMPORT_ROOT only. */
+export function isAllowedLocalM3uReadPath(
+  filePath: string,
+  opts?: { uploadRoot?: string; mediaRoot?: string | null }
+): boolean {
+  const safe = path.resolve(filePath);
+  const uploadRoot = path.resolve(opts?.uploadRoot ?? watchM3uUploadDir());
+  const mediaRoot =
+    opts && "mediaRoot" in (opts ?? {})
+      ? opts.mediaRoot
+        ? path.resolve(opts.mediaRoot)
+        : null
+      : process.env.MEDIA_IMPORT_ROOT
+        ? path.resolve(process.env.MEDIA_IMPORT_ROOT)
+        : null;
+  if (isPathInsideDir(safe, uploadRoot)) return true;
+  if (mediaRoot && isPathInsideDir(safe, mediaRoot)) return true;
+  return false;
+}
+
 function readLocalM3uFile(filePath: string): string {
   const safe = path.resolve(filePath);
-  const uploadRoot = path.resolve(watchM3uUploadDir());
-  const mediaRoot = process.env.MEDIA_IMPORT_ROOT
-    ? path.resolve(process.env.MEDIA_IMPORT_ROOT)
-    : null;
-  const allowed = safe.startsWith(uploadRoot) || !mediaRoot || safe.startsWith(mediaRoot);
-  if (!allowed) {
-    throw new Error(`Path must be under ${mediaRoot}`);
+  if (!isAllowedLocalM3uReadPath(safe)) {
+    throw new Error("M3U path is outside allowed import directories");
   }
   if (!fs.existsSync(safe) || !fs.statSync(safe).isFile()) {
     throw new Error(`M3U file not found: ${filePath}`);

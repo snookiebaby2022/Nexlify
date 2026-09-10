@@ -186,6 +186,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     maintenanceMode: false,
     /** Block new 24h / 48h IPTV trial subscriptions (not the panel software license). */
     disableTrial: false,
+    trialMaxPerIpPerDay: 3,
     /** When true, feature packs (LB Pro, transcoding, archive, security) work without extra addon licenses. */
     bundledFeaturePacks: true,
     /** Hours before panel logs are deleted by cron. 0 = never. */
@@ -290,7 +291,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     onDemandProbesize: "128000",
     onDemandProbesizeAuto: true,
     abrAutoSwitch: true,
-    playbackTokenTtlSec: 0,
+    playbackTokenTtlSec: 3600,
+    /** When true, clients must send a valid pt= mark (breaks stock Xtream URL-only apps). */
+    requirePlaybackToken: false,
     autoFixDeadLinks: false,
     autoFixDeadLinksIntervalMin: 15,
     catchupPresetsHours: [24, 48, 72],
@@ -442,7 +445,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     logoutOnIpChange: false,
     maxLoginAttempts: 5,
     lockoutMinutes: 15,
-    loginFloodPerMin: 30,
+    loginFloodPerMin: 10,
     requireStrongPasswords: false,
     autoGenerateLineCredentials: true,
     autoGenerateResellerCredentials: false,
@@ -451,7 +454,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     linePasswordBlockCommon: true,
     linePasswordDisallowUsername: true,
     apiRateLimitPerMin: 120,
-    totpRequiredForAdmins: false,
+    totpRequiredForAdmins: true,
     totpRequiredForResellers: false,
     blockBots: true,
     stealthPanel: true,

@@ -138,6 +138,62 @@ export function forcedAiTake(take: unknown, max = 50): number {
   return Math.min(Math.floor(n), max);
 }
 
+/** Safe scalar fields AI plans may sort by (never secrets / relations). */
+const AI_ORDER_BY_FIELDS = new Set([
+  "id",
+  "name",
+  "username",
+  "createdAt",
+  "updatedAt",
+  "expiresAt",
+  "startedAt",
+  "lastSeenAt",
+  "sortOrder",
+  "credits",
+  "isActive",
+  "type",
+  "role",
+  "start",
+  "end",
+  "checkedAt",
+  "watchCount",
+  "connectionCount",
+]);
+
+const AI_ORDER_DIRS = new Set(["asc", "desc"]);
+
+/**
+ * Whitelist Prisma orderBy from AI plans. Rejects unknown fields / dirs.
+ * Accepts a field name string, `{ field: "asc"|"desc" }`, or an array of those.
+ */
+export function sanitizeAiOrderBy(
+  orderBy: unknown,
+  fallback: Record<string, "asc" | "desc"> = { createdAt: "desc" }
+): Record<string, "asc" | "desc"> | Array<Record<string, "asc" | "desc">> {
+  const one = (raw: unknown): Record<string, "asc" | "desc"> | null => {
+    if (typeof raw === "string") {
+      const field = raw.trim();
+      if (!AI_ORDER_BY_FIELDS.has(field) || isSecretField(field)) return null;
+      return { [field]: "desc" };
+    }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const out: Record<string, "asc" | "desc"> = {};
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!AI_ORDER_BY_FIELDS.has(key) || isSecretField(key)) continue;
+      const dir = String(value ?? "").toLowerCase();
+      if (!AI_ORDER_DIRS.has(dir)) continue;
+      out[key] = dir as "asc" | "desc";
+    }
+    return Object.keys(out).length ? out : null;
+  };
+
+  if (Array.isArray(orderBy)) {
+    const items = orderBy.map(one).filter(Boolean) as Array<Record<string, "asc" | "desc">>;
+    return items.length ? items : [fallback];
+  }
+  return one(orderBy) ?? fallback;
+}
+
 export function redactAiRow(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(redactAiRow);
   if (!value || typeof value !== "object") return value;

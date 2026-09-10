@@ -49,3 +49,14 @@ test("legacy startCmd quotes the URL", () => {
   assert.equal(cmd.includes("eval"), false);
   assert.ok(cmd.includes(`'http://x/a'\\''b'`));
 });
+
+test("rejects control characters in inputUrl", () => {
+  assert.throws(() =>
+    buildFfmpegArgv({
+      ffmpegPath: "/usr/bin/ffmpeg",
+      inputUrl: "http://x/\0y",
+      streamId: "s1",
+      serverId: "srv1",
+    })
+  );
+});

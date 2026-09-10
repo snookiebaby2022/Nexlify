@@ -27,6 +27,11 @@ function livePlaybackBase(baseUrl: string, ignoreMediaOrigin = false): string {
   return trimBase(baseUrl);
 }
 
+function vodPlaybackBase(baseUrl: string, ignoreMediaOrigin = false): string {
+  // Proxied /movie|/series must use the LB/media edge (panel nginx refuses bitrate).
+  return livePlaybackBase(baseUrl, ignoreMediaOrigin);
+}
+
 /** MAG/Ministra cannot play modern TLS or random :8080 media IPs — use panel :80. */
 export function magHttpPlaybackOrigin(baseUrl: string): string {
   try {
@@ -46,7 +51,7 @@ export function magHttpPlaybackOrigin(baseUrl: string): string {
  * URL placed in M3U / Xtream exports.
  * @param output - "hls" forces .m3u8, "ts" forces .ts, "auto" matches the upstream format.
  * @param directPlay - when true, VOD returns the raw provider URL (faster, source exposed).
- *                     when false, VOD goes through the panel proxy (source hidden, Range support).
+ *                     when false, VOD goes through the LB/media edge /movie|/series path.
  */
 export function exportPlaybackUrl(
   baseUrl: string,
@@ -59,7 +64,6 @@ export function exportPlaybackUrl(
   ignoreMediaOrigin = false
 ): string {
   const resolved = (full ?? stream) as StreamWithProvider;
-  const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
     const liveBase = livePlaybackBase(baseUrl, ignoreMediaOrigin);
@@ -81,7 +85,7 @@ export function exportPlaybackUrl(
   }
 
   if (stream.type === StreamType.SERIES) {
-    return `${base}/series/${line.username}/${line.password}/${stream.id}.${ext === "mp4" ? "mkv" : ext}`;
+    return `${vodPlaybackBase(baseUrl, ignoreMediaOrigin)}/series/${line.username}/${line.password}/${stream.id}.${ext === "mp4" ? "mkv" : ext}`;
   }
-  return `${base}/movie/${line.username}/${line.password}/${stream.id}.${ext}`;
+  return `${vodPlaybackBase(baseUrl, ignoreMediaOrigin)}/movie/${line.username}/${line.password}/${stream.id}.${ext}`;
 }

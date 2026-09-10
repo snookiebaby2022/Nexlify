@@ -7,7 +7,10 @@ export function sessionPaysLineCredits(role: PanelRole): boolean {
   return role === Role.RESELLER || role === Role.SUB_RESELLER;
 }
 
-/** Debit reseller credits and write a credit ledger row. Throws on insufficient balance. */
+/**
+ * Debit reseller credits and write a credit ledger row.
+ * Uses a conditional update so concurrent debits cannot race below zero.
+ */
 export async function debitResellerCredits(
   tx: Tx,
   opts: {
@@ -21,16 +24,20 @@ export async function debitResellerCredits(
     return { balanceAfter: 0, charged: 0 };
   }
 
-  const owner = await tx.panelUser.findUnique({
+  const exists = await tx.panelUser.findUnique({
     where: { id: opts.userId },
-    select: { credits: true },
+    select: { id: true },
   });
-  if (!owner) throw new Error("Forbidden");
-  if (owner.credits < amount) throw new Error("Insufficient credits");
+  if (!exists) throw new Error("Forbidden");
 
-  const afterDebit = await tx.panelUser.update({
-    where: { id: opts.userId },
+  const updated = await tx.panelUser.updateMany({
+    where: { id: opts.userId, credits: { gte: amount } },
     data: { credits: { decrement: amount } },
+  });
+  if (updated.count !== 1) throw new Error("Insufficient credits");
+
+  const afterDebit = await tx.panelUser.findUniqueOrThrow({
+    where: { id: opts.userId },
     select: { credits: true },
   });
 

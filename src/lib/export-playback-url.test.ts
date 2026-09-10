@@ -16,7 +16,7 @@ describe("exportPlaybackUrl", () => {
     assert.equal(url, "http://45.88.138.18/live/demo/pass/live123.ts");
   });
 
-  it("uses the dedicated media origin only for live playback", () => {
+  it("uses the dedicated media origin for live and proxied VOD", () => {
     const previous = process.env.NEXLIFY_MEDIA_ORIGIN;
     process.env.NEXLIFY_MEDIA_ORIGIN = "http://209.237.141.15:8080";
     try {
@@ -41,7 +41,7 @@ describe("exportPlaybackUrl", () => {
         false
       );
       assert.equal(live, "http://209.237.141.15:8080/live/demo/pass/live123.ts");
-      assert.equal(movie, "http://45.88.138.18/movie/demo/pass/movie123.mkv");
+      assert.equal(movie, "http://209.237.141.15:8080/movie/demo/pass/movie123.mkv");
     } finally {
       if (previous == null) delete process.env.NEXLIFY_MEDIA_ORIGIN;
       else process.env.NEXLIFY_MEDIA_ORIGIN = previous;

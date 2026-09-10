@@ -169,6 +169,40 @@ for p in [
     if napi == 1:
         t = t4
         print("api→panel", p)
+    # Exact /xmltv.php must not go to refuse-media :8080 (legacy edge hop).
+    t5, nxml = re.subn(
+        r"(?ms)^    location = /xmltv\.php \{\n.*?proxy_pass http://127\.0\.0\.1:8080;.*?^    \}\n",
+        r'''    location = /xmltv.php {
+        gzip off;
+        proxy_pass http://127.0.0.1:13000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+        proxy_set_header X-Nexlify-Client-Port $server_port;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept-Encoding "";
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+''',
+        t,
+        count=1,
+    )
+    if nxml == 1:
+        t = t5
+        print("xmltv exact→panel", p)
+    else:
+        # Fallback: any remaining exact xmltv→8080
+        if "location = /xmltv.php" in t and "proxy_pass http://127.0.0.1:8080;" in t:
+            t = t.replace(
+                "location = /xmltv.php {\n        gzip off;\n        proxy_pass http://127.0.0.1:8080;",
+                "location = /xmltv.php {\n        gzip off;\n        proxy_pass http://127.0.0.1:13000;",
+                1,
+            )
+            print("xmltv exact→panel (simple)", p)
     p.write_text(t)
     print("wrote", p)
 PY

@@ -43,10 +43,13 @@ export function ServerEdgeAuthPanel({
 
   const envBlock = agentToken && agentToken !== "configured"
     ? `IPTV_EDGE_AGENT_TOKEN=${agentToken}
-IPTV_EDGE_SERVER_ID=${serverId}`
+IPTV_EDGE_SERVER_ID=${serverId}
+# Optional: shared slots Redis (same as panel REDIS_SLOTS_URL / REDIS_URL)
+# REDIS_SLOTS_URL=redis://PANEL_REDIS:6379`
     : agentToken === "configured"
       ? `IPTV_EDGE_AGENT_TOKEN=<generate or rotate in Agent panel below>
-IPTV_EDGE_SERVER_ID=${serverId}`
+IPTV_EDGE_SERVER_ID=${serverId}
+# REDIS_SLOTS_URL=redis://PANEL_REDIS:6379`
       : null;
 
   function copy(text: string, key: string) {

@@ -6,6 +6,7 @@ import { createLineForDevice, parseDeviceBouquetIds } from "@/lib/device-line-cr
 import { logActivity } from "@/lib/lines";
 import { assertMagDeviceAccess, assertOwnedLine } from "@/lib/device-access";
 import { PanelRole } from "@prisma/client";
+import { getClientIp } from "@/lib/client-ip";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
         packageId: packageId || undefined,
         ownerId: body.ownerId ? String(body.ownerId) : undefined,
         bouquetIds,
+        clientIp: getClientIp(req),
       });
       lineId = line.id;
     } catch (e) {

@@ -82,11 +82,16 @@ export function parseStreamServerDomain(
   return { ok: true, domain: host };
 }
 
-/** First/single LB hostname from a domain field, or empty if invalid/multi. */
+/**
+ * First/single LB hostname from a domain field.
+ * Tolerates a comma-separated DB value (legacy / UI mistakes) by taking the first
+ * valid hostname so advertise can still publish stream DNS instead of falling to LB IP.
+ */
 export function mediaHostnameFromServerDomain(domain: string | null | undefined): string {
   const parsed = parseStreamServerDomain(domain ?? "", "lb");
-  if (!parsed.ok || !parsed.domain) return "";
-  return parsed.domain;
+  if (parsed.ok && parsed.domain) return parsed.domain;
+  const hosts = listDomainFieldHostnames(domain);
+  return hosts[0] || "";
 }
 
 /** All hostnames listed in a main (or LB) domain field. */
@@ -186,19 +191,37 @@ function stickyPickIndex(seed: string, len: number): number {
   return hash % len;
 }
 
+function normalizeAdvertiseHost(raw: string | null | undefined): string {
+  return String(raw || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .split("/")[0]
+    ?.split(":")[0]
+    ?.toLowerCase() || "";
+}
+
 /**
  * Advertised media hostname for a sticky LB assignment (XUI-style direct edge):
  * Only advertise a hostname when its A/AAAA records include the LB IP.
  * Otherwise advertise the LB IP so players never hairpin through the panel
  * (panel proxy NIC ≈1G wall). Multi-domain still works when DNS points at the LB.
  * Never returns the main panel IP while an LB host exists.
+ *
+ * Preference (XUI.ONE-style):
+ * 1) Login Host (player_api DNS) when it resolves to this LB
+ * 2) NEXLIFY_MEDIA_ORIGIN when DNS→LB
+ * 3) LB Domain Name when DNS→LB
+ * 4) Main Domain Name / DNS rotator pool when DNS→LB
+ * 5) LB IP
  */
 export async function resolveAdvertisedMediaHostname(opts: {
   lb: DirectMediaServerFields;
   mainPoolHosts?: string[];
   lineId?: string;
-  /** Optional panel/main IP — never advertise this as media. */
+  /** Optional panel/main IP — never advertise this as media (unless monolith shares LB IP). */
   panelHost?: string | null;
+  /** Hostname the IPTV client used to login — prefer when DNS points at this LB. */
+  loginHost?: string | null;
 }): Promise<string | null> {
   const lbIp = rawServerHost(opts.lb);
   if (!lbIp) return null;
@@ -210,6 +233,29 @@ export async function resolveAdvertisedMediaHostname(opts: {
     return lbIp;
   }
 
+  const panelHost = normalizeAdvertiseHost(opts.panelHost);
+  // Monolith: panel IP === LB IP — domains that resolve there are valid media hosts.
+  const panelIsSeparateFromLb = Boolean(panelHost && panelHost !== lbIp);
+
+  const rejectIfPanel = (host: string | null): string | null => {
+    if (!host) return null;
+    if (panelIsSeparateFromLb && host.toLowerCase() === panelHost) return null;
+    if (panelIsSeparateFromLb && isIpHost(host) && host === panelHost) return null;
+    return host;
+  };
+
+  const loginHost = normalizeAdvertiseHost(opts.loginHost);
+  if (
+    loginHost &&
+    rejectIfPanel(loginHost) &&
+    (loginHost === lbIp || (await hostnameResolvesToTarget(loginHost, lbIp)))
+  ) {
+    // Login DNS→LB: advertise the same hostname apps already dialed (XUI behavior).
+    if (!(panelIsSeparateFromLb && (await hostnameResolvesToTarget(loginHost, panelHost)))) {
+      return loginHost;
+    }
+  }
+
   // Prefer configured media origin hostname when DNS points at this LB (e.g. darkcdn.site).
   const configuredOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
   if (configuredOrigin) {
@@ -219,33 +265,23 @@ export async function resolveAdvertisedMediaHostname(opts: {
       ).hostname.toLowerCase();
       if (
         configuredHost &&
-        configuredHost !== lbIp &&
+        rejectIfPanel(configuredHost) &&
         (await hostnameResolvesToTarget(configuredHost, lbIp))
       ) {
-        return configuredHost;
+        if (!(panelIsSeparateFromLb && (await hostnameResolvesToTarget(configuredHost, panelHost)))) {
+          return configuredHost;
+        }
       }
     } catch {
       /* ignore bad origin */
     }
   }
 
-  const panelHost = String(opts.panelHost || "")
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .split("/")[0]
-    ?.split(":")[0]
-    ?.toLowerCase();
-
-  const rejectIfPanel = (host: string | null): string | null => {
-    if (!host) return null;
-    if (panelHost && host.toLowerCase() === panelHost && host !== lbIp) return null;
-    if (panelHost && isIpHost(host) && host === panelHost && lbIp !== panelHost) return null;
-    return host;
-  };
-
   const lbDomain = mediaHostnameFromServerDomain(opts.lb.domain);
   if (lbDomain && rejectIfPanel(lbDomain) && (await hostnameResolvesToTarget(lbDomain, lbIp))) {
-    return lbDomain;
+    if (!(panelIsSeparateFromLb && (await hostnameResolvesToTarget(lbDomain, panelHost)))) {
+      return lbDomain;
+    }
   }
 
   const pool = (opts.mainPoolHosts || []).filter(Boolean);
@@ -259,7 +295,7 @@ export async function resolveAdvertisedMediaHostname(opts: {
       }
       if (!rejectIfPanel(candidate)) continue;
       // Skip hostnames that resolve to the panel (hairpin / ~1G wall).
-      if (panelHost && (await hostnameResolvesToTarget(candidate, panelHost))) continue;
+      if (panelIsSeparateFromLb && (await hostnameResolvesToTarget(candidate, panelHost))) continue;
       if (await hostnameResolvesToTarget(candidate, lbIp)) {
         return candidate;
       }
@@ -277,17 +313,58 @@ export async function resolveDirectMediaHostname(
 
 export async function directMediaOriginForServer(
   server: DirectMediaServerFields,
-  opts?: { mainPoolHosts?: string[]; lineId?: string; panelHost?: string | null }
+  opts?: {
+    mainPoolHosts?: string[];
+    lineId?: string;
+    panelHost?: string | null;
+    loginHost?: string | null;
+    /** Full login origin (scheme) — when advertised host matches login Host, inherit http/https. */
+    loginOrigin?: string | null;
+  }
 ): Promise<string | null> {
+  const loginHost =
+    opts?.loginHost ||
+    (opts?.loginOrigin ? normalizeAdvertiseHost(opts.loginOrigin) : "") ||
+    null;
   const host = await resolveAdvertisedMediaHostname({
     lb: server,
     mainPoolHosts: opts?.mainPoolHosts,
     lineId: opts?.lineId,
     panelHost: opts?.panelHost,
+    loginHost,
   });
   if (!host) return null;
-  const proto =
+  let proto =
     String(server.protocol || "http").toLowerCase() === "https" ? "https" : "http";
+  // Bare IP media hosts have no trustworthy cert — never advertise https://IP.
+  if (isIpHost(host)) {
+    proto = "http";
+  }
+  // Honor configured media origin scheme (e.g. https://darkcdn.site) over LB row http.
+  const configuredOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+  if (configuredOrigin && !isIpHost(host)) {
+    try {
+      const cfg = new URL(
+        configuredOrigin.includes("://") ? configuredOrigin : `http://${configuredOrigin}`
+      );
+      if (cfg.protocol === "https:") proto = "https";
+    } catch {
+      /* ignore */
+    }
+  }
+  // XUI: same-host login may upgrade to https. Never downgrade LB/media https to http —
+  // edge often forwards player_api to the panel over plain HTTP, and some IPTV UAs force
+  // http in serverBaseUrl even when the client dialed :443 with a trusted cert.
+  if (loginHost && host.toLowerCase() === loginHost.toLowerCase() && opts?.loginOrigin) {
+    try {
+      const u = new URL(
+        opts.loginOrigin.includes("://") ? opts.loginOrigin : `http://${opts.loginOrigin}`
+      );
+      if (u.protocol === "https:") proto = "https";
+    } catch {
+      /* keep proto */
+    }
+  }
   return `${proto}://${formatHostForOrigin(host)}`;
 }
 
@@ -307,17 +384,30 @@ export function pickAdvertisedMediaHostnameSync(opts: {
   mainPoolHosts?: string[];
   lineId?: string;
   panelHost?: string | null;
+  loginHost?: string | null;
 }): string {
   const lbIp = opts.lbHost;
+  const panelHost = opts.panelHost || "";
+  const panelIsSeparateFromLb = Boolean(panelHost && panelHost !== lbIp);
+  const loginHost = String(opts.loginHost || "")
+    .trim()
+    .toLowerCase();
+  if (
+    loginHost &&
+    !(panelIsSeparateFromLb && loginHost === panelHost) &&
+    (loginHost === lbIp || !isIpHost(loginHost))
+  ) {
+    return loginHost;
+  }
   const lbDomain = mediaHostnameFromServerDomain(opts.lbDomain ?? "");
   if (lbDomain) return lbDomain;
   const pool = (opts.mainPoolHosts || []).filter(
-    (h) => h && (!opts.panelHost || h !== opts.panelHost || h === lbIp)
+    (h) => h && (!panelIsSeparateFromLb || h !== panelHost || h === lbIp)
   );
   if (pool.length) {
     const idx = stickyPickIndex(opts.lineId || lbIp, pool.length);
     const pick = pool[idx];
-    if (pick && !(isIpHost(pick) && opts.panelHost && pick === opts.panelHost && pick !== lbIp)) {
+    if (pick && !(isIpHost(pick) && panelIsSeparateFromLb && pick === panelHost && pick !== lbIp)) {
       return pick;
     }
   }

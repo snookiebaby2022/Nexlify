@@ -9,6 +9,7 @@ import {
   forcedAiTake,
   redactAiRow,
   resolveAiPrismaModel,
+  sanitizeAiOrderBy,
   sanitizeAiSelect,
   sanitizeAiWhere,
 } from "@/lib/ai-prisma-plan";
@@ -89,9 +90,7 @@ Rules:
         const queryArgs: Record<string, unknown> = {
           take: forcedAiTake(queryPlan.take, 20),
           where: sanitizeAiWhere(queryPlan.filter),
-          orderBy: queryPlan.orderBy
-            ? { [queryPlan.orderBy]: "desc" }
-            : { createdAt: "desc" },
+          orderBy: sanitizeAiOrderBy(queryPlan.orderBy),
         };
         const select = sanitizeAiSelect(selectFromList, modelName);
         if (select) queryArgs.select = select;

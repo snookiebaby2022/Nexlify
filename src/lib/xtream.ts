@@ -139,7 +139,9 @@ async function loadXtreamAccountShell(
       process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
     ).replace(/\/+$/, "");
     const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
-    const mediaOrigin = await resolveLinePlaybackOrigin(lineId, configuredMediaOrigin || panelOrigin);
+    const mediaOrigin = await resolveLinePlaybackOrigin(lineId, configuredMediaOrigin || panelOrigin, {
+      loginOrigin: panelOrigin,
+    });
     let streamHost: string;
     let mediaPort = "";
     let mediaProtocol = "";
@@ -156,14 +158,34 @@ async function loadXtreamAccountShell(
       streamHost = (mediaOrigin || panelOrigin).replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
     }
     const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
-    const useHttps = mediaOrigin ? mediaProtocol === "https" : standardPorts ? false : panelOrigin.startsWith("https");
+    // Prefer configured media origin scheme even when sticky resolve returns http://host
+    // (edge often forwards player_api over plain HTTP while TLS terminates on the domain).
+    let useHttps = mediaOrigin
+      ? mediaProtocol === "https"
+      : standardPorts
+        ? false
+        : panelOrigin.startsWith("https");
+    if (!useHttps && configuredMediaOrigin) {
+      try {
+        const cfg = new URL(
+          configuredMediaOrigin.includes("://")
+            ? configuredMediaOrigin
+            : `http://${configuredMediaOrigin}`
+        );
+        if (cfg.protocol === "https:") useHttps = true;
+      } catch {
+        /* keep */
+      }
+    }
+    if (!useHttps && panelOrigin.startsWith("https")) useHttps = true;
     const publicPort = portFromPanelBaseUrl(panelOrigin);
     const serverSettings = await getPanelServerSettings();
     const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
-    // HTTP media edge (FORCE_LB / NEXLIFY_MEDIA_ORIGIN=http://LB): always advertise
-    // port 80 for both http + https_port. LB often has no :443 listener; advertising
-    // 443 for browser/WebOS UAs made "login OK" then HTTPS playback fail.
-    const httpMediaEdge = Boolean(mediaOrigin) && !useHttps;
+    // HTTP media edge = bare LB IP with no TLS. Only then advertise https_port=80.
+    // Domain media hosts (e.g. darkcdn.site) often have :443; advertising https_port=80
+    // makes IPTV apps dial https://domain:80 → TLS "wrong version number" → no play.
+    const httpMediaEdge =
+      Boolean(mediaOrigin) && !useHttps && isIpHost(streamHost);
     const httpPort = httpMediaEdge
       ? mediaPort || "80"
       : standardPorts
@@ -171,11 +193,12 @@ async function loadXtreamAccountShell(
       : useHttps
         ? String(streamHttpsPort)
         : String(resolveAdvertisedStreamHttpPort(publicPort));
-    const httpsPort = mediaOrigin && useHttps
-      ? mediaPort || String(streamHttpsPort)
-      : httpMediaEdge || standardPorts
-        ? mediaPort || "80"
-        : String(streamHttpsPort);
+    const httpsPort =
+      mediaOrigin && useHttps
+        ? mediaPort || String(streamHttpsPort)
+        : httpMediaEdge
+          ? mediaPort || "80"
+          : String(streamHttpsPort);
     const formats = preferLiveOutputFormats(
       xtreamOutputFormats("ts,m3u8,hls,rtmp"),
       resolveClientPlaybackProfile(userAgent)
@@ -574,7 +597,12 @@ export function buildM3uStream(
         const directPlay = streamSettings.vodDirectPlay !== false;
         const excludeDisabled = streamSettings.excludeDisabledFromExport === true;
         const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
-        const liveOrigin = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl);
+        // Live + proxied VOD/series must use the LB/media origin — panel nginx refuses
+        // /live|/movie|/series bitrate (live-routing lock). Direct-play VOD still
+        // returns the provider URL inside exportPlaybackUrl when enabled.
+        const mediaOrigin = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl, {
+          loginOrigin: baseUrl,
+        });
 
         const { streamsForLineExport } = await import("./lines");
         await streamsForLineExport(line, {
@@ -593,7 +621,7 @@ export function buildM3uStream(
                   );
                   const variantFull = { ...full, streamUrl: v.path } as typeof full;
                   batchLines.push(
-                    exportPlaybackUrl(liveOrigin, line, full, variantFull, undefined, output, directPlay, true)
+                    exportPlaybackUrl(mediaOrigin, line, full, variantFull, undefined, output, directPlay, true)
                   );
                 }
                 continue;
@@ -611,14 +639,14 @@ export function buildM3uStream(
                       : "Series")
               );
               const playUrl = exportPlaybackUrl(
-                full.type === StreamType.LIVE ? liveOrigin : baseUrl,
+                mediaOrigin,
                 line,
                 full,
                 full,
                 undefined,
                 output,
                 directPlay,
-                full.type === StreamType.LIVE
+                true
               );
               const displayName = xtreamM3uAttr(full.name) || "Channel";
 

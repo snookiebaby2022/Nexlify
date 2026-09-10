@@ -1008,12 +1008,14 @@ export function ServerForm({
                     color: "var(--muted)",
                   }}
                 >
-                  <strong style={{ color: "var(--text)" }}>Multiple stream domains</strong>
+                  <strong style={{ color: "var(--text)" }}>Multiple stream domains (XUI-style)</strong>
                   {" — "}
-                  set a primary Domain Name below, then add more under{" "}
-                  <strong style={{ color: "var(--text)" }}>Additional domains</strong> (one per
-                  line). Point each DNS-only A record at an LB — video splices on the LB, not this
-                  panel. Role is under Advanced → Server role (Main).
+                  XC apps can <em>login</em> on any hostname that reaches this panel (or an LB that
+                  proxies API). For <em>playback</em>, set Domain Name / Additional domains whose
+                  DNS-only A records point at an LB — <code className="text-xs">server_info.url</code>{" "}
+                  prefers the login hostname when that DNS hits the sticky LB, otherwise an LB
+                  domain / IP. Never point stream DNS at the panel (live-routing lock). Role is under
+                  Advanced → Server role (Main).
                 </div>
               ) : (
                 <div

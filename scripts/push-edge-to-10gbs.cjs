@@ -22,6 +22,9 @@ async function main() {
     /* lsattr missing */
   }
   const body = fs.readFileSync(edgePath, "utf8");
+  const companions = ["edge-redis-slots.mjs", "edge-redis-auth.mjs"].filter((name) =>
+    fs.existsSync(path.join(__dirname, name))
+  );
   const { PrismaClient } = require("@prisma/client");
   const p = new PrismaClient();
   const s = await get10gbsServer(p);
@@ -37,9 +40,18 @@ async function main() {
       timeoutMs: 120_000,
     });
     if (w.code !== 0) throw new Error(w.stderr || "upload failed");
+    for (const name of companions) {
+      const buf = fs.readFileSync(path.join(__dirname, name));
+      const up = await sshExec(c, `cat > /opt/nexlify-panel/scripts/${name}`, {
+        stdin: buf,
+        timeoutMs: 60_000,
+      });
+      if (up.code !== 0) throw new Error(`upload ${name}: ${up.stderr || up.stdout}`);
+      console.log(`pushed companion ${name} (${buf.length} bytes)`);
+    }
     const r = await sshExec(
       c,
-      "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env && sleep 8 && chattr +i scripts/iptv-edge-proxy.mjs 2>/dev/null || true; ss -tlnp | grep 8080; curl -sS -m 3 -o /dev/null -w 'local:%{http_code}\\n' http://127.0.0.1:8080/player_api.php || true; grep -n liveFanMatchesUpstream scripts/iptv-edge-proxy.mjs | head -n 3 || true"
+      "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env && sleep 8 && chattr +i scripts/iptv-edge-proxy.mjs 2>/dev/null || true; ss -tlnp | grep 8080; curl -sS -m 3 -o /dev/null -w 'local:%{http_code}\\n' http://127.0.0.1:8080/edge/health || true; curl -sS -m 3 -o /dev/null -w 'player:%{http_code}\\n' http://127.0.0.1:8080/player_api.php || true; grep -n liveFanMatchesUpstream scripts/iptv-edge-proxy.mjs | head -n 3 || true"
     );
     process.stdout.write(r.stdout);
     if (r.code !== 0) process.stderr.write(r.stderr);

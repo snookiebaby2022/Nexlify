@@ -9,7 +9,7 @@ if (!fs.existsSync(envPath)) {
   process.exit(0);
 }
 
-const limit = Number(process.env.NEXLIFY_DB_CONNECTION_LIMIT || 8);
+const limit = Number(process.env.NEXLIFY_DB_CONNECTION_LIMIT || 20);
 const timeout = Number(process.env.NEXLIFY_DB_POOL_TIMEOUT_SEC || 15);
 
 let raw = fs.readFileSync(envPath, "utf8");

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildXtreamM3uUrl, isLocalM3uPath, planWatchFolderM3uReview } from "./watch-folder-m3u";
+import { buildXtreamM3uUrl, isAllowedLocalM3uReadPath, isLocalM3uPath, planWatchFolderM3uReview } from "./watch-folder-m3u";
 import type { M3uEntry } from "./m3u-parser";
 
 describe("isLocalM3uPath", () => {
@@ -9,6 +9,16 @@ describe("isLocalM3uPath", () => {
     assert.equal(isLocalM3uPath("C:\\lists\\uk.m3u8"), true);
     assert.equal(isLocalM3uPath("https://host/get.php?type=m3u_plus"), false);
     assert.equal(isLocalM3uPath("/media/vod/movies"), false);
+  });
+});
+
+describe("isAllowedLocalM3uReadPath", () => {
+  it("does not allow arbitrary paths when mediaRoot is null", () => {
+    const upload = "/tmp/nexlify-upload-root-test";
+    assert.equal(
+      isAllowedLocalM3uReadPath("/etc/passwd.m3u", { uploadRoot: upload, mediaRoot: null }),
+      false
+    );
   });
 });
 

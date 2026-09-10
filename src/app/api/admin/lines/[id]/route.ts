@@ -15,6 +15,7 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 import { adminOrOwnerWhere, logAdminCredentialChange } from "@/lib/admin-access";
+import { getClientIp } from "@/lib/client-ip";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -107,7 +108,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   if (body.isTrial === true && existing.isTrial !== true) {
     const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
-    const trialGuard = await assertIptvTrialAllowed({ isTrial: true });
+    const trialGuard = await assertIptvTrialAllowed({
+      isTrial: true,
+      clientIp: getClientIp(req),
+    });
     if (!trialGuard.ok) {
       return NextResponse.json({ error: trialGuard.error }, { status: 400 });
     }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { createPayPalOrder, getPayPalConfig } from "@/lib/paypal-billing";
 import { createLineFromShopPackage, shopUrls } from "@/lib/shop-checkout";
+import { getClientIp } from "@/lib/client-ip";
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,9 +21,15 @@ export async function POST(req: NextRequest) {
     const origin = req.nextUrl.origin;
     const username = String(body.username ?? "").trim();
     const password = String(body.password ?? "").trim();
+    const clientIp = getClientIp(req);
 
     if (pkg.shopPriceCents <= 0) {
-      const line = await createLineFromShopPackage({ packageId, username, password });
+      const line = await createLineFromShopPackage({
+        packageId,
+        username,
+        password,
+        clientIp,
+      });
       return NextResponse.json({
         ok: true,
         paid: true,
@@ -47,7 +54,7 @@ export async function POST(req: NextRequest) {
         provider: "shop-paypal",
         action: "pending",
         status: "pending",
-        payload: { packageId, username, password },
+        payload: { packageId, username, password, clientIp },
         message: "",
       },
     });

@@ -61,7 +61,7 @@ export async function runLineTheftJob(settings: TheftSettings) {
   let disabled = 0;
   const staleBefore = new Date(Date.now() - settings.lookbackMinutes * 60 * 1000);
   const conns = await prisma.liveConnection.findMany({
-    where: { lastSeenAt: { gte: staleBefore }, ip: { not: null } },
+    where: { lastSeenAt: { gte: staleBefore }, ip: { not: "" } },
     select: { ip: true, lineId: true },
   });
   const byIp = new Map<string, Set<string>>();
@@ -104,7 +104,7 @@ export async function runVodTheftJob(settings: TheftSettings) {
   let disabled = 0;
   const staleBefore = new Date(Date.now() - settings.lookbackMinutes * 60 * 1000);
   const conns = await prisma.liveConnection.findMany({
-    where: { lastSeenAt: { gte: staleBefore }, ip: { not: null } },
+    where: { lastSeenAt: { gte: staleBefore }, ip: { not: "" } },
     select: { ip: true, lineId: true, streamId: true, stream: { select: { type: true } } },
   });
   const byIp = new Map<string, Set<string>>();
@@ -148,7 +148,7 @@ export async function runStreamTheftJob(settings: TheftSettings) {
   let disabled = 0;
   const staleBefore = new Date(Date.now() - settings.lookbackMinutes * 60 * 1000);
   const conns = await prisma.liveConnection.findMany({
-    where: { lastSeenAt: { gte: staleBefore }, ip: { not: null } },
+    where: { lastSeenAt: { gte: staleBefore }, ip: { not: "" } },
     select: { ip: true, lineId: true, streamId: true },
   });
   const byIpStream = new Map<string, Set<string>>();

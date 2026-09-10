@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { capturePayPalOrder } from "@/lib/paypal-billing";
 import { createLineFromShopPackage, shopUrls } from "@/lib/shop-checkout";
+import { getClientIp } from "@/lib/client-ip";
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,13 +45,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Payment ${captured.status}` }, { status: 402 });
     }
 
-    const payload = (pending.payload ?? {}) as { packageId?: string; username?: string; password?: string };
+    const payload = (pending.payload ?? {}) as {
+      packageId?: string;
+      username?: string;
+      password?: string;
+      clientIp?: string;
+    };
     if (!payload.packageId) return NextResponse.json({ error: "Package missing" }, { status: 400 });
 
     const line = await createLineFromShopPackage({
       packageId: payload.packageId,
       username: payload.username,
       password: payload.password,
+      clientIp: payload.clientIp ?? getClientIp(req),
     });
 
     await prisma.billingEvent.update({

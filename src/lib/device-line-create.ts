@@ -39,6 +39,7 @@ export async function createLineForDevice(opts: {
   packageId?: string;
   ownerId?: string;
   bouquetIds?: string[];
+  clientIp?: string | null;
 }) {
   const resolved = await resolveLineCreateFromPackage(
     {
@@ -51,7 +52,10 @@ export async function createLineForDevice(opts: {
   );
 
   const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
-  const trialGuard = await assertIptvTrialAllowed({ isTrial: resolved.isTrial });
+  const trialGuard = await assertIptvTrialAllowed({
+    isTrial: resolved.isTrial,
+    clientIp: opts.clientIp,
+  });
   if (!trialGuard.ok) throw new Error(trialGuard.error);
 
   const { assertResellerCanCreateLine } = await import("@/lib/reseller-line-guards");

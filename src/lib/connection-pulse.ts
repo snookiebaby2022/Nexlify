@@ -1,13 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
-import {
-  connectionIpPrismaFilter,
-  normalizeConnectionIp,
-} from "@/lib/connections";
+import { normalizeConnectionIp } from "@/lib/connections";
 import { touchLiveSession } from "@/lib/live-session";
 import { markStreamSpliceOk } from "@/lib/viewer-playback-probe";
 import { lineIsPlayable } from "@/lib/lines";
 import { notifyLiveConnectionsChanged } from "@/lib/connection-live-bus";
+import { refreshConnSlot } from "@/lib/connection-slots";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -24,50 +22,16 @@ export async function pulseLiveConnection(opts: {
   const streamId = opts.streamId?.trim();
   if (!lineId || !streamId) return;
 
-  const clientIp = normalizeConnectionIp(opts.ip);
+  const clientIp = normalizeConnectionIp(opts.ip) || "";
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
   const idleMs = Math.max(0, Math.floor(opts.idleMs ?? 0));
   const onDemand = Boolean(opts.onDemand);
   if (bytes > 0 || idleMs > 0) {
-    void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes, idleMs, onDemand);
+    void recordConnectionMediaBytes(lineId, streamId, clientIp, bytes, idleMs, onDemand);
   }
-  void touchLiveSession(lineId, streamId, clientIp);
+  void touchLiveSession(lineId, streamId, clientIp || null);
   if (bytes > 0) void markStreamSpliceOk(streamId);
-
-  const row = await prisma.liveConnection.findFirst({
-    where: clientIp
-      ? { lineId, streamId, ...connectionIpPrismaFilter(clientIp) }
-      : { lineId, streamId },
-    orderBy: { lastSeenAt: "desc" },
-    select: { id: true },
-  });
-
-  if (row) {
-    await prisma.liveConnection.updateMany({
-      where: { id: row.id },
-      data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
-    });
-    return;
-  }
-
-  if (clientIp) {
-    const loose = await prisma.liveConnection.findFirst({
-      where: {
-        lineId,
-        streamId,
-        OR: [{ ip: null }, { ip: "" }, { ip: "209.237.141.15" }, { ip: "45.88.138.18" }],
-      },
-      orderBy: { lastSeenAt: "desc" },
-      select: { id: true },
-    });
-    if (loose) {
-      await prisma.liveConnection.updateMany({
-        where: { id: loose.id },
-        data: { lastSeenAt: new Date(), ip: clientIp },
-      });
-      return;
-    }
-  }
+  void refreshConnSlot(lineId, { streamId, clientIp });
 
   const [stream, line] = await Promise.all([
     prisma.stream.findFirst({
@@ -81,8 +45,31 @@ export async function pulseLiveConnection(opts: {
   ]);
   if (!stream || !line || !lineIsPlayable(line)) return;
 
-  await prisma.liveConnection.create({
-    data: { lineId, streamId, ip: clientIp || null },
-  }).catch(() => undefined);
+  const now = new Date();
+  try {
+    await prisma.liveConnection.upsert({
+      where: {
+        lineId_streamId_ip: { lineId, streamId, ip: clientIp },
+      },
+      create: { lineId, streamId, ip: clientIp },
+      update: { lastSeenAt: now },
+    });
+    notifyLiveConnectionsChanged();
+    return;
+  } catch {
+    /* Unique index may not be migrated yet — legacy path. */
+  }
+
+  const updated = await prisma.liveConnection.updateMany({
+    where: { lineId, streamId, OR: [{ ip: clientIp }, ...(clientIp ? [] : [{ ip: "" }])] },
+    data: { lastSeenAt: now, ip: clientIp },
+  });
+  if (updated.count > 0) return;
+
+  await prisma.liveConnection
+    .create({
+      data: { lineId, streamId, ip: clientIp },
+    })
+    .catch(() => undefined);
   notifyLiveConnectionsChanged();
 }

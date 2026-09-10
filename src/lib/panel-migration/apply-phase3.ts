@@ -630,7 +630,7 @@ export async function applyMigrationPhase3(
           data: {
             lineId,
             streamId,
-            ip: c.ip ?? null,
+            ip: c.ip ?? "",
             userAgent: c.userAgent ?? null,
             startedAt: c.startedAt ?? undefined,
             lastSeenAt: c.lastSeenAt ?? c.startedAt ?? undefined,

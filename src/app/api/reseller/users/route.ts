@@ -265,7 +265,8 @@ export async function PATCH(req: NextRequest) {
       username: user.username,
       isActive: user.isActive,
       groupId: user.groupId,
-      password: typeof body.password === "string" && body.password.trim() ? body.password.trim() : "",
+      // Never echo plaintext passwords (SEC-03).
+      password: "",
     },
   });
   } catch (e) {

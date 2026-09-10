@@ -19,6 +19,15 @@ function isAbsoluteBin(path: string): boolean {
   return path.startsWith("/") && !path.includes("\0") && !path.includes("..");
 }
 
+/** Reject NUL/control chars in attacker-controlled stream source URLs (SEC-07). */
+export function sanitizeFfmpegInputUrl(inputUrl: string): string {
+  const raw = String(inputUrl ?? "");
+  if (!raw || /[\x00-\x1F\x7F]/.test(raw)) {
+    throw new Error("Invalid stream source URL");
+  }
+  return raw;
+}
+
 /** Structured ffmpeg argv for the stream agent (no shell). Ignores custom shell commands. */
 export function buildFfmpegArgv(opts: {
   ffmpegPath: string;
@@ -33,6 +42,7 @@ export function buildFfmpegArgv(opts: {
   nativeFrames?: boolean;
 }): FfmpegArgvSpec {
   const ffmpegPath = isAbsoluteBin(opts.ffmpegPath) ? opts.ffmpegPath : "/usr/bin/ffmpeg";
+  const inputUrl = sanitizeFfmpegInputUrl(opts.inputUrl);
   const threads =
     opts.threads && opts.threads > 0 ? ["-threads", String(Math.min(64, Math.floor(opts.threads)))] : [];
   const preset =
@@ -54,7 +64,7 @@ export function buildFfmpegArgv(opts: {
     ...(opts.nativeFrames ? ["-use_wallclock_as_timestamps", "0"] : []),
   ];
 
-  const capture = captureDeviceInputArgs(opts.inputUrl);
+  const capture = captureDeviceInputArgs(inputUrl);
   const transcodeBody =
     opts.transcodeArgs && opts.transcodeArgs.length > 0
       ? opts.transcodeArgs.filter((a) => typeof a === "string")
@@ -72,7 +82,7 @@ export function buildFfmpegArgv(opts: {
             "-rw_timeout",
             "20000000",
             "-i",
-            opts.inputUrl,
+            inputUrl,
             "-c",
             "copy",
             "-flush_packets",

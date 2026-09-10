@@ -2,7 +2,12 @@ import Redis, { Cluster } from "ioredis";
 
 type RedisClient = Redis | Cluster;
 
-const globalRedis = globalThis as unknown as { redis: RedisClient | null; redisErrorLogged?: boolean };
+const globalRedis = globalThis as unknown as {
+  redis: RedisClient | null;
+  slotsRedis: RedisClient | null;
+  redisErrorLogged?: boolean;
+  slotsRedisErrorLogged?: boolean;
+};
 
 function parseClusterNodes(raw: string) {
   return raw
@@ -15,13 +20,33 @@ function parseClusterNodes(raw: string) {
     });
 }
 
-function attachRedisErrorLogging(client: RedisClient) {
+function attachRedisErrorLogging(client: RedisClient, kind: "redis" | "slots") {
   client.on("error", (err) => {
-    if (globalRedis.redisErrorLogged) return;
-    globalRedis.redisErrorLogged = true;
+    if (kind === "slots") {
+      if (globalRedis.slotsRedisErrorLogged) return;
+      globalRedis.slotsRedisErrorLogged = true;
+    } else {
+      if (globalRedis.redisErrorLogged) return;
+      globalRedis.redisErrorLogged = true;
+    }
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[redis] connection error: ${msg}`);
+    console.warn(`[${kind}] connection error: ${msg}`);
   });
+}
+
+function createClientFromUrl(url: string, kind: "redis" | "slots"): RedisClient | null {
+  try {
+    const client = new Redis(url, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+      connectTimeout: 5000,
+      retryStrategy: (times) => (times > 8 ? null : Math.min(times * 200, 2000)),
+    });
+    attachRedisErrorLogging(client, kind);
+    return client;
+  } catch {
+    return null;
+  }
 }
 
 function createClient() {
@@ -38,7 +63,7 @@ function createClient() {
           },
           lazyConnect: true,
         });
-        attachRedisErrorLogging(client);
+        attachRedisErrorLogging(client, "redis");
         return client;
       }
     } catch {
@@ -48,23 +73,27 @@ function createClient() {
 
   const url = process.env.REDIS_URL?.trim();
   if (!url) return null;
-  try {
-    const client = new Redis(url, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-      connectTimeout: 5000,
-      retryStrategy: (times) => (times > 8 ? null : Math.min(times * 200, 2000)),
-    });
-    attachRedisErrorLogging(client);
-    return client;
-  } catch {
-    return null;
-  }
+  return createClientFromUrl(url, "redis");
 }
 
 export function getRedis() {
   if (!globalRedis.redis) globalRedis.redis = createClient();
   return globalRedis.redis;
+}
+
+/**
+ * Prefer dedicated session/slots Redis (`REDIS_SLOTS_URL`, typically noeviction).
+ * Falls back to the shared cache Redis when unset.
+ */
+export function getSlotsRedis() {
+  const slotsUrl = process.env.REDIS_SLOTS_URL?.trim();
+  if (slotsUrl) {
+    if (!globalRedis.slotsRedis) {
+      globalRedis.slotsRedis = createClientFromUrl(slotsUrl, "slots");
+    }
+    return globalRedis.slotsRedis;
+  }
+  return getRedis();
 }
 
 export function redisModeFromEnv(): "cluster" | "single" | "memory" {
@@ -74,8 +103,8 @@ export function redisModeFromEnv(): "cluster" | "single" | "memory" {
 }
 
 /** Connect lazy ioredis client — required before GET/SET when status is wait/connecting. */
-export async function ensureRedisConnected(): Promise<boolean> {
-  const r = getRedis();
+export async function ensureRedisConnected(client?: RedisClient | null): Promise<boolean> {
+  const r = client === undefined ? getRedis() : client;
   if (!r) return false;
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
@@ -92,6 +121,10 @@ export async function ensureRedisConnected(): Promise<boolean> {
     }
   }
   return false;
+}
+
+export async function ensureSlotsRedisConnected(): Promise<boolean> {
+  return ensureRedisConnected(getSlotsRedis());
 }
 
 export async function redisPing() {

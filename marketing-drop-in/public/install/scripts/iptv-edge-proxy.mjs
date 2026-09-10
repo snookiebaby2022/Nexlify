@@ -36,6 +36,7 @@ import {
   edgeRedisGetSeg,
   edgeRedisSetSeg,
 } from "./edge-redis-auth.mjs";
+import { edgeSlotsEnabled, edgeTryAcquireConnSlot } from "./edge-redis-slots.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -170,6 +171,10 @@ function edgeCanAuthLive() {
 }
 /** Cache live-auth at edge so channel zaps skip panel round-trip (XUI-style local auth). */
 const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 180_000);
+/** Short positive TTL when line maxConnections is 1 — reduces stale multi-device admits. */
+const AUTH_CACHE_TTL_STRICT_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_STRICT_MS || 20_000);
+/** Negative cache for 403/429 so we don't hammer panel after max-conn deny. */
+const AUTH_DENY_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_DENY_MS || 8_000);
 const CATALOG_CACHE_MS = Number(process.env.IPTV_EDGE_CATALOG_CACHE_MS || 300_000);
 const CATALOG_STALE_MS = Number(process.env.IPTV_EDGE_CATALOG_STALE_MS || 600_000);
 const EDGE_DISK_HLS_WAIT_MS = Number(process.env.IPTV_EDGE_DISK_HLS_WAIT_MS || 6000);
@@ -2801,6 +2806,47 @@ function authCacheKey(clientReq) {
   return `${clientIp(clientReq)}:${methodKey}:${urlPath}:${ua}`;
 }
 
+/** `/live/user/pass/...` credential prefix used to purge sibling IP auth caches on max-conn deny. */
+function liveCredentialPrefix(clientReq) {
+  const urlPath = String(clientReq.url || "/").split("?")[0];
+  const m = urlPath.match(/^(\/live\/[^/]+\/[^/]+)\//i);
+  return m ? m[1].toLowerCase() : "";
+}
+
+function purgeAuthCacheForLiveCredentials(clientReq) {
+  const prefix = liveCredentialPrefix(clientReq);
+  if (!prefix) return;
+  for (const [key] of authCache.entries()) {
+    if (String(key).toLowerCase().includes(prefix)) authCache.delete(key);
+  }
+}
+
+function authPositiveTtlMs(data) {
+  const maxConn = Number(data?.maxConnections) || 0;
+  if (maxConn === 1) return Math.min(AUTH_CACHE_TTL_MS, AUTH_CACHE_TTL_STRICT_MS);
+  return AUTH_CACHE_TTL_MS;
+}
+
+async function enforceEdgeConnSlot(data, clientReq) {
+  const maxConn = Number(data?.maxConnections) || 0;
+  const lineId = String(data?.lineId || "").trim();
+  if (!lineId || maxConn <= 0 || !edgeSlotsEnabled()) return data;
+  const slot = await edgeTryAcquireConnSlot(lineId, maxConn, {
+    streamId: data.streamId,
+    clientIp: clientIp(clientReq),
+  });
+  if (slot === "denied") {
+    purgeAuthCacheForLiveCredentials(clientReq);
+    return {
+      ...data,
+      status: 403,
+      upstream: "",
+      denyReason: "connections",
+    };
+  }
+  return data;
+}
+
 function authLive(clientReq) {
   return new Promise((resolve, reject) => {
     // A direct playback LB can serve any authorized stream for the line. Use
@@ -2918,25 +2964,41 @@ async function authLiveCached(clientReq) {
   const key = authCacheKey(clientReq);
   const now = Date.now();
   const hit = authCache.get(key);
-  if (hit && hit.expires > now && hit.data?.upstream) {
-    touchHlsDaemon(hit.data.streamId);
-    return sanitizeAuthUpstream(hit.data);
+  if (hit && hit.expires > now) {
+    if (hit.data?.status === 403 || hit.data?.status === 429) {
+      return sanitizeAuthUpstream(hit.data);
+    }
+    if (hit.data?.upstream) {
+      touchHlsDaemon(hit.data.streamId);
+      return enforceEdgeConnSlot(sanitizeAuthUpstream(hit.data), clientReq);
+    }
   }
   if (edgeRedisEnabled()) {
     const redisHit = await edgeRedisGetAuth(key);
     if (redisHit?.upstream) {
       const clean = sanitizeAuthUpstream(redisHit);
-      authCache.set(key, { expires: now + AUTH_CACHE_TTL_MS, data: clean });
+      authCache.set(key, { expires: now + authPositiveTtlMs(clean), data: clean });
       if (clean.streamId) touchHlsDaemon(clean.streamId);
-      return clean;
+      return enforceEdgeConnSlot(clean, clientReq);
     }
   }
   try {
-    const data = sanitizeAuthUpstream(await authLiveWithDeadline(clientReq));
+    let data = sanitizeAuthUpstream(await authLiveWithDeadline(clientReq));
+    if (data.status === 403 || data.status === 429) {
+      purgeAuthCacheForLiveCredentials(clientReq);
+      authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+      return data;
+    }
     if (data.status === 200 && data.upstream) {
-      authCache.set(key, { expires: now + AUTH_CACHE_TTL_MS, data });
+      data = await enforceEdgeConnSlot(data, clientReq);
+      if (data.status === 403) {
+        authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+        return data;
+      }
+      const ttl = authPositiveTtlMs(data);
+      authCache.set(key, { expires: now + ttl, data });
       if (edgeRedisEnabled()) {
-        void edgeRedisSetAuth(key, data, AUTH_CACHE_TTL_MS);
+        void edgeRedisSetAuth(key, data, ttl);
       }
       pruneAuthCache(now);
       if (data.streamId) touchHlsDaemon(data.streamId);

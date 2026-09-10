@@ -25,6 +25,7 @@ import { listManageLinesPage } from "@/lib/manage-lines-list";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
+import { getClientIp } from "@/lib/client-ip";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
 
@@ -209,6 +210,7 @@ export async function POST(req: NextRequest) {
     isTrial: Boolean(body.isTrial),
     days: body.unlimited === true ? undefined : days,
     expiresAt: body.unlimited === true ? null : expiresAt,
+    clientIp: getClientIp(req),
   });
   if (!trialGuard.ok) {
     return NextResponse.json({ error: trialGuard.error }, { status: 400 });

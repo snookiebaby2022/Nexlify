@@ -245,7 +245,15 @@ export async function GET(req: NextRequest) {
       clientIp: ip,
     });
     if (!hasCapacity) {
-      return new NextResponse("Max connections reached", { status: 403 });
+      return new NextResponse("Max connections reached", {
+        status: 403,
+        headers: {
+          "X-Nexlify-Deny": "connections",
+          "X-Nexlify-Line-Id": line.id,
+          "X-Nexlify-Max-Connections": String(line.maxConnections),
+          "Cache-Control": "no-store",
+        },
+      });
     }
   }
 

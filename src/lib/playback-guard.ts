@@ -22,7 +22,8 @@ export type PlaybackDenyReason =
   | "reputation"
   | "isp"
   | "kicked"
-  | "device";
+  | "device"
+  | "unavailable";
 
 export type PlaybackGuardLine = {
   id: string;
@@ -82,10 +83,14 @@ export async function assertPlaybackAllowed(
   userAgent?: string,
   options?: PlaybackGuardOptions
 ): Promise<PlaybackDenyReason | null> {
-  // Global timeout — fail-open if checks take too long to avoid blocking IPTV apps
-  const GUARD_TIMEOUT_MS = 1500;
+  // Listing (catalog) stays fail-open so XC apps don't show Unauthorized on slow geo.
+  // Playback paths fail-closed under timeout (XUI proxy model).
+  const listingOnly = Boolean(options?.listingOnly);
+  const GUARD_TIMEOUT_MS = listingOnly ? 1500 : 800;
   const guardPromise = assertPlaybackAllowedInner(line, clientIp, userAgent, options);
-  const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), GUARD_TIMEOUT_MS));
+  const timeoutPromise = new Promise<PlaybackDenyReason | null>((resolve) =>
+    setTimeout(() => resolve(listingOnly ? null : "unavailable"), GUARD_TIMEOUT_MS)
+  );
   return Promise.race([guardPromise, timeoutPromise]);
 }
 
@@ -122,6 +127,13 @@ async function assertPlaybackAllowedInner(
       )
     ) {
       return "device";
+    }
+    if (!options?.listingOnly && line.maxConnections > 0) {
+      const ok = await lineHasConnectionCapacity(line.id, line.maxConnections, {
+        streamId: options?.streamId,
+        clientIp,
+      });
+      if (!ok) return "connections";
     }
     return null;
   }
@@ -201,7 +213,15 @@ async function assertPlaybackAllowedInner(
     }
   }
 
-  if (clientIp && !checkPlaybackRateLimit(line.id, clientIp)) return "rate";
+  if (clientIp && !(await checkPlaybackRateLimit(line.id, clientIp))) return "rate";
+
+  if (!options?.listingOnly && line.maxConnections > 0) {
+    const ok = await lineHasConnectionCapacity(line.id, line.maxConnections, {
+      streamId: options?.streamId,
+      clientIp,
+    });
+    if (!ok) return "connections";
+  }
   return null;
 }
 
@@ -231,6 +251,8 @@ export function playbackDenyMessage(reason: PlaybackDenyReason): string {
       return "Access blocked (security policy)";
     case "kicked":
       return "Session kicked — reconnect blocked briefly";
+    case "unavailable":
+      return "Playback temporarily unavailable — try again";
     default:
       return "Playback denied";
   }

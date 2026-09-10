@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.90",
+  "latestVersion": "2.0.91",
   "releases": [
+    {
+      "version": "2.0.91",
+      "date": "2026-09-10",
+      "channel": "stable",
+      "summary": "Correct HTTPS stream advertise for portal domains, PM2 media env wiring, panel perf caches, and connection-slot hardening.",
+      "changelog": [
+        "player_api advertises https_port 443 for TLS portal/media domains — fixes https://host:80 SSL handshake failures",
+        "Bare LB IP hosts always advertise http; NEXLIFY_MEDIA_ORIGIN / FORCE_LB_IP passed through PM2 sharedPanelEnv",
+        "Dashboard and admin hot paths use shorter TTL caches and lighter catalog queries on large installs",
+        "Connection slot accounting and live-auth edge scripts aligned with Redis slot helpers"
+      ],
+      "fixes": [
+        "darkcdn.site and bladesmedia2.darkcdn.win playback failed when apps used advertised https_port 80",
+        "Standalone PM2 builds ignored NEXLIFY_MEDIA_* from .env until ecosystem shared env included them",
+        "StreamServer protocol https on raw IP made strict clients reject LB certificate",
+        "Prisma P2025 noise on connection pulse when rows raced delete/update"
+      ],
+      "notes": [
+        "Portal hostnames can stay Cloudflare-proxied for API; point media DNS-only at the LB when possible.",
+        "Re-open IPTV apps after update so server_info picks up new ports."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+    },
     {
       "version": "2.0.90",
       "date": "2026-09-09",

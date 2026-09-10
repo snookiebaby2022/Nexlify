@@ -4,6 +4,7 @@ import {
   forcedAiTake,
   redactAiRow,
   resolveAiPrismaModel,
+  sanitizeAiOrderBy,
   sanitizeAiSelect,
   sanitizeAiWhere,
 } from "./ai-prisma-plan";
@@ -48,4 +49,9 @@ test("resolveAiPrismaModel maps PascalCase and rejects unknown", () => {
   assert.equal(resolveAiPrismaModel("PanelUser"), "panelUser");
   assert.equal(resolveAiPrismaModel("stream"), "stream");
   assert.equal(resolveAiPrismaModel("dropTable"), null);
+});
+
+test("sanitizeAiOrderBy whitelists fields", () => {
+  assert.deepEqual(sanitizeAiOrderBy(undefined), { createdAt: "desc" });
+  assert.deepEqual(sanitizeAiOrderBy({ id: "asc", passwordHash: "desc" }), { id: "asc" });
 });

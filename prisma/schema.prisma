@@ -509,6 +509,7 @@ model Stream {
   @@index([xtreamNum])
   @@index([serverId])
   @@index([categoryId])
+  @@index([epgChannelId])
   @@index([lastProbeOk])
   @@index([providerId])
   @@index([parentStreamId])
@@ -613,11 +614,12 @@ model LiveConnection {
   line       Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
   streamId   String?
   stream     Stream?  @relation(fields: [streamId], references: [id], onDelete: SetNull)
-  ip         String?
+  ip         String   @default("")
   userAgent  String?
   startedAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
 
+  @@unique([lineId, streamId, ip])
   @@index([lineId])
   @@index([lastSeenAt])
   @@index([lastSeenAt, lineId])
@@ -813,6 +815,7 @@ model EpgProgram {
   stop        DateTime
 
   @@index([channelId, start])
+  @@index([channelId, stop])
   @@index([sourceId])
 }
 

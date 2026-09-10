@@ -166,8 +166,21 @@ export async function syncEpgSource(
   const dir = await mkdtemp(join(tmpdir(), "nexlify-epg-"));
   const xmlPath = join(dir, "guide.xml");
   let inserted = 0;
+  let stagingSourceId: string | null = null;
   try {
     await fetchEpgXmlToFile(source.url, proxy, xmlPath);
+
+    const staging = await prisma.epgSource.create({
+      data: {
+        name: `__staging__${sourceId}`,
+        url: source.url,
+        sourceType: source.sourceType,
+        country: source.country,
+        isActive: false,
+        syncEveryHours: source.syncEveryHours,
+      },
+    });
+    stagingSourceId = staging.id;
 
     let batch: NonNullable<ReturnType<typeof parseXmltvProgrammeElement>>[] = [];
     const CHUNK = 5000;
@@ -178,8 +191,7 @@ export async function syncEpgSource(
       batch = [];
     };
 
-    await prisma.epgProgram.deleteMany({ where: { sourceId } });
-    for await (const row of iterateXmltvProgramsFromFile(xmlPath, sourceId)) {
+    for await (const row of iterateXmltvProgramsFromFile(xmlPath, staging.id)) {
       batch.push(row);
       if (batch.length >= CHUNK) await flush();
     }
@@ -188,10 +200,25 @@ export async function syncEpgSource(
       throw new Error("EPG sync found no programmes in the guide (empty or wrong format)");
     }
 
-    await prisma.epgSource.update({
-      where: { id: sourceId },
-      data: { lastSync: new Date(), lastSyncError: null },
+    // Atomic swap: keep live guide until staging is fully loaded.
+    await prisma.$transaction(async (tx) => {
+      await tx.epgProgram.deleteMany({ where: { sourceId } });
+      await tx.epgProgram.updateMany({
+        where: { sourceId: staging.id },
+        data: { sourceId },
+      });
+      await tx.epgSource.delete({ where: { id: staging.id } });
+      await tx.epgSource.update({
+        where: { id: sourceId },
+        data: { lastSync: new Date(), lastSyncError: null },
+      });
     });
+    stagingSourceId = null;
+  } catch (e) {
+    if (stagingSourceId) {
+      await prisma.epgSource.delete({ where: { id: stagingSourceId } }).catch(() => undefined);
+    }
+    throw e;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -247,10 +274,9 @@ export async function getShortEpgForChannelIds(
   }
   if (!candidates.length) return [];
 
-  const results = await Promise.all(
-    candidates.map((id) => getShortEpg(id, limit, { archivable }))
-  );
-  for (const listings of results) {
+  // Sequential (cached) — first hit wins. Avoids N parallel DB storms on cold cache.
+  for (const id of candidates) {
+    const listings = await getShortEpg(id, limit, { archivable });
     if (listings.length) return listings;
   }
   return [];
@@ -262,19 +288,31 @@ async function loadShortEpg(
   display: { timezone: string; timeFormat: "12" | "24"; archivable?: boolean }
 ) {
   const now = new Date();
-  const programs = await prisma.epgProgram.findMany({
-    where: display.archivable
-      ? {
-          channelId: { equals: channelId, mode: "insensitive" },
-          stop: { gte: new Date(now.getTime() - 7 * 86400000) },
-        }
-      : {
-          channelId: { equals: channelId, mode: "insensitive" },
-          stop: { gte: now },
-        },
-    orderBy: { start: "asc" },
-    take: limit,
-  });
+  const channelKey = channelId.trim();
+  if (!channelKey) return [];
+
+  // Exact + lower() match via expression index — avoid Prisma mode:insensitive (seq scan).
+  const programs = display.archivable
+    ? await prisma.$queryRaw<
+        Array<{ title: string; description: string | null; start: Date; stop: Date; channelId: string }>
+      >`
+        SELECT e.title, e.description, e.start, e.stop, e."channelId"
+        FROM "EpgProgram" e
+        WHERE lower(e."channelId") = lower(${channelKey})
+          AND e.stop >= ${new Date(now.getTime() - 7 * 86400000)}
+        ORDER BY e.start ASC
+        LIMIT ${limit}
+      `
+    : await prisma.$queryRaw<
+        Array<{ title: string; description: string | null; start: Date; stop: Date; channelId: string }>
+      >`
+        SELECT e.title, e.description, e.start, e.stop, e."channelId"
+        FROM "EpgProgram" e
+        WHERE lower(e."channelId") = lower(${channelKey})
+          AND e.stop >= ${now}
+        ORDER BY e.start ASC
+        LIMIT ${limit}
+      `;
 
   return programs.map((p, i) => ({
     id: String(xtreamUnix(p.start) || i + 1),
