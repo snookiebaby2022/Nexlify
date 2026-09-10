@@ -13,6 +13,7 @@ import {
 } from "@/lib/panel-local-server";
 import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
+import { publicStreamServer } from "@/lib/server-public";
 import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
 import { parseStreamServerDomain, type StreamServerDomainRole } from "@/lib/stream-server-domain";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
