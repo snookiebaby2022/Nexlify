@@ -1,5 +1,6 @@
 import { addDays } from "@/lib/license";
 import { prisma } from "@/lib/prisma";
+import { setLicenseServerExpiry, setLicenseServerStatus } from "@/lib/license-server-admin";
 import { syncLicenseToPanel } from "@/lib/panel-sync";
 
 export async function clearLicenseMachineId(id: string) {
@@ -50,8 +51,12 @@ export async function extendLicense(
     },
   });
 
-  await syncLicenseToPanel(id, "REPLACE", { licenseKey: updated.key }).catch(() => null);
-  return updated;
+  await setLicenseServerExpiry(updated.key, expiresAt);
+  if (updated.status === "ACTIVE") {
+    await setLicenseServerStatus(updated.key, "ACTIVE");
+  }
+  const sync = await syncLicenseToPanel(id, "REPLACE", { licenseKey: updated.key });
+  return { license: updated, sync };
 }
 
 /** Reactivate expired license — same key, fresh 30-day window. */
@@ -76,6 +81,8 @@ export async function reactivateLicense(id: string) {
     },
   });
 
-  await syncLicenseToPanel(id, "REPLACE", { licenseKey: updated.key }).catch(() => null);
-  return updated;
+  await setLicenseServerExpiry(updated.key, expiresAt);
+  await setLicenseServerStatus(updated.key, "ACTIVE");
+  const sync = await syncLicenseToPanel(id, "REPLACE", { licenseKey: updated.key });
+  return { license: updated, sync };
 }

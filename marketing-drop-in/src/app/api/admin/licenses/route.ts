@@ -7,6 +7,7 @@ import {
   deleteLicensesSafely,
   findBulkDeletableTrialIds,
 } from "@/lib/license-admin";
+import { setLicenseServerExpiry, setLicenseServerStatus } from "@/lib/license-server-admin";
 import { syncLicenseToPanel } from "@/lib/panel-sync";
 
 function isRegisteredAccount(passwordHash: string): boolean {
@@ -213,8 +214,15 @@ export async function PATCH(request: Request) {
 
     const license = await prisma.license.update({ where: { id }, data: updateData });
 
+    let sync: Awaited<ReturnType<typeof syncLicenseToPanel>> | undefined;
     if (data.extendDays || data.upgradePlanSlug || data.reactivate) {
-      await syncLicenseToPanel(id, "REPLACE", { licenseKey: license.key }).catch(() => null);
+      if (license.expiresAt) {
+        await setLicenseServerExpiry(license.key, license.expiresAt);
+      }
+      if (license.status === "ACTIVE") {
+        await setLicenseServerStatus(license.key, "ACTIVE");
+      }
+      sync = await syncLicenseToPanel(id, "REPLACE", { licenseKey: license.key });
     }
 
     await logAudit({
@@ -224,7 +232,7 @@ export async function PATCH(request: Request) {
       detail: `${license.key} → ${JSON.stringify(updateData)}`,
     });
 
-    return NextResponse.json({ license });
+    return NextResponse.json({ license, ...(sync ? { sync } : {}) });
   } catch (e) {
     console.error("[admin/licenses PATCH]", e);
     return NextResponse.json({ error: "Update failed" }, { status: 500 });

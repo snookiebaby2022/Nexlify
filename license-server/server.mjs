@@ -74,6 +74,21 @@ function keyHash(key) {
   return createHash("sha256").update(key).digest("hex");
 }
 
+/** Admin-extended expiry (marketing DB) can exceed JWT exp in the key string. */
+function effectiveExpSec(payload, lid) {
+  const admin = store.adminStatus[lid];
+  let exp = payload.exp;
+  if (admin?.expiresAt) {
+    const override = Math.floor(new Date(admin.expiresAt).getTime() / 1000);
+    if (Number.isFinite(override)) exp = Math.max(exp, override);
+  }
+  return exp;
+}
+
+function licenseExpired(payload, lid) {
+  return effectiveExpSec(payload, lid) * 1000 < Date.now();
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -183,7 +198,7 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, status: "SUSPENDED", error: "License suspended" }));
         return;
       }
-      if (payload.exp * 1000 < Date.now()) {
+      if (licenseExpired(payload, payload.lid)) {
         res.writeHead(400);
         res.end(JSON.stringify({ ok: false, status: "EXPIRED", error: "License expired" }));
         return;
@@ -206,7 +221,51 @@ const server = http.createServer(async (req, res) => {
           lid: payload.lid,
           tier: payload.tier,
           term: payload.term,
-          expires_at: new Date(payload.exp * 1000).toISOString(),
+          expires_at: new Date(effectiveExpSec(payload, payload.lid) * 1000).toISOString(),
+        })
+      );
+    } catch (e) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ ok: false, error: String(e) }));
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url === "/v1/admin/set-expiry") {
+    if (!checkSecret(req)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
+      return;
+    }
+    try {
+      const data = JSON.parse(await readBody(req));
+      let lid = String(data.lid ?? "").trim();
+      let parsed = null;
+      if (data.license_key) {
+        parsed = parseKey(data.license_key);
+        if (parsed) lid = parsed.payload.lid;
+      }
+      if (!lid) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ ok: false, error: "lid or license_key required" }));
+        return;
+      }
+      const raw = data.expires_at ?? data.expiresAt;
+      const expiresAt = new Date(String(raw ?? ""));
+      if (Number.isNaN(expiresAt.getTime())) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ ok: false, error: "expires_at must be a valid ISO date" }));
+        return;
+      }
+      if (!store.adminStatus[lid]) store.adminStatus[lid] = {};
+      store.adminStatus[lid].expiresAt = expiresAt.toISOString();
+      store.adminStatus[lid].updatedAt = new Date().toISOString();
+      saveActivations(store);
+      res.end(
+        JSON.stringify({
+          ok: true,
+          lid,
+          expires_at: expiresAt.toISOString(),
         })
       );
     } catch (e) {
@@ -295,7 +354,7 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ ok: false, error: "Invalid license key" }));
         return;
       }
-      if (parsed.payload.exp * 1000 < Date.now()) {
+      if (licenseExpired(parsed.payload, parsed.payload.lid)) {
         res.writeHead(400);
         res.end(JSON.stringify({ ok: false, error: "License expired" }));
         return;
@@ -333,7 +392,9 @@ const server = http.createServer(async (req, res) => {
           lid: parsed.payload.lid,
           tier: parsed.payload.tier,
           term: parsed.payload.term,
-          expires_at: new Date(parsed.payload.exp * 1000).toISOString(),
+          expires_at: new Date(
+            effectiveExpSec(parsed.payload, parsed.payload.lid) * 1000
+          ).toISOString(),
         })
       );
     } catch (e) {

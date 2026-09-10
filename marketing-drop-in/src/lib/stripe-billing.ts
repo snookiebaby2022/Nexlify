@@ -133,8 +133,9 @@ export async function renewLicenseFromInvoice(invoice: Stripe.Invoice) {
   if (!license) return { ok: false as const, error: "license_not_found" };
 
   const days = license.plan.durationDays || 30;
-  const updated = await extendLicense(license.id, days);
-  if (!updated) return { ok: false as const, error: "extend_failed" };
+  const extended = await extendLicense(license.id, days);
+  if (!extended) return { ok: false as const, error: "extend_failed" };
+  const updated = extended.license;
 
   await prisma.license.update({
     where: { id: license.id },

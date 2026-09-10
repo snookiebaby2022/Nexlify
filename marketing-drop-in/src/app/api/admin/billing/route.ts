@@ -116,10 +116,9 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "extendDays") {
-      const updated = await extendLicense(body.licenseId, body.days);
-      if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-      await syncLicenseToPanel(body.licenseId, "REPLACE", { licenseKey: updated.key }).catch(() => {});
-      return NextResponse.json({ ok: true, license: updated });
+      const result = await extendLicense(body.licenseId, body.days);
+      if (!result) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({ ok: true, license: result.license, sync: result.sync });
     }
 
     if (body.action === "syncPanel") {

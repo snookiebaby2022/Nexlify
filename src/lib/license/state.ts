@@ -339,7 +339,21 @@ export async function revalidateStoredLicense(panelHost: string): Promise<boolea
 
   const stored = await getStoredLicense();
   if (!stored) return false;
-  if (stored.exp * 1000 < Date.now()) return false;
+  if (stored.exp * 1000 < Date.now()) {
+    const key = await readLicenseRawKey();
+    if (key) {
+      const { fetchVendorLicenseExpiry } = await import("./remote-sync");
+      const vendorExp = await fetchVendorLicenseExpiry(key);
+      if (!vendorExp || vendorExp.getTime() <= Date.now()) return false;
+      stored.exp = Math.floor(vendorExp.getTime() / 1000);
+      await prisma.panelSetting.update({
+        where: { key: STATE_KEY },
+        data: { value: JSON.stringify(stored) },
+      });
+    } else {
+      return false;
+    }
+  }
 
   const instanceId = await getOrCreateInstanceId();
   if (isEmailBoundLicense()) {

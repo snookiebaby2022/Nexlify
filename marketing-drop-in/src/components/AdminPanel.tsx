@@ -774,12 +774,12 @@ export function AdminPanel() {
           >
             <h3 className="font-semibold text-white">Activate IPTV panel</h3>
             <p className="text-xs text-slate-400">
-              Pushes this license key to the panel so login on the domain or IP no longer asks for the key. Prefer the
-              origin IP if the domain is behind Cloudflare.
+              Enter the panel origin only — public IP or hostname (http is assumed for IPs, https for domains). Secret is
+              optional if this server already has PANEL_API_SECRET or the license row stores one from a prior push.
             </p>
             <input
               type="text"
-              placeholder="http://45.88.138.18"
+              placeholder="45.88.138.18 or panel.example.com"
               value={activateEdit.panelUrl}
               onChange={(e) => setActivateEdit({ ...activateEdit, panelUrl: e.target.value })}
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"

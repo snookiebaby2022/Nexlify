@@ -53,3 +53,11 @@ export async function setLicenseServerStatus(
 export async function clearLicenseServerBinding(licenseKey: string) {
   return postLicenseServer("/v1/admin/clear-binding", { license_key: licenseKey });
 }
+
+/** Push marketing DB expiry so JWT exp in the key can lag after admin extend. */
+export async function setLicenseServerExpiry(licenseKey: string, expiresAt: Date) {
+  return postLicenseServer("/v1/admin/set-expiry", {
+    license_key: licenseKey,
+    expires_at: expiresAt.toISOString(),
+  });
+}
