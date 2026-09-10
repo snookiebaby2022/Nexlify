@@ -26,38 +26,49 @@ function vendorWebBase(): string | null {
   return fromLicense.replace(/\/v1$/i, "");
 }
 
+const vendorExpMem = new Map<string, { expAt: number; value: Date | null }>();
+const VENDOR_EXP_MEM_TTL_MS = 3_600_000;
+
 /** Vendor DB expiry (may exceed JWT exp after admin extend on same key). */
 export async function fetchVendorLicenseExpiry(licenseKey: string): Promise<Date | null> {
   const key = licenseKey.trim();
   if (!key) return null;
-  const { createHash } = await import("node:crypto");
-  const cacheKey = `license:vendor-exp:${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
-  const { cacheGetOrSet } = await import("@/lib/cache");
-  // Cache vendor round-trips — /api/license/status was blocking ~1.2s on every cold hit.
-  // Store ISO string (Redis JSON cannot round-trip Date).
-  const iso = await cacheGetOrSet<string | null>(cacheKey, 3600, async () => {
-    const base = vendorWebBase();
-    if (!base) return null;
-    try {
-      const res = await fetch(`${base}/api/licenses/validate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey: key }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(4_000),
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as { ok?: boolean; expiresAt?: string | null };
-      if (!data.ok || !data.expiresAt) return null;
-      const d = new Date(data.expiresAt);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
-    } catch {
+  // In-memory only — do NOT import @/lib/cache (ioredis). remote-sync is reachable
+  // from some admin client pages via license/state → plan-limits → gpu-transcode.
+  const cacheKey = key.length > 48 ? `${key.slice(0, 24)}…${key.slice(-16)}` : key;
+  const hit = vendorExpMem.get(cacheKey);
+  if (hit && hit.expAt > Date.now()) return hit.value;
+
+  const base = vendorWebBase();
+  if (!base) {
+    vendorExpMem.set(cacheKey, { expAt: Date.now() + VENDOR_EXP_MEM_TTL_MS, value: null });
+    return null;
+  }
+  try {
+    const res = await fetch(`${base}/api/licenses/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: key }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!res.ok) {
+      vendorExpMem.set(cacheKey, { expAt: Date.now() + 60_000, value: null });
       return null;
     }
-  });
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d;
+    const data = (await res.json()) as { ok?: boolean; expiresAt?: string | null };
+    if (!data.ok || !data.expiresAt) {
+      vendorExpMem.set(cacheKey, { expAt: Date.now() + 60_000, value: null });
+      return null;
+    }
+    const d = new Date(data.expiresAt);
+    const value = Number.isNaN(d.getTime()) ? null : d;
+    vendorExpMem.set(cacheKey, { expAt: Date.now() + VENDOR_EXP_MEM_TTL_MS, value });
+    return value;
+  } catch {
+    vendorExpMem.set(cacheKey, { expAt: Date.now() + 60_000, value: null });
+    return null;
+  }
 }
 
 function panelApiSecret(): string | null {
