@@ -489,12 +489,17 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
   const stored = await getStoredLicense();
   let storedExpMs = stored ? stored.exp * 1000 : 0;
   if (stored) {
-    const rawKey = await readLicenseRawKey();
-    if (rawKey) {
-      const { fetchVendorLicenseExpiry } = await import("./remote-sync");
-      const vendorExp = await fetchVendorLicenseExpiry(rawKey);
-      if (vendorExp && vendorExp.getTime() > storedExpMs) {
-        storedExpMs = vendorExp.getTime();
+    // Avoid blocking admin UI on vendor network when JWT still has plenty of life.
+    // Only sync vendor expiry when within 7 days of JWT exp (or already past).
+    const nearExpiry = storedExpMs < Date.now() + 7 * 86_400_000;
+    if (nearExpiry) {
+      const rawKey = await readLicenseRawKey();
+      if (rawKey) {
+        const { fetchVendorLicenseExpiry } = await import("./remote-sync");
+        const vendorExp = await fetchVendorLicenseExpiry(rawKey);
+        if (vendorExp && vendorExp.getTime() > storedExpMs) {
+          storedExpMs = vendorExp.getTime();
+        }
       }
     }
   }
