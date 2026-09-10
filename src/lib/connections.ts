@@ -597,34 +597,33 @@ export async function trackConnection(opts: {
       });
       if (byIp) {
         const switchedStream = Boolean(byIp.streamId && byIp.streamId !== streamId);
-        try {
-          await prisma.liveConnection.update({
-            where: { id: byIp.id },
-            data: {
-              streamId,
-              ...(switchedStream ? { startedAt: new Date() } : {}),
-              lastSeenAt: new Date(),
-              ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
-            },
-          });
-        } catch (err) {
-          const code = (err as { code?: string })?.code;
-          if (code !== "P2025") throw err;
+        // updateMany avoids Prisma P2025 noise when the row was deleted between find+update
+        const touched = await prisma.liveConnection.updateMany({
+          where: { id: byIp.id },
+          data: {
+            streamId,
+            ...(switchedStream ? { startedAt: new Date() } : {}),
+            lastSeenAt: new Date(),
+            ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+          },
+        });
+        if (touched.count > 0) {
+          if (byIp.streamId && byIp.streamId !== streamId) {
+            await prisma.liveConnection.deleteMany({
+              where: {
+                lineId: opts.lineId,
+                ip: clientIp,
+                id: { not: byIp.id },
+              },
+            });
+            notifyLiveConnectionsChanged();
+          }
+          invalidateConnectionCaches({ lineId: opts.lineId });
+          void touchLiveSession(opts.lineId, streamId, clientIp);
+          void setViewerActiveStream(opts.lineId, streamId, clientIp);
+          return byIp.id;
         }
-        if (byIp.streamId && byIp.streamId !== streamId) {
-          await prisma.liveConnection.deleteMany({
-            where: {
-              lineId: opts.lineId,
-              ip: clientIp,
-              id: { not: byIp.id },
-            },
-          });
-          notifyLiveConnectionsChanged();
-        }
-        invalidateConnectionCaches({ lineId: opts.lineId });
-        void touchLiveSession(opts.lineId, streamId, clientIp);
-        void setViewerActiveStream(opts.lineId, streamId, clientIp);
-        return byIp.id;
+        /* touched.count === 0: row raced away — fall through to create path */
       }
     }
   }

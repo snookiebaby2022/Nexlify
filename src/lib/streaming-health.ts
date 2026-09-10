@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
-import { bouquetContentCounts } from "@/lib/bouquet-counts";
-import { isMultiWorkerPanel, isRedisConfigured } from "@/lib/cache";
+import { bouquetContentCountsByBouquetId, emptyBouquetContentCounts } from "@/lib/bouquet-counts";
+import { isMultiWorkerPanel, isRedisConfigured, cacheGetOrSet } from "@/lib/cache";
 import { redisModeFromEnv, redisPing } from "@/lib/redis";
 import { detectHostHardware, buildOptimizationProfile } from "@/lib/server-optimization";
 import { getServerLoadScores } from "@/lib/server-load";
@@ -25,15 +25,18 @@ export async function getStreamingHealthSnapshot() {
       },
       orderBy: { name: "asc" },
     }),
-    prisma.stream.groupBy({
-      by: ["type"],
-      where: { isActive: true },
-      _count: { id: true },
-    }),
+    cacheGetOrSet("health:stream-type-counts:v1", 120, () =>
+      prisma.stream.groupBy({
+        by: ["type"],
+        where: { isActive: true },
+        _count: { id: true },
+      })
+    ),
     prisma.bouquet.findMany({
       where: { isActive: true },
-      include: {
-        streams: { include: { stream: { select: { type: true, isRadio: true } } } },
+      select: {
+        id: true,
+        name: true,
         _count: { select: { lines: true } },
       },
       orderBy: { name: "asc" },
@@ -42,11 +45,13 @@ export async function getStreamingHealthSnapshot() {
     prisma.line.count({ where: { status: "ACTIVE" } }),
     getAntiFreezeSettings(),
     redisPing(),
-    prisma.stream.groupBy({
-      by: ["lastProbeOk"],
-      where: { isActive: true, type: "LIVE" },
-      _count: { id: true },
-    }),
+    cacheGetOrSet("health:live-probe-stats:v1", 60, () =>
+      prisma.stream.groupBy({
+        by: ["lastProbeOk"],
+        where: { isActive: true, type: "LIVE" },
+        _count: { id: true },
+      })
+    ),
     getServerLoadScores(),
     listLiveConnections(undefined, 500),
   ]);
@@ -55,9 +60,22 @@ export async function getStreamingHealthSnapshot() {
   const recommended = buildOptimizationProfile(hardware);
 
   const now = Date.now();
-  const liveSamples = await batchGetLiveQualitySamples(
-    liveConnections.map((c) => ({ lineId: c.lineId, streamId: c.streamId ?? "", ip: c.ip }))
-  );
+  const [liveSamples, bouquetCountsRaw] = await Promise.all([
+    batchGetLiveQualitySamples(
+      liveConnections.map((c) => ({ lineId: c.lineId, streamId: c.streamId ?? "", ip: c.ip }))
+    ),
+    cacheGetOrSet(
+      `health:bouquet-counts:${bouquets.map((b) => b.id).sort().join(",") || "none"}`,
+      120,
+      async () => {
+        const map = await bouquetContentCountsByBouquetId(
+          prisma,
+          bouquets.map((b) => b.id)
+        );
+        return Object.fromEntries(map.entries());
+      }
+    ),
+  ]);
   const stallSessions = liveSamples.filter((sample) => (sample?.stallCount ?? 0) > 0).length;
   const serverLoadById = new Map(loadScores.map((row) => [row.server.id, row]));
 
@@ -89,13 +107,15 @@ export async function getStreamingHealthSnapshot() {
   });
 
   const byType = Object.fromEntries(streamCounts.map((r) => [r.type, r._count.id]));
-  const radioCount = await prisma.stream.count({ where: { isActive: true, isRadio: true } });
+  const radioCount = await cacheGetOrSet("health:radio-count:v1", 120, () =>
+    prisma.stream.count({ where: { isActive: true, isRadio: true } })
+  );
 
   const bouquetRows = bouquets.map((b) => ({
     id: b.id,
     name: b.name,
     lineCount: b._count.lines,
-    counts: bouquetContentCounts(b.streams),
+    counts: bouquetCountsRaw[b.id] ?? emptyBouquetContentCounts(),
   }));
 
   const emptyBouquets = bouquetRows.filter((b) => b.counts.total === 0);

@@ -4,6 +4,8 @@ import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
 import { streamListOrderBy } from "@/lib/stream-order";
 import { attachStreamEpgWorking } from "@/lib/epg-working-status";
 import { categoryTypeForStream } from "@/lib/category-options";
+import { cacheGetOrSet } from "@/lib/cache";
+import { listAdminServersLite } from "@/lib/admin-servers-list";
 
 export async function bootstrapAdminStreamsPage(opts: {
   type?: "LIVE" | "MOVIE" | "SERIES";
@@ -15,7 +17,7 @@ export async function bootstrapAdminStreamsPage(opts: {
   const pageSize = Math.min(500, Math.max(1, opts.pageSize ?? DEFAULT_LIST_PAGE_SIZE));
   const skip = (page - 1) * pageSize;
 
-  const [streams, total, categories, servers, totalRows] = await Promise.all([
+  const [streams, total, categories, servers, typeTotals] = await Promise.all([
     prisma.stream.findMany({
       where: { type },
       skip,
@@ -46,22 +48,24 @@ export async function bootstrapAdminStreamsPage(opts: {
         category: { select: { id: true, name: true } },
       },
     }),
-    prisma.stream.count({ where: { type } }),
+    cacheGetOrSet(`admin:stream-count:${JSON.stringify({ type })}`, 45, () =>
+      prisma.stream.count({ where: { type } })
+    ),
     prisma.category.findMany({
       where: { categoryType: categoryTypeForStream(type) as CategoryType },
       select: { id: true, name: true, parentId: true, sortOrder: true, categoryType: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
-    prisma.streamServer.findMany({
-      select: { id: true, name: true },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    listAdminServersLite(),
+    cacheGetOrSet("admin:stream-type-totals:v1", 120, async () => {
+      const totalRows = await prisma.stream.groupBy({ by: ["type"], _count: true });
+      const next: Record<string, number> = { LIVE: 0, MOVIE: 0, SERIES: 0 };
+      for (const row of totalRows) next[row.type] = row._count;
+      return next;
     }),
-    prisma.stream.groupBy({ by: ["type"], _count: true }),
   ]);
 
   const listed = await attachStreamEpgWorking(streams);
-  const typeTotals: Record<string, number> = { LIVE: 0, MOVIE: 0, SERIES: 0 };
-  for (const row of totalRows) typeTotals[row.type] = row._count;
 
   return {
     streams: listed,

@@ -89,7 +89,7 @@ export async function runLineTheftJob(settings: TheftSettings) {
         entityId: ip,
         meta: { lineCount: lines.size, lineIds: [...lines], kind: "lines" } as Prisma.InputJsonValue,
       },
-    });
+    }).catch(() => undefined);
     if (settings.autoDisableLine) {
       await disableLines(lines);
       disabled += lines.size;
@@ -133,7 +133,7 @@ export async function runVodTheftJob(settings: TheftSettings) {
         entityId: ip,
         meta: { lineCount: lines.size, lineIds: [...lines], kind: "vod" } as Prisma.InputJsonValue,
       },
-    });
+    }).catch(() => undefined);
     if (settings.autoDisableLine) {
       await disableLines(lines);
       disabled += lines.size;
@@ -179,7 +179,7 @@ export async function runStreamTheftJob(settings: TheftSettings) {
         entityId: streamId,
         meta: { ip, lineCount: lines.size, lineIds: [...lines], kind: "stream" } as Prisma.InputJsonValue,
       },
-    });
+    }).catch(() => undefined);
     if (settings.autoDisableLine) {
       await disableLines(lines);
       disabled += lines.size;

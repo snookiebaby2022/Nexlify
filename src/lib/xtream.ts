@@ -160,7 +160,11 @@ async function loadXtreamAccountShell(
     const publicPort = portFromPanelBaseUrl(panelOrigin);
     const serverSettings = await getPanelServerSettings();
     const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
-    const httpPort = mediaOrigin && !useHttps
+    // HTTP media edge (FORCE_LB / NEXLIFY_MEDIA_ORIGIN=http://LB): always advertise
+    // port 80 for both http + https_port. LB often has no :443 listener; advertising
+    // 443 for browser/WebOS UAs made "login OK" then HTTPS playback fail.
+    const httpMediaEdge = Boolean(mediaOrigin) && !useHttps;
+    const httpPort = httpMediaEdge
       ? mediaPort || "80"
       : standardPorts
       ? "80"
@@ -169,7 +173,9 @@ async function loadXtreamAccountShell(
         : String(resolveAdvertisedStreamHttpPort(publicPort));
     const httpsPort = mediaOrigin && useHttps
       ? mediaPort || String(streamHttpsPort)
-      : standardPorts ? "80" : String(streamHttpsPort);
+      : httpMediaEdge || standardPorts
+        ? mediaPort || "80"
+        : String(streamHttpsPort);
     const formats = preferLiveOutputFormats(
       xtreamOutputFormats("ts,m3u8,hls,rtmp"),
       resolveClientPlaybackProfile(userAgent)

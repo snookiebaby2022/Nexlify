@@ -681,14 +681,27 @@ export async function logActivity(
     meta?: Record<string, unknown>;
   }
 ) {
-  await prisma.activityLog.create({
-    data: {
-      action,
-      userId: opts.userId,
-      lineId: opts.lineId,
-      entity: opts.entity,
-      entityId: opts.entityId,
-      meta: opts.meta ? (opts.meta as Prisma.InputJsonValue) : undefined,
-    },
-  });
+  let lineId = opts.lineId?.trim() || undefined;
+  if (lineId) {
+    const exists = await prisma.line.findUnique({ where: { id: lineId }, select: { id: true } });
+    if (!exists) {
+      lineId = undefined;
+    }
+  }
+  try {
+    await prisma.activityLog.create({
+      data: {
+        action,
+        userId: opts.userId,
+        lineId,
+        entity: opts.entity,
+        entityId: opts.entityId,
+        meta: opts.meta ? (opts.meta as Prisma.InputJsonValue) : undefined,
+      },
+    });
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "P2003") return; // FK — never crash callers
+    throw err;
+  }
 }

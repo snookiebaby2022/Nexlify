@@ -591,6 +591,8 @@ export function StreamsList({
     if (countedKeyRef.current === loadKey) {
       params.set("skipTotal", "1");
       params.set("skipEpg", "1");
+      // Soft polls: keep viewer counts from prior page; avoid withStats DB round-trips every tick.
+      params.delete("withStats");
     }
     if (!params.has("skipTotal")) setListLoading(true);
     fetch(`/api/admin/streams?${params}`)
@@ -600,7 +602,12 @@ export function StreamsList({
         setStreams((prev) => {
           if (!params.has("skipEpg")) return next;
           const epgById = new Map(prev.map((s) => [s.id, s.epgWorking]));
-          return next.map((s) => ({ ...s, epgWorking: epgById.get(s.id) ?? s.epgWorking }));
+          const statsById = new Map(prev.map((s) => [s.id, s.liveStats]));
+          return next.map((s) => ({
+            ...s,
+            epgWorking: epgById.get(s.id) ?? s.epgWorking,
+            liveStats: s.liveStats ?? statsById.get(s.id) ?? null,
+          }));
         });
         if (typeof d.total === "number") {
           setTotal(d.total);

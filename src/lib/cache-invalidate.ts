@@ -4,13 +4,25 @@ import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 export async function invalidateDashboardStats() {
   await Promise.all([
     cacheDelExact("stats:dashboard"),
-    cacheDelExact("stats:kpi"),
     cacheDelExact("stats:summary"),
+    cacheDelExact("stats:kpi"),
+    cacheDelExact("stats:header"),
     cacheDelExact("stats:server-metrics"),
     cacheDelExact("stats:probe-dead:v1"),
     cacheDelExact("stats:probe-unstable:v1"),
+    cacheDelExact("stats:admin-primary-counts:v2"),
+    cacheDelExact("stats:header-counts:v2"),
+    cacheDelExact("stats:playback-bw:v2"),
     cacheDelExact("stream-errors:list"),
     cacheDelExact("dashboard:admin-widgets"),
+    cacheDelExact("dash:stream-health:v1"),
+    cacheDelExact("admin:servers:list:v1"),
+    cacheDelExact("health:stream-type-counts:v1"),
+    cacheDelExact("health:live-probe-stats:v1"),
+    cacheDelExact("health:radio-count:v1"),
+    cacheDel("health:bouquet-counts:"),
+    cacheDel("admin:stream-count:"),
+    cacheDel("admin:stream-type-totals:"),
   ]);
 }
 

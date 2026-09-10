@@ -28,24 +28,36 @@ function vendorWebBase(): string | null {
 
 /** Vendor DB expiry (may exceed JWT exp after admin extend on same key). */
 export async function fetchVendorLicenseExpiry(licenseKey: string): Promise<Date | null> {
-  const base = vendorWebBase();
-  if (!base) return null;
-  try {
-    const res = await fetch(`${base}/api/licenses/validate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey: licenseKey.trim() }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { ok?: boolean; expiresAt?: string | null };
-    if (!data.ok || !data.expiresAt) return null;
-    const d = new Date(data.expiresAt);
-    return Number.isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
+  const key = licenseKey.trim();
+  if (!key) return null;
+  const { createHash } = await import("node:crypto");
+  const cacheKey = `license:vendor-exp:${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  // Cache vendor round-trips — /api/license/status was blocking ~1.2s on every cold hit.
+  // Store ISO string (Redis JSON cannot round-trip Date).
+  const iso = await cacheGetOrSet<string | null>(cacheKey, 3600, async () => {
+    const base = vendorWebBase();
+    if (!base) return null;
+    try {
+      const res = await fetch(`${base}/api/licenses/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: key }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(4_000),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { ok?: boolean; expiresAt?: string | null };
+      if (!data.ok || !data.expiresAt) return null;
+      const d = new Date(data.expiresAt);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    } catch {
+      return null;
+    }
+  });
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function panelApiSecret(): string | null {

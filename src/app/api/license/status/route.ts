@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLicenseStatus } from "@/lib/license";
+import { cacheGetOrSet } from "@/lib/cache";
 
 export async function GET(req: NextRequest) {
   try {
     const host = (req.headers.get("host") ?? "localhost").split(":")[0].toLowerCase();
-    const status = await getLicenseStatus(host);
+    const status = await cacheGetOrSet(`license:status:${host}`, 60, () => getLicenseStatus(host));
     return NextResponse.json({ status });
   } catch (err) {
     console.error("[license/status]", err);

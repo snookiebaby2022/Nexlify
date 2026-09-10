@@ -16,6 +16,15 @@ import {
 } from "@/lib/server-pool";
 
 const STALE_MS = 5 * 60 * 1000;
+/** Coalesce dashboard/LB polls — full Prisma rows must not go through Redis JSON. */
+const SCORES_MEM_TTL_MS = 10_000;
+let scoresMem:
+  | {
+      at: number;
+      value: Awaited<ReturnType<typeof computeServerLoadScores>>;
+    }
+  | null = null;
+let scoresInFlight: Promise<Awaited<ReturnType<typeof computeServerLoadScores>>> | null = null;
 
 type ServerPoolMove = { streamId: string; toServerId: string; pool: string[] };
 
@@ -31,13 +40,27 @@ async function applyServerPoolMoves(moves: ServerPoolMove[]) {
   }
 }
 
-export async function getServerLoadScores() {
+/** LIVE+active rows per server — never count the whole VOD/series catalog (can be 800k+). */
+async function liveCatalogAssignedByServer(): Promise<Map<string, number>> {
+  const rows = await prisma.stream.groupBy({
+    by: ["serverId"],
+    where: { type: "LIVE", isActive: true, serverId: { not: null } },
+    _count: { _all: true },
+  });
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.serverId) continue;
+    map.set(row.serverId, row._count._all);
+  }
+  return map;
+}
+
+async function computeServerLoadScores() {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const [servers, connRows] = await Promise.all([
+  const [servers, connRows, catalogByServer] = await Promise.all([
     prisma.streamServer.findMany({
       where: { isActive: true },
       include: {
-        _count: { select: { streams: true } },
         processes: { where: { status: "running", lastSeenAt: { gte: staleBefore } } },
       },
     }),
@@ -45,6 +68,7 @@ export async function getServerLoadScores() {
       where: { lastSeenAt: { gte: staleBefore }, stream: { serverId: { not: null } } },
       select: { stream: { select: { serverId: true } } },
     }),
+    liveCatalogAssignedByServer(),
   ]);
 
   const liveByServer = new Map<string, number>();
@@ -55,7 +79,7 @@ export async function getServerLoadScores() {
   }
 
   return servers.map((s) => {
-    const catalogAssigned = s._count.streams;
+    const catalogAssigned = catalogByServer.get(s.id) ?? 0;
     const running = s.processes.length;
     const liveConnections = liveByServer.get(s.id) ?? 0;
     const slotsUsed = viewerSlotsUsed(liveConnections, running);
@@ -83,6 +107,24 @@ export async function getServerLoadScores() {
       online: isServerHealthOnline(s.healthStatus),
     };
   });
+}
+
+export async function getServerLoadScores(_opts?: { includeCatalogCounts?: boolean }) {
+  const now = Date.now();
+  if (scoresMem && now - scoresMem.at < SCORES_MEM_TTL_MS) {
+    return scoresMem.value;
+  }
+  if (scoresInFlight) return scoresInFlight;
+
+  scoresInFlight = computeServerLoadScores()
+    .then((value) => {
+      scoresMem = { at: Date.now(), value };
+      return value;
+    })
+    .finally(() => {
+      scoresInFlight = null;
+    });
+  return scoresInFlight;
 }
 export async function pickLeastLoadedServerId(clientIp?: string): Promise<string | null> {
   if (clientIp) {

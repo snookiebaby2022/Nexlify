@@ -13,7 +13,6 @@ import {
 } from "@/lib/panel-local-server";
 import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
-import { publicStreamServer } from "@/lib/server-public";
 import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
 import { parseStreamServerDomain, type StreamServerDomainRole } from "@/lib/stream-server-domain";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
@@ -69,14 +68,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ servers: sortServersMainFirst(servers) });
   }
 
-  const servers = await prisma.streamServer.findMany({
-    include: {
-      proxy: true,
-      _count: { select: { streams: true, lbSessions: true } },
-    },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
-  return NextResponse.json({ servers: sortServersMainFirst(servers).map(publicStreamServer) });
+  const { listAdminServers } = await import("@/lib/admin-servers-list");
+  const servers = await listAdminServers();
+  return NextResponse.json({ servers });
 }
 
 export async function POST(req: NextRequest) {

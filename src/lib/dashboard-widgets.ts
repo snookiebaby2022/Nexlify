@@ -404,30 +404,33 @@ async function getTrialExpiringLines(
 }
 
 async function getStreamHealth(): Promise<StreamHealthSummary> {
-  const base = { type: StreamType.LIVE, isActive: true };
-  const [totalLive, online, offlineCount, offlineStreams] = await Promise.all([
-    prisma.stream.count({ where: base }),
-    prisma.stream.count({ where: { ...base, lastProbeOk: true } }),
-    prisma.stream.count({ where: { ...base, lastProbeOk: false } }),
-    prisma.stream.findMany({
-      where: { ...base, lastProbeOk: false },
-      orderBy: { name: "asc" },
-      take: 10,
-      select: { id: true, name: true, lastProbeError: true, lastProbeAt: true },
-    }),
-  ]);
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet("dash:stream-health:v1", 60, async () => {
+    const base = { type: StreamType.LIVE, isActive: true };
+    const [totalLive, online, offlineCount, offlineStreams] = await Promise.all([
+      prisma.stream.count({ where: base }),
+      prisma.stream.count({ where: { ...base, lastProbeOk: true } }),
+      prisma.stream.count({ where: { ...base, lastProbeOk: false } }),
+      prisma.stream.findMany({
+        where: { ...base, lastProbeOk: false },
+        orderBy: { name: "asc" },
+        take: 10,
+        select: { id: true, name: true, lastProbeError: true, lastProbeAt: true },
+      }),
+    ]);
 
-  return {
-    totalLive,
-    online,
-    offline: offlineCount,
-    offlineStreams: offlineStreams.map((s) => ({
-      id: s.id,
-      name: s.name,
-      lastProbeError: s.lastProbeError,
-      lastProbeAt: s.lastProbeAt?.toISOString() ?? null,
-    })),
-  };
+    return {
+      totalLive,
+      online,
+      offline: offlineCount,
+      offlineStreams: offlineStreams.map((s) => ({
+        id: s.id,
+        name: s.name,
+        lastProbeError: s.lastProbeError,
+        lastProbeAt: s.lastProbeAt?.toISOString() ?? null,
+      })),
+    };
+  });
 }
 
 async function getTicketQueue(createdById?: string): Promise<TicketQueueSummary> {

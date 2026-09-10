@@ -265,37 +265,39 @@ export type DashboardPlaybackBandwidth = {
 
 /** Live viewer egress on online load balancers only (never panel NIC / hairpin). */
 export async function getDashboardPlaybackBandwidth(): Promise<DashboardPlaybackBandwidth> {
-  const [scores, panelNic] = await Promise.all([
-    getServerLoadScores(),
-    getDashboardNicBandwidthMbps(),
-  ]);
-  const ctx = buildServerRoleContext(scores.map((s) => s.server));
-  // Stream boxes only — main/panel is never counted toward LB egress.
-  const lbs = scores.filter((s) => s.online && resolveServerRole(s.server, ctx) === "lb");
+  return cacheGetOrSet("stats:playback-bw:v2", 10, async () => {
+    const [scores, panelNic] = await Promise.all([
+      getServerLoadScores(),
+      getDashboardNicBandwidthMbps(),
+    ]);
+    const ctx = buildServerRoleContext(scores.map((s) => s.server));
+    // Stream boxes only — main/panel is never counted toward LB egress.
+    const lbs = scores.filter((s) => s.online && resolveServerRole(s.server, ctx) === "lb");
 
-  let measuredOut = 0;
-  let hasMeasured = false;
-  for (const lb of lbs) {
-    const host = readStoredHostMetrics(lb.server.panelSettings, true);
-    if (host && host.uploadMbps > 0) {
-      measuredOut += host.uploadMbps;
-      hasMeasured = true;
+    let measuredOut = 0;
+    let hasMeasured = false;
+    for (const lb of lbs) {
+      const host = readStoredHostMetrics(lb.server.panelSettings, true);
+      if (host && host.uploadMbps > 0) {
+        measuredOut += host.uploadMbps;
+        hasMeasured = true;
+      }
     }
-  }
 
-  const estimatedOut = lbs.reduce((n, s) => n + s.bandwidthMbps, 0);
-  const out = hasMeasured ? measuredOut : estimatedOut;
-  const cap = lbs.reduce((n, s) => n + s.capMbps, 0);
-  const rounded = Math.round(out * 10) / 10;
+    const estimatedOut = lbs.reduce((n, s) => n + s.bandwidthMbps, 0);
+    const out = hasMeasured ? measuredOut : estimatedOut;
+    const cap = lbs.reduce((n, s) => n + s.capMbps, 0);
+    const rounded = Math.round(out * 10) / 10;
 
-  return {
-    networkOutMbps: rounded,
-    networkInMbps: rounded,
-    lbCapMbps: cap,
-    // Kept for API compatibility / ops elsewhere — not shown on LB egress KPI.
-    panelProxyMbps: Math.round(Math.max(panelNic.networkInMbps, panelNic.networkOutMbps) * 10) / 10,
-    measured: hasMeasured,
-  };
+    return {
+      networkOutMbps: rounded,
+      networkInMbps: rounded,
+      lbCapMbps: cap,
+      // Kept for API compatibility / ops elsewhere — not shown on LB egress KPI.
+      panelProxyMbps: Math.round(Math.max(panelNic.networkInMbps, panelNic.networkOutMbps) * 10) / 10,
+      measured: hasMeasured,
+    };
+  });
 }
 
 export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {

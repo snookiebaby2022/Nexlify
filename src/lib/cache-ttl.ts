@@ -8,9 +8,9 @@ export type CacheTtlSettings = {
 };
 
 const FALLBACK: CacheTtlSettings = {
-  stats: 60,
+  stats: 45,
   epg: 43_200,
-  categories: 60,
+  categories: 120,
   playbackUrl: 60,
 };
 
@@ -29,10 +29,11 @@ export async function getCacheTtls(): Promise<CacheTtlSettings> {
 
   const settings = await getSettingGroup("cache");
   const ttl: CacheTtlSettings = {
-    stats: clamp(Number(settings.statsTtlSeconds), 15, 300),
-    epg: clamp(Number(settings.epgTtlSeconds), 30, 43_200),
-    categories: clamp(Number(settings.categoriesTtlSeconds), 60, 3600),
-    playbackUrl: clamp(Number(settings.playbackUrlCacheTtlSec), 5, 300),
+    // Floor at 30s — 15s was thrashing dashboard/header polls against Postgres.
+    stats: clamp(Number(settings.statsTtlSeconds) || FALLBACK.stats, 30, 300),
+    epg: clamp(Number(settings.epgTtlSeconds) || FALLBACK.epg, 30, 43_200),
+    categories: clamp(Number(settings.categoriesTtlSeconds) || FALLBACK.categories, 60, 3600),
+    playbackUrl: clamp(Number(settings.playbackUrlCacheTtlSec) || FALLBACK.playbackUrl, 5, 300),
   };
 
   cached = { at: Date.now(), ttl };

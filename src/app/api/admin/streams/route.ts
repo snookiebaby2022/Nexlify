@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       resellerBouquetIds === null
         ? "admin:stream-type-totals:v1"
         : `admin:stream-type-totals:v1:${session.id}`;
-    const totals = await cacheGetOrSet(totalsKey, 20, async () => {
+    const totals = await cacheGetOrSet(totalsKey, 120, async () => {
       const totalsWhere: Prisma.StreamWhereInput = {};
       if (resellerBouquetIds !== null) {
         totalsWhere.bouquets = { some: { bouquetId: { in: resellerBouquetIds } } };
@@ -347,7 +347,11 @@ export async function GET(req: NextRequest) {
 
 
   if (picker) {
-    const total = skipTotal ? streams.length : await prisma.stream.count({ where });
+    const total = skipTotal
+      ? streams.length
+      : await cacheGetOrSet(`admin:stream-count:${JSON.stringify(where)}`, 45, () =>
+          prisma.stream.count({ where })
+        );
     const slim = streams.map((s) => ({
       id: s.id,
       name: s.name,
@@ -399,7 +403,11 @@ export async function GET(req: NextRequest) {
       session.role
     );
     if (paginate) {
-      const total = skipTotal ? undefined : await prisma.stream.count({ where });
+      const total = skipTotal
+        ? undefined
+        : await cacheGetOrSet(`admin:stream-count:${JSON.stringify(where)}`, 45, () =>
+            prisma.stream.count({ where })
+          );
       return NextResponse.json({ streams: enriched, total, page, pageSize });
     }
     return NextResponse.json({ streams: enriched });
@@ -429,7 +437,11 @@ export async function GET(req: NextRequest) {
   const safeStreams = redactStreams(listed, session.role);
 
   if (paginate) {
-    const total = skipTotal ? undefined : await prisma.stream.count({ where });
+    const total = skipTotal
+      ? undefined
+      : await cacheGetOrSet(`admin:stream-count:${JSON.stringify(where)}`, 45, () =>
+          prisma.stream.count({ where })
+        );
     return NextResponse.json({ streams: safeStreams, total, page, pageSize });
   }
   return NextResponse.json({ streams: safeStreams });

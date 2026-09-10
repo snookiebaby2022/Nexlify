@@ -87,6 +87,10 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string; 
   if (process.env.NEXLIFY_LICENSE_REQUIRE === "0") {
     return { ok: true };
   }
+  // Mirror middleware: env flag means panel is already licensed for this host.
+  if (process.env.NEXLIFY_LICENSE_VALID === "1") {
+    return { ok: true, reason: "env_valid" };
+  }
 
   const host = process.env.PANEL_PRIMARY_DOMAIN ?? "localhost";
   const { isPanelLicenseExempt } = await import("@/lib/panel-demo-host");
@@ -95,13 +99,25 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string; 
   }
 
   try {
-    const { getStoredLicense } = await import("@/lib/license");
+    const { getStoredLicense, readLicenseRawKey } = await import("@/lib/license");
     const stored = await getStoredLicense();
     if (!stored) {
       // Already cleared — do not increment forever or re-clear (cron spam).
       return { ok: false, soft: true, reason: "no_license" };
     }
-    if (stored.exp * 1000 < Date.now()) {
+    let expMs = stored.exp * 1000;
+    if (expMs < Date.now()) {
+      // JWT may lag vendor-side renewals; check cached vendor expiry before failing.
+      const rawKey = await readLicenseRawKey();
+      if (rawKey) {
+        const { fetchVendorLicenseExpiry } = await import("@/lib/license/remote-sync");
+        const vendorExp = await fetchVendorLicenseExpiry(rawKey);
+        if (vendorExp && vendorExp.getTime() > Date.now()) {
+          expMs = vendorExp.getTime();
+        }
+      }
+    }
+    if (expMs < Date.now()) {
       return { ok: false, reason: "expired" };
     }
 

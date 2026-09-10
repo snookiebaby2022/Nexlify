@@ -105,7 +105,7 @@ export async function listManageLinesPage(opts: {
     prisma.line.findMany({
       where,
       include: {
-        bouquets: { include: { bouquet: true } },
+        bouquets: { include: { bouquet: { select: { id: true, name: true, isActive: true } } } },
         owner: { select: { id: true, username: true } },
         lastWatchedStream: { select: { id: true, name: true } },
       },
