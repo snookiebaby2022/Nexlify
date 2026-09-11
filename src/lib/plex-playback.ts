@@ -74,7 +74,9 @@ export function pickPlexPlaybackUrl(
 
   const media = item.Media?.[0];
   const part = media?.Part?.[0];
-  if (profile.preferDirectPlay && part?.key) {
+  if (profile.preferDirectPlay) {
+    // Edge /movie|/series splice needs a byte-rangeable file URL — never invent HLS here.
+    if (!part?.key) return null;
     return buildPlexDirectPartUrl(base, token, part.key);
   }
 

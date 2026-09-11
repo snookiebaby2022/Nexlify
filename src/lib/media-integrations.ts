@@ -24,10 +24,10 @@ import {
   buildPlexBaseUrl,
   extractPlexToken,
   flipPlexBaseProtocol,
+  listPlexTvConnectionBases,
   normalizePlexConfig,
   plexClientIdentifier,
   plexLibraryKeys,
-  plexProtocolFromBase,
   plexTokenParam,
   signInPlexTv,
   type PlexIntegrationConfig,
@@ -133,9 +133,21 @@ async function plexSectionsOrThrow(base: string, cfg: PlexIntegrationConfig, cli
 }
 
 function isPlexReachabilityError(msg: string): boolean {
-  return /TLS|certificate|CERT_|SSL|timed out|timeout|refused|Could not reach|resolve the Plex|fetch failed|ECONNREFUSED|ENOTFOUND|UNABLE_TO_VERIFY/i.test(
+  return /TLS|certificate|CERT_|SSL|timed out|timeout|refused|Could not reach|resolve the Plex|fetch failed|ECONNREFUSED|ENOTFOUND|UNABLE_TO_VERIFY|HTTP 503|Service Unavailable|Plex API HTTP 5\d\d/i.test(
     msg
   );
+}
+
+function applyPlexBaseToConfig(cfg: PlexIntegrationConfig, base: string) {
+  try {
+    const u = new URL(base);
+    cfg.host = u.hostname;
+    cfg.port = u.port || (u.protocol === "https:" ? "443" : "80");
+    cfg.protocol = u.protocol === "https:" ? "https" : "http";
+    cfg.url = undefined;
+  } catch {
+    /* keep prior cfg */
+  }
 }
 
 export async function ensurePlexAccess(integrationId: string): Promise<PlexAccess> {
@@ -165,6 +177,37 @@ export async function ensurePlexAccess(integrationId: string): Promise<PlexAcces
 
   const trySections = async (at: string) => plexSectionsOrThrow(at, cfg, clientIdentifier);
 
+  const tryAlternateBases = async (primaryError: unknown) => {
+    const candidates: string[] = [];
+    const flip = flipPlexBaseProtocol(base);
+    if (flip && flip !== base) candidates.push(flip);
+    try {
+      const discovered = await listPlexTvConnectionBases(token, clientIdentifier);
+      for (const uri of discovered) {
+        if (uri !== base && !candidates.includes(uri)) candidates.push(uri);
+        const flipped = flipPlexBaseProtocol(uri);
+        if (flipped && flipped !== base && !candidates.includes(flipped)) candidates.push(flipped);
+      }
+    } catch {
+      /* plex.tv optional */
+    }
+    let lastErr = primaryError;
+    for (const alt of candidates) {
+      try {
+        await trySections(alt);
+        base = alt;
+        applyPlexBaseToConfig(cfg, alt);
+        return true;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    const detail = lastErr instanceof Error ? lastErr.message : String(lastErr ?? "");
+    throw new Error(
+      `Plex Media Server is unreachable at ${base} (${detail}). Restart PMS on that host (Docker/service), confirm port ${cfg.port || "42400"} is open to this VPS, then Save & Test again.`
+    );
+  };
+
   try {
     await trySections(base);
   } catch (e) {
@@ -172,19 +215,15 @@ export async function ensurePlexAccess(integrationId: string): Promise<PlexAcces
     if (/401/.test(msg) && username && password) {
       token = await signInPlexTv(username, password, clientIdentifier);
       cfg.token = token;
-      await trySections(base);
-    } else if (isPlexReachabilityError(msg)) {
-      // Raw-IP Plex often listens HTTP-only on the custom port; https://…:42400 fails TLS.
-      const alt = flipPlexBaseProtocol(base);
-      if (!alt || alt === base) throw e;
       try {
-        await trySections(alt);
-        base = alt;
-        const proto = plexProtocolFromBase(alt);
-        if (proto) cfg.protocol = proto;
-      } catch {
-        throw e;
+        await trySections(base);
+      } catch (e2) {
+        const msg2 = e2 instanceof Error ? e2.message : "";
+        if (isPlexReachabilityError(msg2)) await tryAlternateBases(e2);
+        else throw e2;
       }
+    } else if (isPlexReachabilityError(msg)) {
+      await tryAlternateBases(e);
     } else {
       throw e;
     }
@@ -1549,15 +1588,18 @@ export async function resolvePlexIntegrationPlayback(
         );
         playItem = leaves.MediaContainer?.Metadata?.[0] ?? item;
       }
-      upstream = pickPlexPlaybackUrl(base, token, playItem, profile);
+      // Edge /movie|/series splice needs a byte-rangeable file URL. Prefer direct part
+      // even when the integration profile defaults to transcode HLS.
+      const directProfile = resolvePlexProfile("direct");
+      upstream = pickPlexPlaybackUrl(base, token, playItem, directProfile);
+      // Only allow HLS when the operator explicitly disabled directStream AND meta
+      // yielded no Part — never invent a transcode URL after a reachability failure.
+      if (!upstream && !cfg.directStream) {
+        upstream = pickPlexPlaybackUrl(base, token, playItem, profile);
+      }
     }
   } catch {
-    /* fall through to transcode URL */
-  }
-
-  if (!upstream) {
-    const { buildPlexTranscodeM3u8 } = await import("@/lib/plex-playback");
-    upstream = buildPlexTranscodeM3u8(base, token, itemId, profile);
+    /* no fake HLS fallback — edge cannot splice Plex m3u8 */
   }
 
   return upstream;

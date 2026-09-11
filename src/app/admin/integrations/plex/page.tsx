@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
@@ -108,6 +108,7 @@ export default function PlexIntegrationPage() {
   const [addProgress, setAddProgress] = useState<LocalProgress | null>(null);
   const [syncProgress, setSyncProgress] = useState<IntegrationSyncProgress | null>(null);
   const [catBusy, setCatBusy] = useState(false);
+  const autoLoadedRef = useRef(false);
 
   function load() {
     fetch("/api/admin/integrations?type=plex")
@@ -115,6 +116,41 @@ export default function PlexIntegrationPage() {
       .then((d) => {
         const next = (d.items ?? []) as PlexItem[];
         setItems(next);
+        // Keep the saved server in the form (don't leave empty host + default 32400).
+        if (!autoLoadedRef.current && next.length > 0) {
+          autoLoadedRef.current = true;
+          const pick =
+            next.find((i) => i.syncProgress?.status === "error") ||
+            next.find((i) => i.syncProgress?.status === "running") ||
+            next[0];
+          if (pick) {
+            // Inline load so we don't depend on loadIntoForm order during first paint.
+            const c = pick.config ?? {};
+            setEditId(pick.id);
+            setForm({
+              name: pick.name,
+              host: c.host ?? (c.url ? c.url.replace(/^https?:\/\//, "").split(":")[0] : ""),
+              port: String(c.port ?? (c.url?.match(/:(\d+)/)?.[1] ?? "32400")),
+              username: c.username ?? "",
+              password: "",
+              token: c.token ?? "",
+              serverId: c.serverId || "",
+              libraryKey: c.libraryKey ?? "",
+              libraryTitle: c.libraryTitle ?? "",
+              libraryKeys: Array.isArray(c.libraryKeys) && c.libraryKeys.length
+                ? c.libraryKeys.map(String)
+                : c.libraryKey
+                  ? [c.libraryKey]
+                  : [],
+              transcodeProfile: c.transcodeProfile ?? "direct",
+              directStream: c.directStream !== false,
+              skipExistingCatalog: c.skipExistingCatalog !== false,
+              excludeNonEnglish: c.excludeNonEnglish === true,
+              isActive: pick.isActive !== false,
+            });
+            if (pick.syncProgress) setSyncProgress(pick.syncProgress);
+          }
+        }
         const deletingRow = next.find((i) => i.config?.deleteProgress?.status === "running");
         if (deletingRow) {
           setDeleting(deletingRow.id);

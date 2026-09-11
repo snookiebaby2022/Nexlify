@@ -13,12 +13,16 @@ export async function GET(req: NextRequest) {
 
   const light = req.nextUrl.searchParams.get("light") === "1";
   if (light) {
-    const data = await cacheGetOrSet("dashboard:admin-widgets-light", 60, () =>
+    const data = await cacheGetOrSet("dashboard:admin-widgets-light", 90, () =>
       getAdminDashboardWidgetsLight(),
     );
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "private, max-age=30" },
+    });
   }
 
-  const data = await cacheGetOrSet("dashboard:admin-widgets", 120, () => getAdminDashboardWidgets());
-  return NextResponse.json(data);
+  const data = await cacheGetOrSet("dashboard:admin-widgets", 180, () => getAdminDashboardWidgets());
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "private, max-age=45" },
+  });
 }

@@ -120,6 +120,78 @@ export function plexProtocolFromBase(base: string): "http" | "https" | null {
   }
 }
 
+type PlexTvConnection = {
+  protocol?: string;
+  address?: string;
+  port?: number;
+  uri?: string;
+  local?: boolean;
+  relay?: boolean;
+};
+
+type PlexTvResource = {
+  provides?: string;
+  accessToken?: string;
+  connections?: PlexTvConnection[];
+};
+
+/**
+ * Ask plex.tv which URIs this token's PMS currently advertises (remote + optional relay).
+ * Used when the saved host:port is dead so we can auto-heal to a working connection.
+ */
+export async function listPlexTvConnectionBases(
+  token: string,
+  clientIdentifier = "nexlify-panel"
+): Promise<string[]> {
+  const tok = extractPlexToken(token);
+  if (!tok) return [];
+  let res: Response;
+  try {
+    res = await fetch("https://plex.tv/api/v2/resources?includeHttps=1&includeRelay=1", {
+      headers: plexRequestHeaders(tok, clientIdentifier),
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+  const rows = (await res.json()) as PlexTvResource[];
+  if (!Array.isArray(rows)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (base: string) => {
+    const clean = base.replace(/\/$/, "");
+    if (!clean || seen.has(clean)) return;
+    seen.add(clean);
+    out.push(clean);
+  };
+  for (const row of rows) {
+    if (!String(row.provides ?? "").includes("server")) continue;
+    const conns = Array.isArray(row.connections) ? row.connections : [];
+    // Prefer remote non-relay, then relay, then local (rarely reachable from a VPS).
+    const ordered = [
+      ...conns.filter((c) => !c.local && !c.relay),
+      ...conns.filter((c) => !c.local && c.relay),
+      ...conns.filter((c) => c.local),
+    ];
+    for (const c of ordered) {
+      if (c.uri) {
+        try {
+          add(new URL(c.uri).origin);
+          continue;
+        } catch {
+          /* fall through */
+        }
+      }
+      const host = String(c.address ?? "").trim();
+      const port = Number(c.port) || 32400;
+      const proto = String(c.protocol ?? "https").toLowerCase() === "http" ? "http" : "https";
+      if (host) add(`${proto}://${host}:${port}`);
+    }
+  }
+  return out;
+}
+
 export function plexClientIdentifier(cfg: PlexIntegrationConfig): string {
   const existing = String(cfg.clientIdentifier ?? "").trim();
   if (existing) return existing;

@@ -33,7 +33,24 @@ export function DashboardWidgetsProvider({
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(() => {
+    const lightUrl = widgetsUrl.includes("?")
+      ? `${widgetsUrl}&light=1`
+      : `${widgetsUrl}?light=1`;
+
+    // Paint expiring-lines immediately from the light endpoint, then hydrate full payload.
     setLoading(true);
+    fetch(lightUrl)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((light) => {
+        if (!light) return;
+        setData((prev) => ({
+          ...(prev ?? ({} as DashboardWidgetsPayload)),
+          ...light,
+        }));
+        setLoading(false);
+      })
+      .catch(() => {});
+
     fetch(widgetsUrl)
       .then((r) => (r.ok ? r.json() : null))
       .then((payload) => setData(payload))

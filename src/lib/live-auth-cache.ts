@@ -20,7 +20,8 @@ export type LiveAuthCacheEntry = {
   maxConnections?: number;
 };
 
-const LIVE_AUTH_CACHE_SEC = Number(process.env.NEXLIFY_LIVE_AUTH_CACHE_SEC || 90);
+/** Longer positive TTL = faster live zaps after the first auth (edge miss still hits panel cache). */
+const LIVE_AUTH_CACHE_SEC = Number(process.env.NEXLIFY_LIVE_AUTH_CACHE_SEC || 240);
 
 export function liveAuthCacheKey(
   lineId: string,

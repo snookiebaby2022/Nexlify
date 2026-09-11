@@ -397,14 +397,23 @@ export async function GET(req: NextRequest) {
   } else {
     upstream =
       (await resolvePlaybackUrlForLine(line.id, cleanId, ctx, antiFreeze.playbackUrlCacheTtlSec)) ?? "";
-    if (upstream && isHlsPlaybackUrl(upstream)) {
+    // Live HLS can pass through to Next; VOD on remote edges must NOT — 204 makes the edge
+    // forward /movie|/series to the panel and players get "must splice locally" 502.
+    if (upstream && isHlsPlaybackUrl(upstream) && !parsed.spliceVod) {
       return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
+    }
+    // Edge VOD splice cannot pull Plex/Emby HLS manifests — treat as missing upstream.
+    if (parsed.spliceVod && upstream && isHlsPlaybackUrl(upstream)) {
+      upstream = "";
     }
   }
 
   if (!upstream || !isSafeUpstreamUrl(upstream)) {
     if (!liveProbe && method !== "HEAD" && !isHlsSegment) {
       void markStreamViewerPlaybackFailed(cleanId, "No playable upstream URL for viewer");
+    }
+    if (parsed.spliceVod) {
+      return new NextResponse("VOD upstream unavailable", { status: 502 });
     }
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }

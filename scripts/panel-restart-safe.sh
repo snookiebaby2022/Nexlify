@@ -126,6 +126,15 @@ nexlify_only_restart() {
     fi
   fi
 
+  # Refuse restart when schema.prisma is ahead of DB (would boot a client that 500s admin APIs).
+  # Read-only check — does not migrate or touch streams/edge.
+  if [ -f "$ROOT/scripts/assert-prisma-db-parity.cjs" ] && [ "${NEXLIFY_SKIP_SCHEMA_PARITY:-}" != "1" ]; then
+    if ! node "$ROOT/scripts/assert-prisma-db-parity.cjs" >>"$LOG_FILE" 2>&1; then
+      log "SKIP: nexlify restart blocked — Prisma schema ahead of DB (run ensure-prisma-db-parity.sh / migrate deploy first)"
+      return 1
+    fi
+  fi
+
   local panel_down=0
   [ "$(nexlify_online_count)" = "0" ] && panel_down=1
 

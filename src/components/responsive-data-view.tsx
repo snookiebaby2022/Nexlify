@@ -59,14 +59,14 @@ export function ResponsiveDataView({
       </div>
 
       <div className="responsive-data-view__table hidden md:block overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm panel-data-table">
           <thead style={{ background: "var(--bg-card)" }}>
             <tr>
               {headers.map((h, i) => (
                 <th
                   key={typeof h === "string" ? h : `col-${i}`}
-                  className="text-left px-4 py-3 font-medium"
-                  style={{ color: "var(--muted)" }}
+                  className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide sticky top-0 z-[1]"
+                  style={{ color: "var(--muted)", background: "var(--bg-card)", borderBottom: "1px solid var(--border)" }}
                 >
                   {h}
                 </th>
@@ -82,9 +82,13 @@ export function ResponsiveDataView({
               </tr>
             ) : (
               rows.map((row, i) => (
-                <tr key={i} className="border-t" style={{ borderColor: "var(--border)" }}>
+                <tr
+                  key={i}
+                  className="border-t panel-data-table__row"
+                  style={{ borderColor: "var(--border)" }}
+                >
                   {row.map((cell, j) => (
-                    <td key={j} className="px-4 py-3">
+                    <td key={j} className="px-4 py-3 align-middle">
                       {cell}
                     </td>
                   ))}

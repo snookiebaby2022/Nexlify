@@ -1,7 +1,6 @@
-import type { ProxyType, ServerOutboundMode, VpnTunnelKind } from "@prisma/client";
-
+/** Soft string unions so builds work even when Prisma client lags schema. */
 export type OutboundProxyLike = {
-  type: ProxyType | "HTTP" | "HTTPS" | "SOCKS5";
+  type: "HTTP" | "HTTPS" | "SOCKS5" | string;
   host: string;
   port: number;
   username?: string | null;
@@ -13,11 +12,11 @@ export type OutboundProxyLike = {
 export type VpnProfileLike = {
   isActive: boolean;
   localHttpPort: number;
-  kind?: VpnTunnelKind | string;
+  kind?: string;
 };
 
 export type ServerEgressInput = {
-  outboundMode?: ServerOutboundMode | string | null;
+  outboundMode?: string | null;
   proxyId?: string | null;
   vpnProfileId?: string | null;
   proxy?: (OutboundProxyLike & { isActive?: boolean }) | null;

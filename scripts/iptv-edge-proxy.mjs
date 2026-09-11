@@ -4457,6 +4457,14 @@ async function onRequest(clientReq, clientRes, ctx) {
         serveOfflineLiveSplash(clientReq, clientRes, null);
         return;
       }
+      // Never forward /movie|/series to panel either — refuse-media returns a useless 502 loop.
+      if (/^\/(movie|series)\//i.test(pathOnly)) {
+        if (!clientRes.headersSent) {
+          clientRes.writeHead(502, { "content-type": "text/plain", connection: "close" });
+        }
+        clientRes.end("VOD upstream unavailable");
+        return;
+      }
       forward(clientReq, clientRes, ctx);
       return;
     }
@@ -4464,6 +4472,16 @@ async function onRequest(clientReq, clientRes, ctx) {
       reportViewerPlaybackDrop(clientReq, auth, `Live auth failed (HTTP ${auth.status})`, auth.status);
       if (auth.live || /^\/(live|timeshift)\//i.test(pathOnly)) {
         serveOfflineLiveSplash(clientReq, clientRes, null);
+        return;
+      }
+      if (/^\/(movie|series)\//i.test(pathOnly)) {
+        if (!clientRes.headersSent) {
+          clientRes.writeHead(auth.status && auth.status !== 200 ? auth.status : 502, {
+            "content-type": "text/plain",
+            connection: "close",
+          });
+        }
+        clientRes.end("VOD auth failed");
         return;
       }
       forward(clientReq, clientRes, ctx);

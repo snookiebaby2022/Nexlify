@@ -6,6 +6,9 @@ import { getServerLoadScores } from "@/lib/server-load";
 import { listLiveConnections } from "@/lib/connections";
 import { batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
+import { getDashboardPlaybackBandwidth } from "@/lib/dashboard-server-metrics";
+import { readStoredHostMetrics } from "@/lib/host-metrics";
+import { serverEgressHeadroom } from "@/lib/server-load-metrics";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -15,9 +18,10 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const ownerId = session.role === "ADMIN" ? undefined : session.id;
-  const [scores, rows] = await Promise.all([
+  const [scores, rows, playback] = await Promise.all([
     getServerLoadScores(),
     listLiveConnections(ownerId, 400),
+    getDashboardPlaybackBandwidth(),
   ]);
   const samples = await batchGetLiveQualitySamples(
     rows.map((c) => ({ lineId: c.lineId, streamId: c.streamId ?? "", ip: c.ip }))
@@ -40,8 +44,26 @@ export async function GET(req: NextRequest) {
   const ctx = buildServerRoleContext(scores.map((s) => s.server));
   const lbs = scores.filter((s) => s.online && resolveServerRole(s.server, ctx) === "lb");
   const pool = lbs.length ? lbs : [];
-  const saturated = pool.filter((s) => s.saturated);
-  const worst = pool.slice().sort((a, b) => a.headroomPct - b.headroomPct)[0];
+
+  // Same source of truth as orange LB egress KPI: measured LB NIC TX when available.
+  const scored = pool.map((s) => {
+    const host = readStoredHostMetrics(s.server.panelSettings, true);
+    const usedMbps =
+      host && host.uploadMbps > 0 ? host.uploadMbps : s.bandwidthMbps;
+    const egress = serverEgressHeadroom({
+      usedMbps,
+      nicCapMbps: s.capMbps,
+      slotRatio: s.slots > 0 ? s.slotsUsed / s.slots : 0,
+    });
+    return {
+      name: s.server.name,
+      usedMbps,
+      headroomPct: egress.headroomPct,
+      saturated: egress.saturated,
+    };
+  });
+  const saturated = scored.filter((s) => s.saturated);
+  const worst = scored.slice().sort((a, b) => a.headroomPct - b.headroomPct)[0];
 
   return NextResponse.json({
     liveConnections: rows.length,
@@ -50,9 +72,10 @@ export async function GET(req: NextRequest) {
     servers: pool.length,
     saturatedServers: saturated.length,
     worstHeadroomPct: worst?.headroomPct ?? 100,
-    worstServerName: worst?.server.name ?? null,
-    capMbps: pool.reduce((n, s) => n + s.capMbps, 0),
-    usedMbps: Math.round(pool.reduce((n, s) => n + s.bandwidthMbps, 0) * 10) / 10,
+    worstServerName: worst?.name ?? null,
+    capMbps: playback.lbCapMbps,
+    usedMbps: playback.networkOutMbps,
+    measured: playback.measured,
     lbNames: pool.map((s) => s.server.name),
   });
 }

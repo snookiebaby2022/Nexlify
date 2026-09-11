@@ -32,6 +32,7 @@ import {
   resolvePanelListenPort,
   resolveStreamHttpsPort,
   resolveAdvertisedStreamHttpPort,
+  resolveStreamEdgeHttpPort,
   resolveWebsiteHttpPort,
 } from "./server-ports";
 import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
@@ -165,7 +166,7 @@ async function loadXtreamAccountShell(
       : standardPorts
         ? false
         : panelOrigin.startsWith("https");
-    if (!useHttps && configuredMediaOrigin) {
+    if (!useHttps && configuredMediaOrigin && !isIpHost(streamHost)) {
       try {
         const cfg = new URL(
           configuredMediaOrigin.includes("://")
@@ -177,7 +178,8 @@ async function loadXtreamAccountShell(
         /* keep */
       }
     }
-    if (!useHttps && panelOrigin.startsWith("https")) useHttps = true;
+    if (!useHttps && panelOrigin.startsWith("https") && !isIpHost(streamHost)) useHttps = true;
+    if (isIpHost(streamHost)) useHttps = false;
     const publicPort = portFromPanelBaseUrl(panelOrigin);
     const serverSettings = await getPanelServerSettings();
     const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
@@ -186,8 +188,9 @@ async function loadXtreamAccountShell(
     // makes IPTV apps dial https://domain:80 → TLS "wrong version number" → no play.
     const httpMediaEdge =
       Boolean(mediaOrigin) && !useHttps && isIpHost(streamHost);
+    const edgeHttpPort = String(resolveStreamEdgeHttpPort());
     const httpPort = httpMediaEdge
-      ? mediaPort || "80"
+      ? mediaPort || edgeHttpPort
       : standardPorts
       ? "80"
       : useHttps
@@ -197,7 +200,7 @@ async function loadXtreamAccountShell(
       mediaOrigin && useHttps
         ? mediaPort || String(streamHttpsPort)
         : httpMediaEdge
-          ? mediaPort || "80"
+          ? mediaPort || edgeHttpPort
           : String(streamHttpsPort);
     const formats = preferLiveOutputFormats(
       xtreamOutputFormats("ts,m3u8,hls,rtmp"),

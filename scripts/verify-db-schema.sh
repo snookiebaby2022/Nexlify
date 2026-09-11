@@ -27,5 +27,10 @@ if echo "$STATUS" | grep -qiE 'following migrations have not yet been applied|Da
   exit 1
 fi
 
-echo "==> verify-db-schema: required columns + schema parity"
-node scripts/audit-db-schema.cjs
+echo "==> verify-db-schema: full Prisma↔DB column parity"
+if [ -f scripts/assert-prisma-db-parity.cjs ]; then
+  node scripts/assert-prisma-db-parity.cjs
+else
+  echo "==> verify-db-schema: required columns + schema parity (legacy)"
+  node scripts/audit-db-schema.cjs
+fi

@@ -698,7 +698,7 @@ async function computeMostWatchedByCountry(ownerId?: string): Promise<CountryWat
       stream: { select: { name: true } },
     },
     orderBy: [{ watchCount: "desc" }, { lastWatchedAt: "desc" }],
-    take: 3000,
+    take: 800,
   });
 
   if (!watches.length) return [];

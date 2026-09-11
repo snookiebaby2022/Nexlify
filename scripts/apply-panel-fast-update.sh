@@ -463,16 +463,26 @@ cmd_deps() {
 cmd_prisma() {
   # Prevent shell-exported DATABASE_URL from overriding .env
   unset DATABASE_URL 2>/dev/null || true
-  if schema_changed; then
-    echo "Schema changed — prisma db push + generate ..."
-    npx prisma db push --accept-data-loss --skip-generate \
-      || echo "WARN: prisma db push failed (non-fatal) — continuing with current database"
+  # Always prefer migrate deploy over db push — never ship a client that queries
+  # columns the DB does not have (darkcdn panel-failed-to-load / outboundMode).
+  if [ -x "$ROOT/scripts/ensure-prisma-db-parity.sh" ]; then
+    bash "$ROOT/scripts/ensure-prisma-db-parity.sh" || exit 1
+  elif schema_changed; then
+    echo "Schema changed — prisma migrate deploy + generate ..."
+    npx prisma migrate deploy \
+      || { echo "ERROR: prisma migrate deploy failed — refusing to continue with mismatched schema" >&2; exit 1; }
     npx prisma generate || echo "WARN: prisma generate failed"
   elif [ ! -d node_modules/.prisma/client ]; then
     echo "Prisma client missing — generating ..."
     npx prisma generate
   else
-    echo "Schema unchanged — skipping prisma."
+    echo "Schema unchanged — verifying DB parity ..."
+    if [ -f "$ROOT/scripts/assert-prisma-db-parity.cjs" ]; then
+      node "$ROOT/scripts/assert-prisma-db-parity.cjs" || exit 1
+    fi
+  fi
+  if [ ! -d node_modules/.prisma/client ]; then
+    npx prisma generate || true
   fi
 }
 
@@ -481,6 +491,10 @@ cmd_build_prep() {
     # shellcheck disable=SC1091
     . "$ROOT/scripts/nexlify-streaming-guard.sh"
     nexlify_refuse_build_if_streaming_busy || exit 1
+  fi
+  # Block builds that would compile a Prisma client against a lagging DB.
+  if [ -x "$ROOT/scripts/ensure-prisma-db-parity.sh" ]; then
+    bash "$ROOT/scripts/ensure-prisma-db-parity.sh" || exit 1
   fi
   if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
     bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
@@ -602,6 +616,10 @@ cmd_swap() {
     echo "ERROR: staging build invalid — keeping current .next online" >&2
     return 1
   fi
+  # Last line of defense: never put a mismatched client into production.
+  if [ -x "$ROOT/scripts/ensure-prisma-db-parity.sh" ]; then
+    bash "$ROOT/scripts/ensure-prisma-db-parity.sh" || return 1
+  fi
   export NEXLIFY_DIST_DIR=".next.staging"
   bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
   bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
@@ -663,6 +681,9 @@ cmd_restart() {
   if [ -x "$ROOT/scripts/ensure-nginx-panel-hold.sh" ]; then
     bash "$ROOT/scripts/ensure-nginx-panel-hold.sh" || true
   fi
+  # Intentional panel update must load the new build even when viewers are online.
+  # Live media stays on LB/edge; only the panel Node process reloads.
+  export NEXLIFY_FORCE_RESTART=1
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
     bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then

@@ -19,6 +19,14 @@ test("Plex movies and episodes both direct-play the file part when the profile a
   assert.match(String(episode), /\/library\/parts\/88/);
 });
 
+test("direct profile returns null when Plex metadata has no Part key", () => {
+  const url = pickPlexPlaybackUrl("http://plex:32400", "tok", {
+    ratingKey: "10",
+    type: "movie",
+  }, { preferDirectPlay: true });
+  assert.equal(url, null);
+});
+
 test("Plex transcode URL is HLS when direct play is off", () => {
   const url = buildPlexTranscodeM3u8("http://plex:32400", "tok", "33", {
     preferDirectPlay: false,

@@ -14,6 +14,8 @@ type QoeSnapshot = {
   worstServerName: string | null;
   capMbps: number;
   usedMbps: number;
+  /** True when usedMbps is LB NIC TX (same as orange LB egress KPI). */
+  measured?: boolean;
   lbNames?: string[];
 };
 
@@ -62,6 +64,8 @@ export function DashboardCapacityStrip() {
           {data.servers
             ? `${data.servers} LB${data.servers === 1 ? "" : "s"} auto-detected${data.lbNames?.length ? ` (${data.lbNames.join(", ")})` : ""}`
             : "Main server is excluded — add or tag a load balancer"}
+          {" · "}
+          {data.measured ? "NIC measured" : "estimated"}
           {" · "}
           {data.liveConnections} live
           {data.worstServerName ? ` · lowest headroom ${data.worstServerName} ${data.worstHeadroomPct}%` : ""}

@@ -111,8 +111,16 @@ function pathActive(pathname: string, href: string, search: string = "") {
   return true;
 }
 
-function groupActive(pathname: string, group: SidebarNavGroup, search: string = "") {
-  return group.items.some((i) => pathActive(pathname, i.href, search));
+function groupMatchScore(pathname: string, group: SidebarNavGroup, search: string = ""): number {
+  let best = 0;
+  for (const item of group.items) {
+    if (!pathActive(pathname, item.href, search)) continue;
+    const clean = (item.href.split("?")[0] ?? item.href).replace(/\/$/, "") || "/";
+    let score = clean.length * 10;
+    if (pathname === clean || pathname.replace(/\/$/, "") === clean) score += 1000;
+    best = Math.max(best, score);
+  }
+  return best;
 }
 
 function groupItemsBySection(items: SidebarNavGroup["items"]) {
@@ -179,23 +187,25 @@ function activeGroupIds(pathname: string, entries: SidebarNavEntry[], search: st
   const topLevelHrefs = new Set(
     entries
       .filter((e): e is { kind: "link"; link: SidebarNavLink } => e.kind === "link")
-      .map((e) => e.link.href.split("?")[0] ?? e.link.href)
+      .map((e) => (e.link.href.split("?")[0] ?? e.link.href).replace(/\/$/, "") || "/")
   );
+  const pathKey = pathname.replace(/\/$/, "") || "/";
   // Dedicated top-level links (e.g. Live Connections) must not auto-open a group with the same href.
-  if (topLevelHrefs.has(pathname)) return new Set();
+  if (topLevelHrefs.has(pathKey) || topLevelHrefs.has(pathname)) return new Set();
 
-  const next = new Set<string>();
+  let bestId: string | null = null;
+  let bestScore = 0;
   for (const entry of entries) {
-    if (entry.kind === "group" && groupActive(pathname, entry.group, search)) {
-      next.add(entry.group.id);
+    if (entry.kind !== "group") continue;
+    const score = groupMatchScore(pathname, entry.group, search);
+    // Prefer later (more specific) groups on a tie — e.g. Servers over Diagnostics shortcuts
+    if (score > 0 && score >= bestScore) {
+      bestScore = score;
+      bestId = entry.group.id;
     }
   }
-  // Accordion: at most one open group from route
-  if (next.size > 1) {
-    const first = next.values().next().value as string;
-    return new Set([first]);
-  }
-  return next;
+  // Accordion: open only the best-matching category for this route
+  return bestId ? new Set([bestId]) : new Set();
 }
 
 const SIDEBAR_OPEN_KEY = "nexlify-sidebar-open";
@@ -252,6 +262,7 @@ function SidebarGroup({
   search,
   open,
   collapsed,
+  routeActive,
   pendingHref,
   onToggle,
   onNavigate,
@@ -263,19 +274,26 @@ function SidebarGroup({
   search: string;
   open: boolean;
   collapsed: boolean;
+  /** True only for the best-matching category for the current route (not shortcut duplicates). */
+  routeActive: boolean;
   pendingHref: string | null;
   onToggle: () => void;
   onNavigate: () => void;
   onPrefetch: () => void;
   onPending: (href: string) => void;
 }) {
-  const active = groupActive(pathname, group, search);
+  const active = routeActive;
   const sections = groupItemsBySection(group.items);
 
   const submenu = (
     <div className="panel-nav-submenu sidebar-submenu-open">
-      {sections.map((section) => (
-        <div key={section.section ?? "_default"} className="panel-nav-section">
+      {sections.map((section) => {
+        const sectionActive = section.items.some((item) => pathActive(pathname, item.href, search));
+        return (
+        <div
+          key={section.section ?? "_default"}
+          className={`panel-nav-section ${sectionActive ? "panel-nav-section--active" : ""}`}
+        >
           {section.section && (
             <div className="panel-nav-section-label">{section.section}</div>
           )}
@@ -293,6 +311,7 @@ function SidebarGroup({
                     onNavigate();
                   }}
                   title={item.label}
+                  aria-current={itemActive ? "page" : undefined}
                   className={`panel-nav-sub-link ${itemActive ? "panel-nav-sub-link--active" : ""} ${
                     pending ? "panel-nav-sub-link--pending" : ""
                   }`}
@@ -304,12 +323,17 @@ function SidebarGroup({
             })}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 
   return (
-    <div className={`panel-nav-group ${open ? "panel-nav-group--open" : ""}`}>
+    <div
+      className={`panel-nav-group ${open ? "panel-nav-group--open" : ""} ${
+        active ? "panel-nav-group--current" : ""
+      }`}
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -317,6 +341,7 @@ function SidebarGroup({
         onFocus={onPrefetch}
         title={group.label}
         aria-expanded={open}
+        aria-current={active ? "true" : undefined}
         className={`panel-nav-group-btn ${active ? "panel-nav-group-btn--active" : ""} ${
           open && !active ? "panel-nav-group-btn--open" : ""
         }`}
@@ -369,6 +394,9 @@ export function PanelSidebar({
   const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
   const navRef = useRef<HTMLElement | null>(null);
   const scrollPosRef = useRef(0);
+  /** When set, route sync will not re-open this group until the path changes. */
+  const suppressRouteOpenRef = useRef<string | null>(null);
+  const routeKeyRef = useRef(`${pathname}${search}`);
 
   const [collapsed, setCollapsed] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
@@ -377,6 +405,7 @@ export function PanelSidebar({
   const deferredFilter = useDeferredValue(navFilter);
   const isFiltering = deferredFilter.trim().length > 0;
   const visibleEntries = filterNavEntries(entries, deferredFilter);
+  const routeActiveIds = activeGroupIds(pathname, entries, search);
   /** Mobile drawer: never use the desktop collapsed (72px) rail. */
   const isMobileDrawer = Boolean(onNavigate);
   const effectiveCollapsed = isMobileDrawer ? false : (forceCollapsed ?? collapsed);
@@ -412,6 +441,11 @@ export function PanelSidebar({
   }, [isMobileDrawer]);
 
   useEffect(() => {
+    const routeKey = `${pathname}${search}`;
+    if (routeKey !== routeKeyRef.current) {
+      routeKeyRef.current = routeKey;
+      suppressRouteOpenRef.current = null;
+    }
     // Preserve scroll position when route changes expand/collapse groups
     if (navRef.current) scrollPosRef.current = navRef.current.scrollTop;
     setOpenIds((prev) => {
@@ -420,6 +454,11 @@ export function PanelSidebar({
         if (prev.size <= 1) return prev;
         const first = prev.values().next().value as string | undefined;
         return first ? new Set([first]) : new Set();
+      }
+      const activeId = active.values().next().value as string;
+      if (suppressRouteOpenRef.current === activeId) {
+        // User collapsed the category for this page — keep it closed
+        return prev.has(activeId) ? new Set() : prev;
       }
       persistOpenIds(active);
       return active;
@@ -448,7 +487,9 @@ export function PanelSidebar({
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
+        if (routeActiveIds.has(id)) suppressRouteOpenRef.current = id;
       } else {
+        suppressRouteOpenRef.current = null;
         next.clear();
         next.add(id);
         const opened = entries.find((e) => e.kind === "group" && e.group.id === id);
@@ -536,6 +577,7 @@ export function PanelSidebar({
               pendingHref={pendingHref}
               open={displayOpenIds.has(entry.group.id)}
               collapsed={effectiveCollapsed}
+              routeActive={routeActiveIds.has(entry.group.id)}
               onToggle={() => toggle(entry.group.id)}
               onNavigate={onChildNavigate}
               onPrefetch={() => {

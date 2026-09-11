@@ -15,16 +15,20 @@ export async function GET(req: NextRequest) {
   if (light) {
     const data = await cacheGetOrSet(
       `dashboard:reseller-widgets-light:${session.id}`,
-      60,
+      90,
       () => getResellerDashboardWidgetsLight(session.id),
     );
-    return NextResponse.json(data);
+    return NextResponse.json(data, {
+      headers: { "Cache-Control": "private, max-age=30" },
+    });
   }
 
   const data = await cacheGetOrSet(
     `dashboard:reseller-widgets:${session.id}`,
-    120,
+    180,
     () => getResellerDashboardWidgets(session.id),
   );
-  return NextResponse.json(data);
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "private, max-age=45" },
+  });
 }
