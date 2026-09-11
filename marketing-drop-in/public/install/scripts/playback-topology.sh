@@ -14,6 +14,20 @@ nexlify_playback_topology() {
     raw="$(head -1 "$(dirname "${BASH_SOURCE[0]}")/../.playback-topology" | tr -d '\r')"
   elif [ -n "${NEXLIFY_LIVE_EDGE_MODE:-}" ]; then
     raw="${NEXLIFY_LIVE_EDGE_MODE}"
+  elif [ -n "${NEXLIFY_PLAYBACK_TOPOLOGY:-}" ]; then
+    raw="${NEXLIFY_PLAYBACK_TOPOLOGY}"
+  fi
+  if [ -z "$raw" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/live-routing-env.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$(dirname "${BASH_SOURCE[0]}")/live-routing-env.sh"
+    nexlify_load_routing_autodetect
+    remote="$(nexlify_resolve_remote_edge 2>/dev/null || true)"
+    if [ -n "$remote" ]; then
+      ip="${remote%%:*}"
+      if [ -n "$ip" ] && ! hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$ip"; then
+        raw="remote-splice"
+      fi
+    fi
   fi
   raw="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
   case "$raw" in

@@ -17,6 +17,13 @@ set -a
 [ -f .env ] && . ./.env
 set +a
 
+# shellcheck disable=SC1091
+[ -f "$PANEL_DIR/scripts/live-routing-env.sh" ] && . "$PANEL_DIR/scripts/live-routing-env.sh"
+if type nexlify_load_routing_autodetect >/dev/null 2>&1; then
+  nexlify_load_routing_autodetect
+  nexlify_ensure_playback_topology_file
+fi
+
 MODE="$(nexlify_playback_topology)"
 [ -z "$MODE" ] && MODE="${NEXLIFY_LIVE_EDGE_MODE:-local-edge}"
 MODE="$(echo "$MODE" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
@@ -46,7 +53,11 @@ case "$MODE" in
       exit 0
     fi
     export NEXLIFY_REMOTE_EDGE="$REMOTE"
-    bash "$PANEL_DIR/scripts/route-live-to-remote-edge.sh"
+    if [ -x "$PANEL_DIR/scripts/restore-live-proxy.sh" ]; then
+      LIVE_ROUTING_FORCE=1 bash "$PANEL_DIR/scripts/restore-live-proxy.sh"
+    else
+      bash "$PANEL_DIR/scripts/route-live-to-remote-edge.sh"
+    fi
     if type nexlify_stop_panel_local_iptv_edge >/dev/null 2>&1; then
       nexlify_stop_panel_local_iptv_edge
     fi

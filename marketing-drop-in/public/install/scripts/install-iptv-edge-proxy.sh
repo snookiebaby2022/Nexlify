@@ -93,7 +93,9 @@ fi
 if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY_DOM" ] && ! echo "$PRIMARY_DOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
   echo "[iptv-edge] Domain panel behind nginx — nginx owns :443, edge HTTP only (:8080/:25461)"
   HTTPS_PORTS=""
-  if [ -x "$PANEL_DIR/scripts/install-nginx-panel-https.sh" ]; then
+  if [ -x "$PANEL_DIR/scripts/install-panel-nginx.sh" ]; then
+    bash "$PANEL_DIR/scripts/install-panel-nginx.sh" || true
+  elif [ -x "$PANEL_DIR/scripts/install-nginx-panel-https.sh" ]; then
     bash "$PANEL_DIR/scripts/install-nginx-panel-https.sh" || true
   fi
 fi
