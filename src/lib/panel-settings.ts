@@ -454,7 +454,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     linePasswordBlockCommon: true,
     linePasswordDisallowUsername: true,
     apiRateLimitPerMin: 120,
-    totpRequiredForAdmins: true,
+    totpRequiredForAdmins: false,
     totpRequiredForResellers: false,
     blockBots: true,
     stealthPanel: true,

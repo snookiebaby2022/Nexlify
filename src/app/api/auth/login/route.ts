@@ -26,7 +26,6 @@ import { licenseCookieSecure } from "@/lib/license/cookie-options";
 import { jwtSecretBytes, jwtSecretStrengthError } from "@/lib/jwt-secret";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { licenseCheckHost } from "@/lib/domains-host";
-import { isPanelDemoHost } from "@/lib/panel-demo-host";
 
 import { parseJsonBody } from "@/lib/parse-json-body";
 /**
@@ -151,33 +150,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           { error: "Invalid or missing authenticator code", requiresTotp: true },
           { status: 401 }
-        );
-      }
-    } else {
-      const loginHost =
-        req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
-        req.headers.get("host") ??
-        "";
-      const demoHost = isPanelDemoHost(loginHost);
-      let security: Record<string, unknown> = {};
-      try {
-        security = await getSettingGroup("security");
-      } catch (err) {
-        console.error("[auth/login] getSettingGroup failed:", err);
-      }
-      const requireAdminTotp =
-        !demoHost && security.totpRequiredForAdmins === true && user.role === "ADMIN";
-      const requireResellerTotp =
-        !demoHost &&
-        security.totpRequiredForResellers === true &&
-        (user.role === "RESELLER" || user.role === "SUB_RESELLER");
-      if (requireAdminTotp || requireResellerTotp) {
-        return NextResponse.json(
-          {
-            error: "Two-factor authentication is required. Enable 2FA on your Profile page.",
-            requiresTotpSetup: true,
-          },
-          { status: 403 }
         );
       }
     }

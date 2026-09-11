@@ -13,7 +13,6 @@ import { verifyPanelLogin } from "@/lib/auth";
 import { clientIp } from "@/lib/middleware-runtime";
 import { ipMatchesRule } from "@/lib/line-ip-lock";
 import { verifyTotpCode } from "@/lib/totp";
-import { getSettingGroup } from "@/lib/panel-settings";
 import { hasResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 
 export type PanelApiCaller = {
@@ -150,13 +149,11 @@ export async function authenticatePanelApi(
   }
   if (passwordAuth) {
     const totpCode = p.get("totpCode") ?? p.get("totp_code") ?? "";
-    const security = await getSettingGroup("security").catch(() => ({} as Record<string, unknown>));
-    const requiresTotp =
-      Boolean(user.totpEnabled && user.totpSecret) ||
-      (user.role === PanelRole.ADMIN && security.totpRequiredForAdmins === true) ||
-      ((user.role === PanelRole.RESELLER || user.role === PanelRole.SUB_RESELLER) &&
-        security.totpRequiredForResellers === true);
-    if (requiresTotp && (!user.totpSecret || !totpCode || !verifyTotpCode(user.totpSecret, totpCode))) {
+    if (
+      user.totpEnabled &&
+      user.totpSecret &&
+      (!totpCode || !verifyTotpCode(user.totpSecret, totpCode))
+    ) {
       return null;
     }
   }

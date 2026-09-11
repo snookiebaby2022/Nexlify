@@ -100,24 +100,6 @@ export default function SecuritySettingsPage() {
           ],
         },
         {
-          title: "Two-factor (TOTP)",
-          info: "Admins enable 2FA on Profile. When enabled, login requires a 6-digit code from an authenticator app.",
-          fields: [
-            {
-              key: "totpRequiredForAdmins",
-              label: "Require 2FA for admins",
-              type: "yesno",
-              hint: "Admins must enable 2FA on Profile before login succeeds.",
-            },
-            {
-              key: "totpRequiredForResellers",
-              label: "Require 2FA for resellers",
-              type: "yesno",
-              hint: "Resellers and sub-resellers must enable 2FA on Profile.",
-            },
-          ],
-        },
-        {
           title: "CDN proxy IPs",
           info: "Sync Cloudflare and Bunny edge IP lists under Settings → CDN IPs. Used for real client IP behind CDN.",
           fields: [
