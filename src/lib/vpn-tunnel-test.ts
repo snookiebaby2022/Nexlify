@@ -149,7 +149,7 @@ export async function testVpnProfileOnServer(
   }
 
   const creds = await sshCredentials(server);
-  if ("error" in creds) return { ok: false, message: creds.error };
+  if ("error" in creds) return { ok: false, message: creds.error ?? "SSH not configured" };
 
   const script = buildRemoteHealthScript(profile);
   try {

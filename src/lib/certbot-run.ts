@@ -109,11 +109,11 @@ export async function issueLetsEncryptCertificate(
     return { ok: false, message: "At least one domain is required." };
   }
 
-  const contactEmail = pickCertbotEmail([
+  const contactEmail = pickCertbotEmail(
     email,
     process.env.NEXLIFY_CERTBOT_EMAIL,
-    process.env.CERTBOT_EMAIL,
-  ]);
+    process.env.CERTBOT_EMAIL
+  );
 
   const { certbotPath } = await getBinPaths();
   if (!(await executable(certbotPath))) {

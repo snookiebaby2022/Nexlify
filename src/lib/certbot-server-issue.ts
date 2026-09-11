@@ -72,7 +72,7 @@ async function issueRemote(
 ): Promise<CertbotIssueResult> {
   const creds = await serverSshPassword(server);
   if (typeof creds !== "string") {
-    return { ok: false, message: creds.error };
+    return { ok: false, message: creds.error ?? "SSH not configured" };
   }
   const { host, port, user } = serverSshTarget(server);
   const script = remoteCertbotScript(domain, contactEmail);
@@ -135,11 +135,11 @@ export async function issueServerLetsEncryptCertificate(
     return { ok: false, message: "Set a domain on this server before issuing a certificate." };
   }
 
-  const contactEmail = pickCertbotEmail([
+  const contactEmail = pickCertbotEmail(
     email,
     process.env.NEXLIFY_CERTBOT_EMAIL,
-    process.env.CERTBOT_EMAIL,
-  ]);
+    process.env.CERTBOT_EMAIL
+  );
 
   const result = isThisPanelMachine(server)
     ? await issueLetsEncryptCertificate([domain], contactEmail || undefined)
