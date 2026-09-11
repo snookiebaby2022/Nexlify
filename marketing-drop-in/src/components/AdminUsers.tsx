@@ -50,6 +50,7 @@ export function AdminUsers() {
   const [newRole, setNewRole] = useState<"USER" | "ADMIN">("USER");
   const [setPassword, setSetPassword] = useState("");
   const [creditAmount, setCreditAmount] = useState("10");
+  const [creating, setCreating] = useState(false);
 
   async function loadUsers() {
     const res = await fetch("/api/admin/users");
