@@ -1,0 +1,20 @@
+---
+description: Testing standards for Nexlify
+alwaysApply: true
+---
+
+# Testing standards
+
+- Prefer the existing `tsx --test` runner + `c8` coverage; do not migrate the suite to Jest unless explicitly requested.
+- Never modify production source when asked to write tests; report blockers instead.
+- Never write tests that hit real networks, real FFmpeg, or the production DB.
+- Use `TEST_DATABASE_URL` / `.env.test` only; refuse URLs that look like production hosts.
+- Load mocks via `--import ./tests/setup/load-env.mjs --import ./tests/setup/register-mocks.mjs`.
+- Every test must be deterministic: freeze time, seed randomness, no `sleep()`.
+- Use AAA structure (Arrange/Act/Assert) with a descriptive test name.
+- Always include negative, boundary, and authorization cases — not just happy path.
+- For multi-tenant features, always assert reseller data isolation.
+- Assert DB state, not just HTTP status codes.
+- Tests must clean up after themselves (transaction rollback or truncate).
+- No snapshot tests for API responses that IPTV clients depend on — assert keys explicitly.
+- Use factories from `tests/factories/` for admin, reseller, sub-reseller, line, bouquet, stream, series, EPG, MAG.

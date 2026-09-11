@@ -2,42 +2,48 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import type { OutboundProxy } from "@/lib/outbound-proxy";
-import { proxyUrl } from "@/lib/proxy";
+import { connectViaSocks5 } from "@/lib/socks5-connect";
 
-function basicAuthHeader(proxy: URL): string | undefined {
-  if (proxy.username || proxy.password) {
-    const user = decodeURIComponent(proxy.username);
-    const pass = decodeURIComponent(proxy.password);
-    return `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
-  }
-  return undefined;
-}
-
-/** Open a TCP socket to the origin, optionally via HTTP CONNECT proxy (XUI egress proxy). */
+/** Open a TCP socket to the origin, optionally via HTTP CONNECT or SOCKS5. */
 export function connectOriginSocket(
   targetUrl: string,
   proxy: OutboundProxy | null | undefined,
   timeoutMs: number
 ): Promise<net.Socket> {
   const target = new URL(targetUrl);
-  if (!proxy || proxy.type === "SOCKS5") {
+  if (!proxy) {
     return connectDirect(target, timeoutMs);
   }
 
-  const proxyUrlParsed = new URL(proxyUrl(proxy));
+  const destPort = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+  if (String(proxy.type).toUpperCase() === "SOCKS5") {
+    return connectViaSocks5(
+      {
+        host: proxy.host,
+        port: proxy.port,
+        username: proxy.username,
+        password: proxy.password,
+      },
+      target.hostname,
+      destPort,
+      timeoutMs
+    );
+  }
+
   const connectHost = target.hostname;
-  const connectPort = target.port || (target.protocol === "https:" ? "443" : "80");
+  const connectPort = String(destPort);
 
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = {
       Host: `${connectHost}:${connectPort}`,
     };
-    const auth = basicAuthHeader(proxyUrlParsed);
-    if (auth) headers["Proxy-Authorization"] = auth;
+    if (proxy.username || proxy.password) {
+      headers["Proxy-Authorization"] = `Basic ${Buffer.from(`${proxy.username || ""}:${proxy.password || ""}`).toString("base64")}`;
+    }
 
     const req = http.request({
-      host: proxyUrlParsed.hostname,
-      port: Number(proxyUrlParsed.port || (proxy.type === "HTTPS" ? 443 : 80)),
+      host: proxy.host,
+      port: Number(proxy.port || (String(proxy.type).toUpperCase() === "HTTPS" ? 443 : 80)),
       method: "CONNECT",
       path: `${connectHost}:${connectPort}`,
       headers,
@@ -83,7 +89,7 @@ export type OriginRequestOptions = {
   method?: string;
 };
 
-/** Issue an HTTP(S) request to origin, optionally via HTTP CONNECT proxy. */
+/** Issue an HTTP(S) request to origin, optionally via HTTP CONNECT or SOCKS5. */
 export function requestOrigin(
   opts: OriginRequestOptions,
   onResponse: (res: http.IncomingMessage) => void
@@ -92,7 +98,7 @@ export function requestOrigin(
   const method = opts.method ?? "GET";
   const lib = target.protocol === "https:" ? https : http;
 
-  if (!opts.proxy || opts.proxy.type === "SOCKS5") {
+  if (!opts.proxy) {
     const req = lib.request(
       opts.targetUrl,
       {

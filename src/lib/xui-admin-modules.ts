@@ -68,6 +68,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "server_install", title: "Server install wizard", category: "Servers", redirect: "/admin/servers/install" },
   { slug: "proxies", title: "Proxies", category: "Servers", redirect: "/admin/servers/proxies" },
   { slug: "proxy", title: "Add proxy", category: "Servers", redirect: "/admin/servers/proxies" },
+  { slug: "vpn", title: "VPN tunnels", category: "Servers", redirect: "/admin/servers/vpn" },
 
   { slug: "providers", title: "Stream providers", category: "Sources", redirect: "/admin/management/stream-providers" },
   { slug: "provider", title: "Add provider", category: "Sources", redirect: "/admin/management/stream-providers" },

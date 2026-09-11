@@ -29,6 +29,7 @@ export const OPERATOR_FEATURES: OperatorFeature[] = [
   { label: "Diagnostics", href: "/admin/diagnostics", group: "Diagnostics", aliases: ["fix", "recover", "probe", "reboot", "health", "lb recover"] },
   { label: "Stream errors", href: "/admin/stream_errors", group: "Diagnostics", aliases: ["down streams", "dead links", "offline channels", "probe failed"] },
   { label: "Proxies", href: "/admin/servers/proxies", group: "Servers", aliases: ["edge", "1-stream proxies"] },
+  { label: "VPN tunnels", href: "/admin/servers/vpn", group: "Servers", aliases: ["wireguard", "openvpn", "egress"] },
   { label: "Transcoding", href: "/admin/streaming/transcoding", group: "Servers", aliases: ["nvenc", "ffmpeg", "gpu"] },
   { label: "Archive / catch-up", href: "/admin/settings/catchup", group: "Live", aliases: ["timeshift", "dvr", "time machine"] },
   { label: "Panel migration", href: "/admin/import/migrate", group: "Tools", aliases: ["xui import", "1-stream import"] },

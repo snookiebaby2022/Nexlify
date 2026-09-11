@@ -130,6 +130,7 @@ function registerIcons() {
     ["/admin/process_monitor", Gauge],
     ["/admin/settings/cache", Database],
     ["/admin/servers/proxies", Network],
+    ["/admin/servers/vpn", Shield],
     ["/admin/management/rtmp-ips", Globe],
     ["/admin/management/tools/stream-tools", Wrench],
     ["/admin/management/tools/remove-duplicates", CopyMinus],

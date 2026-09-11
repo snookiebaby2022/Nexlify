@@ -96,6 +96,8 @@ export type ServerFormState = {
   protocol: string;
   maxClients: number;
   proxyId: string;
+  vpnProfileId: string;
+  outboundMode: "NONE" | "PROXY" | "VPN";
   rtmpPort: string;
   bandwidthMbps: string;
   timeshiftOnly: boolean;
@@ -148,6 +150,8 @@ export const defaultServerForm = (): ServerFormState => ({
   protocol: "http",
   maxClients: 1000,
   proxyId: "",
+  vpnProfileId: "",
+  outboundMode: "NONE",
   rtmpPort: "",
   bandwidthMbps: "",
   timeshiftOnly: false,
@@ -258,11 +262,17 @@ function serverToForm(s: Record<string, unknown>): ServerFormState {
     protocol: String(s.protocol ?? "http"),
     maxClients: Number(s.maxClients ?? 1000),
     proxyId: s.proxyId ? String(s.proxyId) : "",
+    vpnProfileId: s.vpnProfileId ? String(s.vpnProfileId) : "",
+    outboundMode: (() => {
+      const m = String(s.outboundMode || "").toUpperCase();
+      if (m === "VPN" || m === "PROXY" || m === "NONE") return m as "NONE" | "PROXY" | "VPN";
+      return s.proxyId ? "PROXY" : s.vpnProfileId ? "VPN" : "NONE";
+    })(),
     rtmpPort: s.rtmpPort != null ? String(s.rtmpPort) : "",
     bandwidthMbps: s.bandwidthMbps != null ? String(s.bandwidthMbps) : "",
     timeshiftOnly: Boolean(s.timeshiftOnly),
     isActive: Boolean(s.isActive !== false),
-    proxied: Boolean(s.proxyId),
+    proxied: Boolean(s.proxyId) || String(s.outboundMode || "").toUpperCase() === "PROXY",
     agentUseSsh: s.agentUseSsh !== false,
     agentSshHost: String(s.agentSshHost ?? ""),
     agentSshPort: Number(s.agentSshPort ?? 22),
@@ -325,7 +335,9 @@ function buildPayload(form: ServerFormState, panelSettings: object | null) {
     sortOrder: form.sortOrder,
     isActive: form.isActive,
     timeshiftOnly: form.timeshiftOnly,
-    proxyId: form.proxied ? form.proxyId || null : null,
+    proxyId: form.outboundMode === "PROXY" ? form.proxyId || null : null,
+    vpnProfileId: form.outboundMode === "VPN" ? form.vpnProfileId || null : null,
+    outboundMode: form.outboundMode,
     rtmpPort: form.rtmpPort ? Number(form.rtmpPort) : null,
     bandwidthMbps: form.bandwidthMbps ? Number(form.bandwidthMbps) : null,
     agentUseSsh: form.agentUseSsh,
@@ -362,7 +374,8 @@ export function ServerForm({
   const router = useRouter();
   const [tab, setTab] = useState<TabId>("details");
   const [form, setForm] = useState<ServerFormState>(defaultServerForm);
-  const [proxies, setProxies] = useState<{ id: string; name: string }[]>([]);
+  const [proxies, setProxies] = useState<{ id: string; name: string; type?: string }[]>([]);
+  const [vpnProfiles, setVpnProfiles] = useState<{ id: string; name: string }[]>([]);
   const [panelSummary, setPanelSummary] = useState<{
     panelName: string;
     panelUrl: string;
@@ -445,6 +458,10 @@ export function ServerForm({
     fetch("/api/admin/proxies")
       .then((r) => r.json())
       .then((d) => setProxies(d.proxies ?? []));
+    fetch("/api/admin/vpn-profiles")
+      .then((r) => r.json())
+      .then((d) => setVpnProfiles(d.profiles ?? []))
+      .catch(() => setVpnProfiles([]));
     Promise.all([
       fetch("/api/admin/settings?group=general").then((r) => r.json()),
       fetch("/api/admin/settings?group=server").then((r) => r.json()),
@@ -962,32 +979,73 @@ export function ServerForm({
                 checked={form.isActive}
                 onChange={(isActive) => setForm({ ...form, isActive })}
               />
-              <Toggle
-                label="Proxied"
-                checked={form.proxied}
-                onChange={(proxied) =>
-                  setForm({
-                    ...form,
-                    proxied,
-                    proxyId: proxied && !form.proxyId && proxies[0] ? proxies[0].id : form.proxyId,
-                  })
-                }
-              />
-              {form.proxied && (
+              <FormField label="Outbound egress">
+                <select
+                  className={formSelectClass}
+                  style={formInputStyle}
+                  value={form.outboundMode}
+                  onChange={(e) => {
+                    const outboundMode = e.target.value as "NONE" | "PROXY" | "VPN";
+                    setForm({
+                      ...form,
+                      outboundMode,
+                      proxied: outboundMode === "PROXY",
+                      proxyId:
+                        outboundMode === "PROXY" && !form.proxyId && proxies[0]
+                          ? proxies[0].id
+                          : outboundMode === "PROXY"
+                            ? form.proxyId
+                            : "",
+                      vpnProfileId:
+                        outboundMode === "VPN" && !form.vpnProfileId && vpnProfiles[0]
+                          ? vpnProfiles[0].id
+                          : outboundMode === "VPN"
+                            ? form.vpnProfileId
+                            : "",
+                    });
+                  }}
+                >
+                  <option value="NONE">None (direct)</option>
+                  <option value="PROXY">Stream proxy (HTTP/HTTPS/SOCKS5)</option>
+                  <option value="VPN">VPN tunnel (local HTTP on LB)</option>
+                </select>
+              </FormField>
+              {form.outboundMode === "PROXY" && (
                 <FormField label="Proxy">
                   <select
                     className={formSelectClass}
                     style={formInputStyle}
                     value={form.proxyId}
-                    onChange={(e) => setForm({ ...form, proxyId: e.target.value })}
+                    onChange={(e) => setForm({ ...form, proxyId: e.target.value, proxied: true })}
                   >
                     <option value="">Select proxy…</option>
                     {proxies.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
+                        {p.type ? ` (${p.type})` : ""}
                       </option>
                     ))}
                   </select>
+                </FormField>
+              )}
+              {form.outboundMode === "VPN" && (
+                <FormField label="VPN profile">
+                  <select
+                    className={formSelectClass}
+                    style={formInputStyle}
+                    value={form.vpnProfileId}
+                    onChange={(e) => setForm({ ...form, vpnProfileId: e.target.value })}
+                  >
+                    <option value="">Select VPN…</option>
+                    {vpnProfiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    Apply the tunnel on the LB under Servers → VPN, then select it here.
+                  </p>
                 </FormField>
               )}
               <p className="text-xs pt-2" style={{ color: "var(--muted)" }}>

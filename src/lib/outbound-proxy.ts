@@ -1,10 +1,15 @@
-import type { StreamProxy } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { proxyUrl } from "@/lib/proxy";
+import {
+  ffmpegHttpProxyArg as ffmpegHttpProxyArgPure,
+  ffmpegProxyEnv as ffmpegProxyEnvPure,
+  materializeServerOutboundProxy,
+  outboundProxyToUrl,
+  type OutboundProxyLike,
+} from "@/lib/outbound-egress";
 
-export type OutboundProxy = Pick<StreamProxy, "type" | "host" | "port" | "username" | "password">;
+export type OutboundProxy = OutboundProxyLike;
 
-/** XUI-style: egress proxy is bound to the stream server (servers.proxy_id). */
+/** XUI-style: egress is bound to the stream server (proxy and/or VPN profile). */
 export async function resolveOutboundProxyForServer(
   serverId: string | null | undefined
 ): Promise<OutboundProxy | null> {
@@ -12,23 +17,26 @@ export async function resolveOutboundProxyForServer(
   const server = await prisma.streamServer.findUnique({
     where: { id: serverId },
     select: {
+      outboundMode: true,
+      proxyId: true,
+      vpnProfileId: true,
       proxy: {
         select: { type: true, host: true, port: true, username: true, password: true, isActive: true },
       },
+      vpnProfile: {
+        select: { isActive: true, localHttpPort: true, kind: true },
+      },
     },
   });
-  const proxy = server?.proxy;
-  if (!proxy?.isActive || !proxy.host || !proxy.port) return null;
-  if (proxy.type === "SOCKS5") return null;
-  return proxy;
+  if (!server) return null;
+  return materializeServerOutboundProxy(server);
 }
 
 export function outboundProxyHeaderValue(proxy: OutboundProxy | null | undefined): string {
-  if (!proxy) return "";
-  return proxyUrl(proxy);
+  return outboundProxyToUrl(proxy);
 }
 
-/** Resolve egress proxy from the stream's assigned server (XUI servers.proxy_id). */
+/** Resolve egress proxy from the stream's assigned server. */
 export async function resolveOutboundProxyForStream(streamId: string): Promise<OutboundProxy | null> {
   const row = await prisma.stream.findUnique({
     where: { id: streamId },
@@ -37,12 +45,11 @@ export async function resolveOutboundProxyForStream(streamId: string): Promise<O
   return resolveOutboundProxyForServer(row?.serverId);
 }
 
-/** ffmpeg `-http_proxy` accepts http://host:port only. */
+/** ffmpeg `-http_proxy` accepts http://host:port only (not SOCKS5). */
 export function ffmpegHttpProxyArg(proxy: OutboundProxy | null | undefined): string | null {
-  if (!proxy || proxy.type === "SOCKS5") return null;
-  const auth =
-    proxy.username && proxy.password
-      ? `${encodeURIComponent(proxy.username)}:${encodeURIComponent(proxy.password)}@`
-      : "";
-  return `http://${auth}${proxy.host}:${proxy.port}`;
+  return ffmpegHttpProxyArgPure(proxy);
+}
+
+export function ffmpegProxyEnv(proxy: OutboundProxy | null | undefined): Record<string, string> {
+  return ffmpegProxyEnvPure(proxy);
 }

@@ -114,7 +114,12 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
     await fetch("/api/admin/servers", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: serverId, proxyId: proxyId || null }),
+      body: JSON.stringify({
+        id: serverId,
+        proxyId: proxyId || null,
+        outboundMode: proxyId ? "PROXY" : "NONE",
+        vpnProfileId: proxyId ? null : undefined,
+      }),
     });
     load();
   }

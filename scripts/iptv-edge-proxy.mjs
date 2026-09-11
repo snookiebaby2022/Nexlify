@@ -864,40 +864,56 @@ function parseAltsHeader(raw) {
 
 function parseOutboundProxyHeader(raw) {
   const s = String(raw || "").trim();
-  if (!s || /^socks5:/i.test(s)) return null;
+  if (!s) return null;
   try {
     const u = new URL(s);
+    const proto = u.protocol.replace(":", "").toLowerCase();
+    let type = "HTTP";
+    if (proto === "socks5" || proto === "socks") type = "SOCKS5";
+    else if (proto === "https") type = "HTTPS";
+    else if (proto === "http") type = "HTTP";
+    else return null;
+    const host = u.hostname;
+    const port = Number(u.port || (type === "HTTPS" ? 443 : type === "SOCKS5" ? 1080 : 80));
+    if (!host || !Number.isFinite(port) || port < 1) return null;
+    const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1", "0.0.0.0"]);
+    const allowLoopback =
+      u.searchParams.get("nexlify_loopback") === "1" ||
+      u.searchParams.get("nexlify_vpn") === "1" ||
+      loopbackHosts.has(host.toLowerCase());
     return {
-      type: u.protocol === "https:" ? "HTTPS" : "HTTP",
-      host: u.hostname,
-      port: Number(u.port || (u.protocol === "https:" ? 443 : 80)),
+      type,
+      host,
+      port,
       username: u.username ? decodeURIComponent(u.username) : "",
       password: u.password ? decodeURIComponent(u.password) : "",
+      allowLoopback,
     };
   } catch {
     return null;
   }
 }
 
-/** XUI LB: remote edge already egresses from the stream-server IP — never loop via local tinyproxy. */
+/** Keep configured egress proxies on remote LBs; allow intentional VPN loopback gateways. */
 function effectiveOutboundProxy(proxy) {
   if (!proxy) return null;
-  if (process.env.IPTV_EDGE_REMOTE_NODE === "1") return null;
   const local = new Set(
     ["127.0.0.1", "localhost", "::1", "0.0.0.0"]
       .concat(String(process.env.IPTV_EDGE_LOCAL_HOST || "").split(/[,\s]+/))
       .filter(Boolean)
+      .map((h) => String(h).toLowerCase())
   );
-  if (local.has(String(proxy.host || "").toLowerCase())) return null;
+  const host = String(proxy.host || "").toLowerCase();
+  if (local.has(host) && !proxy.allowLoopback) return null;
   return proxy;
 }
 
 function connectOriginSocket(targetUrl, proxy, timeoutMs) {
   const target = new URL(targetUrl);
+  const destPort = Number(target.port || (target.protocol === "https:" ? 443 : 80));
   if (!proxy) {
     return new Promise((resolve, reject) => {
-      const port = Number(target.port || (target.protocol === "https:" ? 443 : 80));
-      const socket = net.connect({ host: target.hostname, port, timeout: timeoutMs });
+      const socket = net.connect({ host: target.hostname, port: destPort, timeout: timeoutMs });
       socket.once("connect", () => {
         socket.setTimeout(0);
         resolve(socket);
@@ -910,8 +926,12 @@ function connectOriginSocket(targetUrl, proxy, timeoutMs) {
     });
   }
 
+  if (String(proxy.type || "").toUpperCase() === "SOCKS5") {
+    return connectViaSocks5Edge(proxy, target.hostname, destPort, timeoutMs);
+  }
+
   const connectHost = target.hostname;
-  const connectPort = target.port || (target.protocol === "https:" ? "443" : "80");
+  const connectPort = String(destPort);
   const proxyPort = proxy.port || (proxy.type === "HTTPS" ? 443 : 80);
   const headers = { Host: `${connectHost}:${connectPort}` };
   if (proxy.username || proxy.password) {
@@ -942,6 +962,117 @@ function connectOriginSocket(targetUrl, proxy, timeoutMs) {
   });
 }
 
+function socks5ReadExact(socket, n, timeoutMs, state) {
+  return new Promise((resolve, reject) => {
+    const finish = (err, buf) => {
+      cleanup();
+      if (err) reject(err);
+      else resolve(buf);
+    };
+    const pump = () => {
+      if (state.buf.length < n) return false;
+      const out = state.buf.subarray(0, n);
+      state.buf = state.buf.subarray(n);
+      finish(undefined, out);
+      return true;
+    };
+    const onData = (chunk) => {
+      state.buf = Buffer.concat([state.buf, chunk]);
+      pump();
+    };
+    const onErr = (err) => finish(err);
+    const onTimeout = () => {
+      socket.destroy();
+      finish(new Error("SOCKS5 handshake timeout"));
+    };
+    const cleanup = () => {
+      socket.off("data", onData);
+      socket.off("error", onErr);
+      socket.setTimeout(0);
+      clearTimeout(timer);
+    };
+    const timer = setTimeout(onTimeout, timeoutMs);
+    socket.on("data", onData);
+    socket.on("error", onErr);
+    if (pump()) return;
+  });
+}
+
+function socks5Write(socket, buf) {
+  return new Promise((resolve, reject) => {
+    socket.write(buf, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+async function connectViaSocks5Edge(proxy, destHost, destPort, timeoutMs) {
+  const socket = await new Promise((resolve, reject) => {
+    const s = net.connect({ host: proxy.host, port: proxy.port, timeout: timeoutMs });
+    s.once("connect", () => {
+      s.setTimeout(0);
+      resolve(s);
+    });
+    s.once("error", reject);
+    s.once("timeout", () => {
+      s.destroy();
+      reject(new Error("SOCKS5 connect timeout"));
+    });
+  });
+  const state = { buf: Buffer.alloc(0) };
+  try {
+    const user = proxy.username ? String(proxy.username) : "";
+    const pass = proxy.password ? String(proxy.password) : "";
+    const wantAuth = Boolean(user || pass);
+    await socks5Write(socket, Buffer.from(wantAuth ? [0x05, 0x02, 0x00, 0x02] : [0x05, 0x01, 0x00]));
+    const methodResp = await socks5ReadExact(socket, 2, timeoutMs, state);
+    if (methodResp[0] !== 0x05) throw new Error("SOCKS5 bad version");
+    if (methodResp[1] === 0xff) throw new Error("SOCKS5 no acceptable method");
+    if (methodResp[1] === 0x02) {
+      const uBuf = Buffer.from(user, "utf8");
+      const pBuf = Buffer.from(pass, "utf8");
+      const auth = Buffer.alloc(3 + uBuf.length + pBuf.length);
+      auth[0] = 0x01;
+      auth[1] = uBuf.length;
+      uBuf.copy(auth, 2);
+      auth[2 + uBuf.length] = pBuf.length;
+      pBuf.copy(auth, 3 + uBuf.length);
+      await socks5Write(socket, auth);
+      const authResp = await socks5ReadExact(socket, 2, timeoutMs, state);
+      if (authResp[1] !== 0x00) throw new Error("SOCKS5 auth failed");
+    } else if (methodResp[1] !== 0x00) {
+      throw new Error(`SOCKS5 unsupported method ${methodResp[1]}`);
+    }
+    const hostBuf = Buffer.from(destHost, "utf8");
+    const req = Buffer.alloc(7 + hostBuf.length);
+    req[0] = 0x05;
+    req[1] = 0x01;
+    req[2] = 0x00;
+    req[3] = 0x03;
+    req[4] = hostBuf.length;
+    hostBuf.copy(req, 5);
+    req.writeUInt16BE(destPort, 5 + hostBuf.length);
+    await socks5Write(socket, req);
+    const head = await socks5ReadExact(socket, 4, timeoutMs, state);
+    if (head[0] !== 0x05 || head[1] !== 0x00) throw new Error(`SOCKS5 CONNECT failed status=${head[1]}`);
+    const atyp = head[3];
+    let restLen = 0;
+    if (atyp === 0x01) restLen = 6;
+    else if (atyp === 0x03) {
+      const lenBuf = await socks5ReadExact(socket, 1, timeoutMs, state);
+      restLen = lenBuf[0] + 2;
+    } else if (atyp === 0x04) restLen = 18;
+    else throw new Error(`SOCKS5 bad atyp ${atyp}`);
+    if (restLen > 0) await socks5ReadExact(socket, restLen, timeoutMs, state);
+    socket.setTimeout(0);
+    socket.removeAllListeners("data");
+    socket.removeAllListeners("error");
+    if (state.buf.length) socket.unshift(state.buf);
+    return socket;
+  } catch (err) {
+    socket.destroy();
+    throw err;
+  }
+}
+
 function shouldSniffLiveTs(upRes) {
   const ct = String(upRes.headers["content-type"] || "").toLowerCase();
   if (ct.includes("html") || ct.includes("json") || ct.includes("xml") || ct.startsWith("text/")) return true;
@@ -953,6 +1084,7 @@ function shouldSniffLiveTs(upRes) {
 
 function proxyToHttpProxyUrl(proxy) {
   if (!proxy?.host) return "";
+  if (String(proxy.type || "").toUpperCase() === "SOCKS5") return "";
   const auth =
     proxy.username || proxy.password
       ? `${encodeURIComponent(proxy.username || "")}:${encodeURIComponent(proxy.password || "")}@`

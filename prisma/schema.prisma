@@ -73,6 +73,17 @@ enum ProxyType {
   SOCKS5
 }
 
+enum ServerOutboundMode {
+  NONE
+  PROXY
+  VPN
+}
+
+enum VpnTunnelKind {
+  WIREGUARD
+  OPENVPN
+}
+
 enum TicketStatus {
   OPEN
   IN_PROGRESS
@@ -353,14 +364,37 @@ model StreamProxy {
   servers StreamServer[]
 }
 
+/// WireGuard/OpenVPN profile for LB ingest egress. Pull path uses a local HTTP CONNECT
+/// proxy on the LB (127.0.0.1:localHttpPort) after the tunnel is applied.
+model VpnProfile {
+  id            String        @id @default(cuid())
+  name          String
+  kind          VpnTunnelKind @default(WIREGUARD)
+  /// Full wg-quick or OpenVPN client config (private keys — admin-only).
+  configText    String        @db.Text
+  localHttpPort Int           @default(18080)
+  /// Linux iface name (max 15 chars), e.g. wg-nexlify0
+  interfaceName String        @default("wg-nexlify0")
+  isActive      Boolean       @default(true)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  servers StreamServer[]
+}
+
 model StreamServer {
   id                  String       @id @default(cuid())
   name                String
   host                String
   port                Int          @default(8080)
   protocol            String       @default("http")
+  /// NONE = direct; PROXY = StreamProxy; VPN = VpnProfile → 127.0.0.1 local HTTP gateway
+  outboundMode        ServerOutboundMode @default(NONE)
   proxyId             String?
   proxy               StreamProxy? @relation(fields: [proxyId], references: [id])
+  vpnProfileId        String?
+  vpnProfile          VpnProfile?  @relation(fields: [vpnProfileId], references: [id])
   isActive            Boolean      @default(true)
   maxClients          Int          @default(1000)
   sortOrder           Int          @default(0)

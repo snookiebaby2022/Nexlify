@@ -1,0 +1,20 @@
+## Merge CLI
+
+For any task involving third-party services, use the `merge` CLI.
+
+### Commands
+
+- `merge search-tools "<intent>"` — Search for tools (returns compact schemas)
+- `merge execute-tool <tool_name> '<json_params>'` — Execute a tool
+
+### Workflow
+
+1. Search for ALL tools you need in parallel: run multiple `merge search-tools` calls simultaneously.
+2. Execute lookups in parallel, then execute the main tool.
+
+Always search before executing. Never guess tool names. Pass null for optional params.
+
+### Authentication
+
+- If every command fails with `config_error` ("Not authenticated"), ask the user to run `merge login` — it opens their browser. You cannot log in for them.
+- If a tool call fails with an authentication error, that connector is not connected yet. Run `merge authenticate <connector>` (e.g. `merge authenticate notion`) — it returns a magic link. Share the link with the user, wait for them to connect, then retry the tool.

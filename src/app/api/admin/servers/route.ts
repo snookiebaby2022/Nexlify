@@ -123,6 +123,15 @@ export async function POST(req: NextRequest) {
       isActive: body.isActive !== false,
       sortOrder: Number(body.sortOrder ?? 0),
       proxyId: body.proxyId || null,
+      vpnProfileId: body.vpnProfileId || null,
+      outboundMode:
+        body.outboundMode === "VPN" || body.outboundMode === "PROXY" || body.outboundMode === "NONE"
+          ? body.outboundMode
+          : body.proxyId
+            ? "PROXY"
+            : body.vpnProfileId
+              ? "VPN"
+              : "NONE",
       description: body.description || null,
       privateIp: body.privateIp || null,
       domain: domainParsed.domain,
@@ -147,7 +156,11 @@ export async function POST(req: NextRequest) {
     },
   });
   const { cacheDelExact } = await import("@/lib/cache");
-  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
+  await Promise.all([
+    cacheDelExact("stats:header"),
+    cacheDelExact("stats:dashboard"),
+    cacheDelExact("admin:servers:list:v1"),
+  ]);
 
   let portSync: { ok: boolean; message: string; output: string } | undefined;
   if (isLocalPanelServer(server)) {
@@ -175,7 +188,11 @@ export async function DELETE(req: NextRequest) {
   await prisma.stream.updateMany({ where: { serverId: id }, data: { serverId: null } });
   await prisma.streamServer.delete({ where: { id } });
   const { cacheDelExact } = await import("@/lib/cache");
-  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
+  await Promise.all([
+    cacheDelExact("stats:header"),
+    cacheDelExact("stats:dashboard"),
+    cacheDelExact("admin:servers:list:v1"),
+  ]);
   return NextResponse.json({ ok: true });
   } catch (e) {
     return apiMutationErrorResponse(e);
@@ -235,6 +252,13 @@ export async function PATCH(req: NextRequest) {
       isActive: body.isActive,
       sortOrder: body.sortOrder != null ? Number(body.sortOrder) : undefined,
       proxyId: body.proxyId === undefined ? undefined : body.proxyId || null,
+      vpnProfileId: body.vpnProfileId === undefined ? undefined : body.vpnProfileId || null,
+      outboundMode:
+        body.outboundMode === undefined
+          ? undefined
+          : body.outboundMode === "VPN" || body.outboundMode === "PROXY" || body.outboundMode === "NONE"
+            ? body.outboundMode
+            : undefined,
       description: body.description,
       privateIp: body.privateIp !== undefined ? body.privateIp || null : undefined,
       domain: normalizedDomain,
@@ -265,7 +289,11 @@ export async function PATCH(req: NextRequest) {
     },
   });
   const { cacheDelExact } = await import("@/lib/cache");
-  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
+  await Promise.all([
+    cacheDelExact("stats:header"),
+    cacheDelExact("stats:dashboard"),
+    cacheDelExact("admin:servers:list:v1"),
+  ]);
 
   let portSync: { ok: boolean; message: string; output: string } | undefined;
   let agentConfigQueued = false;

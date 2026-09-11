@@ -82,9 +82,8 @@ function isLiveByteProbe(
   return isTinyLiveRangeProbe(originalRange(req), ua);
 }
 
-async function resolveStreamOutboundProxy(streamId: string, agentServerScope: string | null = null) {
-  // Stream-server edge already uses the LB IP; proxy is only for panel-local edge egress.
-  if (agentServerScope) return null;
+async function resolveStreamOutboundProxy(streamId: string, _agentServerScope: string | null = null) {
+  // Send proxy/VPN egress to remote LB edges too (provider IP blocks).
   return resolveOutboundProxyForStream(streamId);
 }
 

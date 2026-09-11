@@ -1,0 +1,182 @@
+# CI — lint, typecheck, unit/integration/E2E, coverage gate, audit + secrets
+#
+# DB: PostgreSQL (Prisma provider=postgresql). Redis for cache.
+# This panel is not MySQL-backed; a MySQL service would not exercise the schema.
+# PHP Composer is not used — vulnerability scan is npm audit only.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+  CI: "1"
+  # Shared test credentials (non-production)
+  TEST_DATABASE_URL: postgresql://nexlify:nexlify@127.0.0.1:5432/nexlify_test
+  DATABASE_URL: postgresql://nexlify:nexlify@127.0.0.1:5432/nexlify_test
+  REDIS_URL: redis://127.0.0.1:6379
+  JWT_SECRET: ci-test-jwt-secret-change-me-32chars-min
+  ENCRYPTION_AT_REST_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  PANEL_INTERNAL_SECRET: ci-panel-internal-secret
+  CRON_SECRET: ci-cron-secret
+  BILLING_WEBHOOK_SECRET: ci-billing-webhook
+  NEXLIFY_LICENSE_VALID: "1"
+  NEXLIFY_TEST_MOCKS: "1"
+  NEXT_PUBLIC_PANEL_NAME: Nexlify CI
+  E2E_PORT: "13100"
+  PORT: "13100"
+  PANEL_PORT: "13100"
+
+jobs:
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+
+      - name: composer audit
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --no-progress
+            composer audit
+          else
+            echo "No composer.json — PHP Composer audit skipped (Node/Next panel)."
+          fi
+
+  test:
+    name: Lint · typecheck · tests · E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nexlify
+          POSTGRES_PASSWORD: nexlify
+          POSTGRES_DB: nexlify_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexlify -d nexlify_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Live-routing drift (repo nginx templates)
+        run: bash scripts/check-live-routing-drift.sh
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Write .env.test
+        run: |
+          cp .env.test.example .env.test
+          {
+            echo 'REDIS_URL=redis://127.0.0.1:6379'
+            echo 'NEXLIFY_TEST_MOCKS=1'
+          } >> .env.test
+
+      - name: Prepare test database
+        run: npm run test:db:prepare
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Coverage (fails below c8 thresholds)
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/
+            coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (Playwright)
+        run: npm run test:e2e
+        env:
+          # Linux CI: use Playwright's Chromium (not Edge/Chrome channel)
+          PW_CHANNEL: ""
+          CI: "1"
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14

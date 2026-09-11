@@ -5,7 +5,7 @@ import { Readable } from "stream";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
 import type { OutboundProxy } from "@/lib/outbound-proxy";
-import { ffmpegHttpProxyArg } from "@/lib/outbound-proxy";
+import { ffmpegHttpProxyArg, ffmpegProxyEnv } from "@/lib/outbound-proxy";
 import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
@@ -243,6 +243,7 @@ async function spawnPackager(
   const liveTune = opts?.vod ? [] : ["-flags", "low_delay", "-muxdelay", "0", "-muxpreload", "0"];
   const httpProxy = ffmpegHttpProxyArg(opts?.outboundProxy ?? null);
   const proxyArgs = httpProxy ? ["-http_proxy", httpProxy] : [];
+  const proxyEnv = ffmpegProxyEnv(opts?.outboundProxy ?? null);
 
   const proc = spawn(
     ffmpegPath,
@@ -296,7 +297,12 @@ async function spawnPackager(
       join(dir, "seg%d.ts"),
       join(dir, "index.m3u8"),
     ],
-    { stdio: ["ignore", "ignore", "ignore"], windowsHide: true, detached: true }
+    {
+      stdio: ["ignore", "ignore", "ignore"],
+      windowsHide: true,
+      detached: true,
+      env: { ...process.env, ...proxyEnv },
+    }
   );
   try {
     proc.unref();

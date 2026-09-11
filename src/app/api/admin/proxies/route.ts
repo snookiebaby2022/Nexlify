@@ -115,7 +115,10 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  await prisma.streamServer.updateMany({ where: { proxyId: id }, data: { proxyId: null } });
+  await prisma.streamServer.updateMany({
+    where: { proxyId: id },
+    data: { proxyId: null, outboundMode: "NONE" },
+  });
   await prisma.streamProxy.delete({ where: { id } });
   await invalidateEpgCache();
   return NextResponse.json({ ok: true });

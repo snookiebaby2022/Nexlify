@@ -131,7 +131,12 @@ export default function AdminProxiesPage() {
           Stream proxies
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          HTTP/HTTPS/SOCKS5 proxies for EPG fetch and outbound panel traffic. Assign per server under Manage Servers.
+          HTTP/HTTPS/SOCKS5 proxies for outbound stream pulls (ingest). Assign per server under Manage Servers
+          (Outbound → Proxy). For WireGuard/OpenVPN tunnels see{" "}
+          <a href="/admin/servers/vpn" className="underline" style={{ color: "#00c0ef" }}>
+            VPN tunnels
+          </a>
+          .
         </p>
       </div>
 

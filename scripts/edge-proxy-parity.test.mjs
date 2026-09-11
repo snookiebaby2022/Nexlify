@@ -103,6 +103,18 @@ describe("edge proxy installer parity", () => {
     }
   });
 
+  it("canonical keeps SOCKS5 and VPN loopback outbound proxies on remote LBs", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /SOCKS5/);
+    assert.match(canonical, /nexlify_loopback/);
+    assert.match(canonical, /allowLoopback/);
+    assert.match(canonical, /connectViaSocks5Edge/);
+    const start = canonical.indexOf("function effectiveOutboundProxy");
+    assert.ok(start >= 0);
+    const slice = canonical.slice(start, start + 900);
+    assert.doesNotMatch(slice, /IPTV_EDGE_REMOTE_NODE === ["']1["']\) return null/);
+  });
+
   it(
     "installer does not forward /live/ by calling forward() without a media guard",
     { skip: !installerAvailable },

@@ -129,6 +129,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/servers/install", label: "Install Wizard", section: "Servers" },
           { href: "/admin/process_monitor", label: "Process Monitor", section: "Servers" },
           { href: "/admin/servers/proxies", label: "Proxies", section: "Edge" },
+          { href: "/admin/servers/vpn", label: "VPN tunnels", section: "Edge" },
           { href: "/admin/management/rtmp-ips", label: "RTMP IPs", section: "Edge" },
           { href: "/admin/streaming/engine", label: "Streaming Engine", section: "Engine" },
           { href: "/admin/streaming/transcoding", label: "Transcoding", section: "Engine" },
