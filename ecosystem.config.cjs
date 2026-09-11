@@ -203,7 +203,12 @@ const pm2Apps = [
         PANEL_PRIMARY_DOMAIN: envVar("PANEL_PRIMARY_DOMAIN"),
         PANEL_LICENSE_EXEMPT_HOSTS: envVar("PANEL_LICENSE_EXEMPT_HOSTS"),
         PANEL_DEMO_HOSTS: envVar("PANEL_DEMO_HOSTS"),
+        // Mirror panelRuntimeEnv so heartbeatCheck sees the same license flags
+        // (run-cron-daemon.sh does not source .env).
+        NEXLIFY_LICENSE_VALID: fileEnv.NEXLIFY_LICENSE_VALID || "0",
+        NEXLIFY_LICENSE_KEY: fileEnv.NEXLIFY_LICENSE_KEY || "",
         NEXLIFY_LICENSE_REQUIRE: envVar("NEXLIFY_LICENSE_REQUIRE"),
+        NEXLIFY_LICENSE_API_URL: fileEnv.NEXLIFY_LICENSE_API_URL || "",
         REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
         REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
         PATH: pgBinPath(),

@@ -12,15 +12,43 @@ local setKey = KEYS[1]
 local member = ARGV[1]
 local max = tonumber(ARGV[2])
 local ttl = tonumber(ARGV[3])
+local function keepOnlyMember()
+  if max ~= 1 then return end
+  for _, existing in ipairs(redis.call('SMEMBERS', setKey)) do
+    if existing ~= member then
+      redis.call('SREM', setKey, existing)
+    end
+  end
+end
 if redis.call('SISMEMBER', setKey, member) == 1 then
+  keepOnlyMember()
   redis.call('EXPIRE', setKey, ttl)
   return 2
 end
 local n = redis.call('SCARD', setKey)
 if max > 0 and n >= max then
-  return 0
+  -- Zap can admit before the old MPEG-TS socket closes. Same-IP first;
+  -- maxConnections=1 clears every other member (CF edge IPs often change).
+  local clientIp = ARGV[4]
+  local prefix = clientIp .. '|'
+  for _, existing in ipairs(redis.call('SMEMBERS', setKey)) do
+    if string.sub(existing, 1, string.len(prefix)) == prefix then
+      redis.call('SREM', setKey, existing)
+      n = n - 1
+    end
+  end
+  if max == 1 and n >= max then
+    for _, existing in ipairs(redis.call('SMEMBERS', setKey)) do
+      redis.call('SREM', setKey, existing)
+      n = n - 1
+    end
+  end
+  if n >= max then
+    return 0
+  end
 end
 redis.call('SADD', setKey, member)
+keepOnlyMember()
 redis.call('EXPIRE', setKey, ttl)
 return 1
 `;
@@ -77,13 +105,15 @@ export async function edgeTryAcquireConnSlot(lineId, maxConnections, opts = {}) 
   if (!client) return "unavailable";
   try {
     if (client.status !== "ready") await client.connect();
+    const clientIp = String(opts.clientIp || "anon");
     const result = await client.eval(
       ACQUIRE_LUA,
       1,
       slotSetKey(lineId),
-      slotMember(opts.clientIp, opts.streamId),
+      slotMember(clientIp, opts.streamId),
       String(maxConnections),
-      String(SLOT_TTL_SEC)
+      String(SLOT_TTL_SEC),
+      clientIp
     );
     const n = Number(result);
     if (n === 2) return "existing";
@@ -91,5 +121,28 @@ export async function edgeTryAcquireConnSlot(lineId, maxConnections, opts = {}) 
     return "denied";
   } catch {
     return "unavailable";
+  }
+}
+
+/**
+ * Release one client/stream slot immediately when playback closes.
+ * The key-level TTL remains a stale-session safety net, but channel switches
+ * must not wait for it before the next stream can acquire a slot.
+ */
+export async function edgeReleaseConnSlot(lineId, opts = {}) {
+  if (!lineId || !opts.streamId) return false;
+  const client = getRedis();
+  if (!client) return false;
+  try {
+    if (client.status !== "ready") await client.connect();
+    const key = slotSetKey(lineId);
+    const removed = await client.srem(key, slotMember(opts.clientIp, opts.streamId));
+    if (removed) {
+      const remaining = await client.scard(key);
+      if (remaining === 0) await client.del(key);
+    }
+    return Number(removed) > 0;
+  } catch {
+    return false;
   }
 }

@@ -136,7 +136,6 @@ export type ServerFormState = {
   advHttpsPorts: string[];
   advGeoIpPriority: "low" | "medium" | "high";
   sslAutoCertbot: boolean;
-  sslCertbotEmail: string;
 };
 
 export const defaultServerForm = (): ServerFormState => ({
@@ -196,7 +195,6 @@ export const defaultServerForm = (): ServerFormState => ({
       advHttpsPorts: uniquePortTags(String(STREAM_HTTPS_PORT)),
       advGeoIpPriority: a.geoIpPriority ?? "low",
       sslAutoCertbot: ssl.autoCertbot,
-      sslCertbotEmail: ssl.certbotEmail,
     };
   })(),
 });
@@ -312,7 +310,6 @@ function serverToForm(s: Record<string, unknown>): ServerFormState {
     ),
     advGeoIpPriority: advanced.geoIpPriority ?? "low",
     sslAutoCertbot: ssl.autoCertbot,
-    sslCertbotEmail: ssl.certbotEmail,
   };
 }
 
@@ -375,7 +372,9 @@ export function ServerForm({
   const [tab, setTab] = useState<TabId>("details");
   const [form, setForm] = useState<ServerFormState>(defaultServerForm);
   const [proxies, setProxies] = useState<{ id: string; name: string; type?: string }[]>([]);
-  const [vpnProfiles, setVpnProfiles] = useState<{ id: string; name: string }[]>([]);
+  const [vpnProfiles, setVpnProfiles] = useState<
+    { id: string; name: string; linkedServers?: { name: string; vpnEgressActive: boolean }[] }[]
+  >([]);
   const [panelSummary, setPanelSummary] = useState<{
     panelName: string;
     panelUrl: string;
@@ -389,6 +388,14 @@ export function ServerForm({
   const [existingPanelSettings, setExistingPanelSettings] = useState<unknown>(null);
   const [certbotMsg, setCertbotMsg] = useState("");
   const [certbotBusy, setCertbotBusy] = useState(false);
+  const [sslAgreeLeTerms, setSslAgreeLeTerms] = useState(false);
+  const [certStatus, setCertStatus] = useState<{
+    expiresAt: string | null;
+    daysLeft: number | null;
+    renewHint?: string;
+    error?: string;
+    remote?: boolean;
+  } | null>(null);
   const [knownInterfaces, setKnownInterfaces] = useState<{ name: string; servers: string[] }[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [sshTesting, setSshTesting] = useState(false);
@@ -405,6 +412,35 @@ export function ServerForm({
       if (installPollRef.current) clearInterval(installPollRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (tab !== "ssl" || mode !== "edit" || !serverId || !form.domain.trim()) {
+      setCertStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/admin/servers/${serverId}/certbot`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        const st = d.status;
+        if (st) {
+          setCertStatus({
+            expiresAt: st.expiresAt ?? null,
+            daysLeft: st.daysLeft ?? null,
+            renewHint: st.renewHint,
+            error: st.error,
+            remote: st.remote,
+          });
+        } else setCertStatus(null);
+      })
+      .catch(() => {
+        if (!cancelled) setCertStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, mode, serverId, form.domain]);
 
   async function autoDetectHardware(scope: "network" | "performance" | "all" = "all") {
     setDetecting(true);
@@ -618,7 +654,7 @@ export function ServerForm({
         },
         ssl: {
           autoCertbot: form.sslAutoCertbot,
-          certbotEmail: form.sslCertbotEmail.trim(),
+          certbotEmail: "",
         },
       },
       snapshot
@@ -714,22 +750,23 @@ export function ServerForm({
       alert(err);
       return;
     }
-    if (
-      mode === "edit" &&
-      serverId &&
-      form.sslAutoCertbot &&
-      form.domain.trim() &&
-      form.sslCertbotEmail.trim()
-    ) {
-      void fetch(`/api/admin/servers/${serverId}/certbot`, {
+    if (mode === "edit" && serverId && form.sslAutoCertbot && form.domain.trim()) {
+      if (!sslAgreeLeTerms) {
+        alert("Agree to the Let's Encrypt terms on the SSL tab before auto-generating a certificate.");
+        setTab("ssl");
+        return;
+      }
+      const certRes = await fetch(`/api/admin/servers/${serverId}/certbot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.sslCertbotEmail, agreeToTerms: true }),
-      }).then(async (certRes) => {
-        if (certRes.ok) return;
-        const certData = await certRes.json().catch(() => ({}));
-        alert(certData.error ?? certData.message ?? "Saved server but certbot failed");
+        body: JSON.stringify({ agreeToTerms: true }),
       });
+      const certData = await certRes.json().catch(() => ({}));
+      if (!certRes.ok || !certData.ok) {
+        alert(certData.error ?? certData.message ?? "Saved server but Let's Encrypt issuance failed");
+        return;
+      }
+      setCertbotMsg(certData.message ?? "Let's Encrypt certificate issued");
     }
     router.push("/admin/servers");
   }
@@ -1037,14 +1074,27 @@ export function ServerForm({
                     onChange={(e) => setForm({ ...form, vpnProfileId: e.target.value })}
                   >
                     <option value="">Select VPN…</option>
-                    {vpnProfiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    {vpnProfiles.map((p) => {
+                      const activeOn = p.linkedServers?.filter((s) => s.vpnEgressActive) ?? [];
+                      const suffix =
+                        activeOn.length > 0
+                          ? ` — active on ${activeOn.map((s) => s.name).join(", ")}`
+                          : "";
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {suffix}
+                        </option>
+                      );
+                    })}
                   </select>
                   <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                    Apply the tunnel on the LB under Servers → VPN, then select it here.
+                    Upload config and apply under{" "}
+                    <a href="/admin/servers/vpn" className="underline" style={{ color: "#00c0ef" }}>
+                      Servers → VPN
+                    </a>
+                    , then choose the profile here. VPN egress is only used when this server’s
+                    outbound mode is VPN and the tunnel is applied on that host.
                   </p>
                 </FormField>
               )}
@@ -1634,25 +1684,78 @@ export function ServerForm({
                 </select>
               </FormField>
               <Toggle
-                label="Auto-generate HTTPS certificate (Certbot)"
+                label="Auto-generate Let's Encrypt HTTPS certificate (Certbot)"
                 checked={form.sslAutoCertbot}
                 onChange={(sslAutoCertbot) => setForm({ ...form, sslAutoCertbot })}
               />
-              <FormField label="Certbot email">
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Uses free certificates from{" "}
+                <a
+                  href="https://letsencrypt.org/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                  style={{ color: "#00c0ef" }}
+                >
+                  Let&apos;s Encrypt
+                </a>{" "}
+                via Certbot on this server (local panel host) or over SSH on remote LBs. DNS for this
+                server&apos;s domain must point at that host and port 80 must be reachable. Optional
+                ACME contact email:{" "}
+                <Link href="/admin/settings/domains" className="underline" style={{ color: "#00c0ef" }}>
+                  Settings → Domains
+                </Link>
+                . Renewal is handled by the system <code className="text-xs">certbot renew</code> timer on
+                each VPS.
+              </p>
+              {certStatus && (
+                <p className="text-xs rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                  {certStatus.expiresAt ? (
+                    <>
+                      Certificate expires{" "}
+                      <strong>{new Date(certStatus.expiresAt).toLocaleString()}</strong>
+                      {certStatus.daysLeft != null && (
+                        <>
+                          {" "}
+                          ({certStatus.daysLeft} day{certStatus.daysLeft === 1 ? "" : "s"} left)
+                        </>
+                      )}
+                      {certStatus.remote ? " · checked on remote LB" : " · on this host"}
+                      {certStatus.renewHint ? ` — ${certStatus.renewHint}` : ""}
+                    </>
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>
+                      {certStatus.error ?? "No Let's Encrypt certificate found for this domain yet."}
+                    </span>
+                  )}
+                </p>
+              )}
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
                 <input
-                  type="email"
-                  className={formInputClass}
-                  style={formInputStyle}
-                  value={form.sslCertbotEmail}
-                  onChange={(e) => setForm({ ...form, sslCertbotEmail: e.target.value })}
-                  placeholder="admin@example.com"
+                  type="checkbox"
+                  checked={sslAgreeLeTerms}
+                  onChange={(e) => setSslAgreeLeTerms(e.target.checked)}
+                  className="mt-1"
                 />
-              </FormField>
+                <span style={{ color: "var(--muted)" }}>
+                  I agree to the{" "}
+                  <a
+                    href="https://letsencrypt.org/documents/LE-SA-v1.4-April-3-2024.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                    style={{ color: "#00c0ef" }}
+                  >
+                    Let&apos;s Encrypt Subscriber Agreement
+                  </a>{" "}
+                  and ACME terms.
+                </span>
+              </label>
               {mode === "edit" && serverId && (
                 <div className="space-y-2">
                   <button
                     type="button"
-                    disabled={certbotBusy || !form.domain.trim()}
+                    disabled={certbotBusy || !form.domain.trim() || !sslAgreeLeTerms}
                     className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
                     style={{ background: "#3c8dbc", color: "#fff" }}
                     onClick={async () => {
@@ -1660,33 +1763,68 @@ export function ServerForm({
                         setCertbotMsg("Set a domain on the Domains tab first.");
                         return;
                       }
+                      if (!sslAgreeLeTerms) {
+                        setCertbotMsg("Agree to the Let's Encrypt terms above first.");
+                        return;
+                      }
                       setCertbotBusy(true);
                       setCertbotMsg("");
                       const res = await fetch(`/api/admin/servers/${serverId}/certbot`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          email: form.sslCertbotEmail,
-                          agreeToTerms: true,
-                        }),
+                        body: JSON.stringify({ agreeToTerms: true }),
                       });
                       const data = await res.json();
                       setCertbotBusy(false);
-                      setCertbotMsg(res.ok ? (data.message ?? "Certificate issued") : (data.error ?? data.message ?? "Failed"));
-                      if (res.ok && data.ok) {
-                        setForm((f) => ({ ...f, protocol: "https" }));
+                      const ok = res.ok && data.ok;
+                      setCertbotMsg(
+                        ok
+                          ? (data.message ?? "Let's Encrypt certificate issued")
+                          : (data.error ?? data.message ?? "Failed")
+                      );
+                      if (ok) {
+                        setForm((f) => ({ ...f, protocol: "https", sslAutoCertbot: true }));
                       }
                     }}
                   >
-                    {certbotBusy ? "Running certbot…" : "Issue certificate now"}
+                    {certbotBusy ? "Running Certbot…" : "Issue Let's Encrypt certificate now"}
                   </button>
                   {!form.domain.trim() && (
                     <p className="text-xs" style={{ color: "var(--muted)" }}>
                       Add a domain name under Domains before issuing a certificate.
                     </p>
                   )}
+                  {(() => {
+                    const raw =
+                      existingPanelSettings &&
+                      typeof existingPanelSettings === "object" &&
+                      !Array.isArray(existingPanelSettings)
+                        ? (existingPanelSettings as Record<string, unknown>).ssl
+                        : null;
+                    const last =
+                      raw && typeof raw === "object" && !Array.isArray(raw)
+                        ? (raw as Record<string, unknown>).lastCertbotRun
+                        : null;
+                    if (!last || typeof last !== "object") return null;
+                    const l = last as Record<string, unknown>;
+                    return (
+                      <p className="text-xs" style={{ color: l.ok ? "var(--success)" : "var(--danger)" }}>
+                        Last Let&apos;s Encrypt run:{" "}
+                        {l.at ? new Date(String(l.at)).toLocaleString() : "—"} —{" "}
+                        {l.ok ? "OK" : "Failed"} — {String(l.message ?? "")}
+                      </p>
+                    );
+                  })()}
                   {certbotMsg && (
-                    <p className="text-xs" style={{ color: certbotMsg.includes("issued") || certbotMsg.includes("success") ? "var(--success)" : "var(--danger)" }}>
+                    <p
+                      className="text-xs"
+                      style={{
+                        color:
+                          /issued|success|renew/i.test(certbotMsg) && !/failed/i.test(certbotMsg)
+                            ? "var(--success)"
+                            : "var(--danger)",
+                      }}
+                    >
                       {certbotMsg}
                     </p>
                   )}

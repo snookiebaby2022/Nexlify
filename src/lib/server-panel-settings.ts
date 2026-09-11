@@ -124,6 +124,24 @@ export function readExplicitServerRole(
   return null;
 }
 
+/** Preserve ssl.lastCertbotRun and other extra keys when saving the form. */
+export function mergeServerSslBlock(
+  existing: unknown,
+  patch: ServerSslSettings
+): Record<string, unknown> {
+  const raw =
+    existing && typeof existing === "object" && !Array.isArray(existing)
+      ? (existing as Record<string, unknown>).ssl
+      : null;
+  const extra =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  delete extra.autoCertbot;
+  delete extra.certbotEmail;
+  return { ...extra, ...patch };
+}
+
 export function buildServerPanelSettingsJson(
   existing: unknown,
   parts: {
@@ -141,6 +159,6 @@ export function buildServerPanelSettingsJson(
     network: parts.network,
     performance: parts.performance,
     advanced: parts.advanced,
-    ssl: parts.ssl,
+    ssl: mergeServerSslBlock(existing, parts.ssl),
   };
 }

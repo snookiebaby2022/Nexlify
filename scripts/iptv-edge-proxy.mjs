@@ -36,7 +36,11 @@ import {
   edgeRedisGetSeg,
   edgeRedisSetSeg,
 } from "./edge-redis-auth.mjs";
-import { edgeSlotsEnabled, edgeTryAcquireConnSlot } from "./edge-redis-slots.mjs";
+import {
+  edgeSlotsEnabled,
+  edgeTryAcquireConnSlot,
+  edgeReleaseConnSlot,
+} from "./edge-redis-slots.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -472,6 +476,13 @@ function isInfraOrLoopbackIp(ip) {
 function clientIp(req) {
   const peer = socketIp(req);
   const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback,45.88.138.18").toLowerCase();
+  const trustCloudflare = /^(1|true|yes|always)$/i.test(
+    String(process.env.IPTV_EDGE_TRUST_CLOUDFLARE || "")
+  );
+  if (trustCloudflare) {
+    const cfIp = stripIp(req.headers["cf-connecting-ip"]);
+    if (isValidIpLiteral(cfIp) && !isInfraOrLoopbackIp(cfIp)) return cfIp;
+  }
   const trustedPeers = new Set(
     trust
       .split(",")
@@ -687,9 +698,14 @@ function clearPlaybackSession(ctx) {
 }
 
 function endPlaybackSession(ctx) {
-  if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  if (!ctx?.lineId || !ctx?.streamId) return;
   clearPlaybackSession(ctx);
   pendingPulseBatch.delete(playbackSessionKey(ctx));
+  void edgeReleaseConnSlot(ctx.lineId, {
+    clientIp: ctx.ip,
+    streamId: ctx.streamId,
+  });
+  if (!INTERNAL_SECRET) return;
   const body = JSON.stringify({
     lineId: ctx.lineId,
     streamId: ctx.streamId,
@@ -3039,6 +3055,7 @@ function authLive(clientReq) {
             streamId: String(res.headers["x-nexlify-stream-id"] || ""),
             lineId: String(res.headers["x-nexlify-line-id"] || ""),
             maxConnections: Number(res.headers["x-nexlify-max-connections"] || 0) || 0,
+            denyReason: String(res.headers["x-nexlify-deny"] || "") || undefined,
             outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
           });
         }
@@ -3118,13 +3135,24 @@ async function authLiveCached(clientReq) {
     let data = sanitizeAuthUpstream(await authLiveWithDeadline(clientReq));
     if (data.status === 403 || data.status === 429) {
       purgeAuthCacheForLiveCredentials(clientReq);
-      authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+      const maxConn = Number(data?.maxConnections) || 0;
+      const deny = String(data?.denyReason || "");
+      // Sticky-caching maxConnections=1 "connections" denies makes quick-zap
+      // flaky under Cloudflare IP churn; allow the next request to retry.
+      if (!(maxConn === 1 && deny === "connections")) {
+        authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+      }
       return data;
     }
     if (data.status === 200 && data.upstream) {
       data = await enforceEdgeConnSlot(data, clientReq);
       if (data.status === 403) {
-        authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+        // maxConnections=1 zaps must not sticky-cache a transient slot race —
+        // CF IP churn + late pulses can deny once then recover on retry.
+        const maxConn = Number(data?.maxConnections) || 0;
+        if (maxConn !== 1) {
+          authCache.set(key, { expires: now + AUTH_DENY_TTL_MS, data });
+        }
         return data;
       }
       const ttl = authPositiveTtlMs(data);
@@ -4396,7 +4424,9 @@ async function onRequest(clientReq, clientRes, ctx) {
     // fall through to forward() → misleading "media must splice locally".
     if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
       reportViewerPlaybackDrop(clientReq, auth, `Live auth denied (HTTP ${auth.status})`, auth.status);
-      clientRes.writeHead(auth.status, { "content-type": "text/plain" });
+      const headers = { "content-type": "text/plain" };
+      if (auth.denyReason) headers["x-nexlify-deny"] = String(auth.denyReason);
+      clientRes.writeHead(auth.status, headers);
       clientRes.end(
         auth.status === 401
           ? "Unauthorized"

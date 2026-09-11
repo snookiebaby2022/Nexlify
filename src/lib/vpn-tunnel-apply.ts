@@ -4,12 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { decryptAtRest } from "@/lib/encryption-at-rest";
 import { withSshClient, sshExec } from "@/lib/ssh-exec";
 import { sanitizeVpnInterfaceName } from "@/lib/outbound-egress";
+import { isThisPanelMachine } from "@/lib/panel-local-server";
+import { runVpnApplyScriptLocally } from "@/lib/vpn-tunnel-local";
 
 export type VpnApplyResult = {
   ok: boolean;
   dryRun?: boolean;
   message: string;
   remoteOutput?: string;
+  local?: boolean;
 };
 
 function scriptSources() {
@@ -20,7 +23,32 @@ function scriptSources() {
   };
 }
 
-/** Apply VPN profile on a stream server via SSH (LB). dryRun only validates remote script path. */
+async function updateServerAfterApply(
+  serverId: string,
+  profile: { id: string; name: string },
+  ok: boolean,
+  out: string
+) {
+  if (ok) {
+    await prisma.streamServer.update({
+      where: { id: serverId },
+      data: {
+        outboundMode: "VPN",
+        vpnProfileId: profile.id,
+        proxyId: null,
+        configRevision: { increment: 1 },
+        healthMessage: `VPN ${profile.name} applied`,
+      },
+    });
+  } else {
+    await prisma.streamServer.update({
+      where: { id: serverId },
+      data: { healthMessage: `VPN apply failed: ${out.slice(0, 200)}` },
+    });
+  }
+}
+
+/** Apply VPN profile on a stream server (local panel host or via SSH). */
 export async function applyVpnProfileToServer(
   serverId: string,
   vpnProfileId: string,
@@ -31,8 +59,36 @@ export async function applyVpnProfileToServer(
   if (!server) return { ok: false, message: "Server not found" };
   if (!profile) return { ok: false, message: "VPN profile not found" };
   if (!profile.isActive) return { ok: false, message: "VPN profile is inactive" };
+
+  if (isThisPanelMachine(server)) {
+    const local = runVpnApplyScriptLocally(profile, { dryRun: opts?.dryRun });
+    if (!opts?.dryRun && local.ok) {
+      await prisma.streamServer.update({
+        where: { id: serverId },
+        data: {
+          outboundMode: "VPN",
+          vpnProfileId: profile.id,
+          proxyId: null,
+          configRevision: { increment: 1 },
+          healthMessage: `VPN ${profile.name} applied (local)`,
+        },
+      });
+    }
+    return {
+      ok: local.ok,
+      dryRun: local.dryRun,
+      message: local.message,
+      remoteOutput: local.output,
+      local: true,
+    };
+  }
+
   if (!server.agentUseSsh) {
-    return { ok: false, message: "Enable SSH on the server to apply VPN tunnels remotely" };
+    return {
+      ok: false,
+      message:
+        "This server is not the panel host — enable SSH (agent) on the server to apply VPN remotely",
+    };
   }
 
   const host = server.agentSshHost || server.host;
@@ -85,16 +141,9 @@ export async function applyVpnProfileToServer(
     );
     const out = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
     const ok = result.code === 0 && /"ok"\s*:\s*true/.test(out);
-    await prisma.streamServer.update({
-      where: { id: serverId },
-      data: {
-        outboundMode: "VPN",
-        vpnProfileId: profile.id,
-        proxyId: null,
-        configRevision: { increment: 1 },
-        healthMessage: ok ? `VPN ${profile.name} applied` : `VPN apply failed: ${out.slice(0, 200)}`,
-      },
-    });
+    if (!opts?.dryRun) {
+      await updateServerAfterApply(serverId, profile, ok, out);
+    }
     return {
       ok,
       dryRun: Boolean(opts?.dryRun),

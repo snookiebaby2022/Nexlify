@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { issueLetsEncryptCertificate } from "@/lib/certbot-run";
+import { issueLetsEncryptCertificate, pickCertbotEmail } from "@/lib/certbot-run";
 import {
   certbotDomainArgs,
   getPanelDomainsSettings,
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = await getPanelDomainsSettings();
-  const email = String(body.email ?? settings.certbotEmail).trim();
+  const email = pickCertbotEmail(body.email as string | undefined, settings.certbotEmail);
   const domains = certbotDomainArgs(settings);
 
   if (!domains.length) {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await issueLetsEncryptCertificate(domains, email);
+  const result = await issueLetsEncryptCertificate(domains, email || undefined);
   const at = new Date().toISOString();
 
   const updated = await savePanelDomainsSettings({

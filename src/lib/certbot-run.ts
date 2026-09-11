@@ -2,6 +2,14 @@ import { spawn } from "child_process";
 import { access } from "fs/promises";
 import { constants } from "fs";
 import { getBinPaths } from "@/lib/bin-paths";
+import {
+  letsEncryptLivePaths,
+  parseOpenSslEndDateLine,
+  pickCertbotEmail,
+  type LetsEncryptCertExpiry,
+} from "@/lib/certbot-utils";
+
+export { pickCertbotEmail, parseOpenSslEndDateLine, letsEncryptLivePaths, type LetsEncryptCertExpiry } from "@/lib/certbot-utils";
 
 async function executable(path: string): Promise<boolean> {
   try {
@@ -55,9 +63,39 @@ export type CertbotIssueResult = {
   log?: string;
 };
 
+/** Read LE cert expiry from local disk (panel/LB host). */
+export async function readLetsEncryptCertExpiry(domain: string): Promise<LetsEncryptCertExpiry> {
+  const { certFullChainPath } = letsEncryptLivePaths(domain);
+  try {
+    const { stdout } = await runProcess(
+      "openssl",
+      ["x509", "-enddate", "-noout", "-in", certFullChainPath],
+      15_000
+    );
+    return parseOpenSslEndDateLine(String(stdout));
+  } catch {
+    return { expiresAt: null, daysLeft: null, error: "No Let's Encrypt certificate file for this domain yet" };
+  }
+}
+
+async function reloadNginxIfPresent(): Promise<void> {
+  try {
+    await runProcess(
+      "bash",
+      [
+        "-lc",
+        "nginx -t 2>/dev/null && (systemctl reload nginx 2>/dev/null || service nginx reload 2>/dev/null || nginx -s reload 2>/dev/null || true)",
+      ],
+      30_000
+    );
+  } catch {
+    /* optional */
+  }
+}
+
 export async function issueLetsEncryptCertificate(
   domains: string[],
-  email: string
+  email?: string | null
 ): Promise<CertbotIssueResult> {
   if (process.platform !== "linux") {
     return {
@@ -71,9 +109,11 @@ export async function issueLetsEncryptCertificate(
     return { ok: false, message: "At least one domain is required." };
   }
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, message: "A valid contact email is required for Let's Encrypt." };
-  }
+  const contactEmail = pickCertbotEmail([
+    email,
+    process.env.NEXLIFY_CERTBOT_EMAIL,
+    process.env.CERTBOT_EMAIL,
+  ]);
 
   const { certbotPath } = await getBinPaths();
   if (!(await executable(certbotPath))) {
@@ -88,10 +128,13 @@ export async function issueLetsEncryptCertificate(
     "certonly",
     "--non-interactive",
     "--agree-tos",
-    "--email",
-    email,
     "--keep-until-expiring",
   ];
+  if (contactEmail) {
+    baseArgs.push("--email", contactEmail);
+  } else {
+    baseArgs.push("--register-unsafely-without-email");
+  }
   const domainArgs = domains.flatMap((d) => ["-d", d]);
 
   const attempts: { mode: string; args: string[] }[] = [
@@ -113,11 +156,12 @@ export async function issueLetsEncryptCertificate(
     const { code, stdout, stderr } = await runProcess(certbotPath, attempt.args);
     lastLog = [stdout, stderr].filter(Boolean).join("\n").trim();
     if (code === 0) {
+      await reloadNginxIfPresent();
       const certFullChainPath = `/etc/letsencrypt/live/${primary}/fullchain.pem`;
       const certKeyPath = `/etc/letsencrypt/live/${primary}/privkey.pem`;
       return {
         ok: true,
-        message: `Certificate issued (${attempt.mode} plugin). Configure nginx to use the cert paths below and reload nginx.`,
+        message: `Let's Encrypt certificate issued (${attempt.mode}). Nginx reloaded when available.`,
         certFullChainPath,
         certKeyPath,
         log: lastLog.slice(-4000),

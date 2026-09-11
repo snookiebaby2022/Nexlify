@@ -36,7 +36,11 @@ import {
   edgeRedisGetSeg,
   edgeRedisSetSeg,
 } from "./edge-redis-auth.mjs";
-import { edgeSlotsEnabled, edgeTryAcquireConnSlot } from "./edge-redis-slots.mjs";
+import {
+  edgeSlotsEnabled,
+  edgeTryAcquireConnSlot,
+  edgeReleaseConnSlot,
+} from "./edge-redis-slots.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -472,6 +476,13 @@ function isInfraOrLoopbackIp(ip) {
 function clientIp(req) {
   const peer = socketIp(req);
   const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback,45.88.138.18").toLowerCase();
+  const trustCloudflare = /^(1|true|yes|always)$/i.test(
+    String(process.env.IPTV_EDGE_TRUST_CLOUDFLARE || "")
+  );
+  if (trustCloudflare) {
+    const cfIp = stripIp(req.headers["cf-connecting-ip"]);
+    if (isValidIpLiteral(cfIp) && !isInfraOrLoopbackIp(cfIp)) return cfIp;
+  }
   const trustedPeers = new Set(
     trust
       .split(",")
@@ -687,9 +698,14 @@ function clearPlaybackSession(ctx) {
 }
 
 function endPlaybackSession(ctx) {
-  if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  if (!ctx?.lineId || !ctx?.streamId) return;
   clearPlaybackSession(ctx);
   pendingPulseBatch.delete(playbackSessionKey(ctx));
+  void edgeReleaseConnSlot(ctx.lineId, {
+    clientIp: ctx.ip,
+    streamId: ctx.streamId,
+  });
+  if (!INTERNAL_SECRET) return;
   const body = JSON.stringify({
     lineId: ctx.lineId,
     streamId: ctx.streamId,

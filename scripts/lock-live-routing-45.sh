@@ -4,8 +4,9 @@
 #   bash scripts/lock-live-routing-45.sh          # apply + lock
 #   bash scripts/lock-live-routing-45.sh unlock    # chattr -i only
 set -euo pipefail
-if ! hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx '45.88.138.18'; then
-  echo "ABORT: live routing lock may only run on server 45 (45.88.138.18)" >&2
+ALLOW="${NEXLIFY_LOCK_LIVE_ROUTING_HOSTS:-45.88.138.18 75.119.137.174}"
+if ! hostname -I 2>/dev/null | tr ' ' '\n' | grep -qxE "$(echo "$ALLOW" | tr ' ' '|')"; then
+  echo "ABORT: live routing lock may only run on: $ALLOW" >&2
   exit 1
 fi
 cd /opt/nexlify-panel 2>/dev/null || cd "$(dirname "$0")/.."
