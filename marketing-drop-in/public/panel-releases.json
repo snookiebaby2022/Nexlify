@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.91",
+  "latestVersion": "2.0.92",
   "releases": [
+    {
+      "version": "2.0.92",
+      "date": "2026-09-11",
+      "channel": "stable",
+      "summary": "Disabled-streams management from Issues, Plex VOD harden, and Prisma DB parity guards on panel updates.",
+      "changelog": [
+        "Dashboard Issues View all opens disabled streams (50/page) with select-all activate, deactivate, probe, delete",
+        "Activate all / Delete all for inactive catalog rows via fix-inactive API",
+        "Plex VOD prefers direct library parts; never invent HLS for edge splice; plex.tv discovery on reachability failure",
+        "Live-auth cache TTL raised; panel update/restart refuse mismatched Prisma schema vs DB"
+      ],
+      "fixes": [
+        "Plex movies/series failed when PMS was down or panel invented HLS playlists for VOD splice",
+        "17k+ disabled streams only had Activate all with no granular review/delete path",
+        "Panel updates could compile a Prisma client against a lagging database"
+      ],
+      "notes": [
+        "Disabled streams stay in the catalog until activated or deleted — players cannot see them while inactive.",
+        "Hard-refresh Admin after update so Issues → View all appears."
+      ]
+    },
     {
       "version": "2.0.91",
       "date": "2026-09-10",
