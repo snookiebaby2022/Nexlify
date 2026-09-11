@@ -4,9 +4,9 @@ import { PanelDashboard } from "@/components/panel-dashboard";
 import { LazyDashboardSection } from "@/components/lazy-dashboard-section";
 import { OpsStatusGlance } from "@/components/ops-status-glance";
 
-type DashboardStats = Awaited<ReturnType<typeof import("@/lib/dashboard-stats").loadAdminDashboardStats>>;
+type InitialStats = Awaited<ReturnType<typeof import("@/lib/dashboard-stats").loadHeaderStats>> | null;
 
-export function AdminDashboardClient({ initialStats = null }: { initialStats?: DashboardStats | null }) {
+export function AdminDashboardClient({ initialStats = null }: { initialStats?: InitialStats }) {
   return (
     <div className="space-y-6">
       <LazyDashboardSection minHeight="2.5rem">

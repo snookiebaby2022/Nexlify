@@ -77,20 +77,39 @@ function QuickActionBtn({
 
 export function PanelMobileDashboard({
   variant,
+  statsUrl,
   widgetsUrl,
   linesHref,
   streamsHref,
   connectionsHref,
   ticketsHref,
-  dashboard: d,
+  dashboard: initialDashboard,
   stackHealthy = true,
 }: MobileDashProps) {
   const isReseller = variant === "reseller";
+  const [dashboard, setDashboard] = useState(initialDashboard);
   const [expiring, setExpiring] = useState<ExpiringLineRow[]>([]);
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    setDashboard(initialDashboard);
+  }, [initialDashboard]);
+
+  const loadLightStats = useCallback(() => {
+    const url = statsUrl.includes("?") ? `${statsUrl}&light=1` : `${statsUrl}?light=1`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { dashboard?: MobileDashProps["dashboard"] } | null) => {
+        if (data?.dashboard) setDashboard(data.dashboard);
+      })
+      .catch(() => {});
+  }, [statsUrl]);
+
   const loadWidgets = useCallback(() => {
-    fetch(widgetsUrl)
+    const url = widgetsUrl.includes("?")
+      ? `${widgetsUrl}&light=1`
+      : `${widgetsUrl}?light=1`;
+    fetch(url)
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { expiringLines?: ExpiringLineRow[] } | null) => {
         const rows = Array.isArray(data?.expiringLines) ? data.expiringLines : [];
@@ -100,10 +119,17 @@ export function PanelMobileDashboard({
   }, [widgetsUrl]);
 
   useEffect(() => {
+    loadLightStats();
     loadWidgets();
-    return startVisibleInterval(loadWidgets, 120_000);
-  }, [loadWidgets]);
+    const stopStats = startVisibleInterval(loadLightStats, 60_000);
+    const stopWidgets = startVisibleInterval(loadWidgets, 120_000);
+    return () => {
+      stopStats();
+      stopWidgets();
+    };
+  }, [loadLightStats, loadWidgets]);
 
+  const d = dashboard;
   const connMax = d && d.maxConnections && d.maxConnections > 0 ? String(d.maxConnections) : "∞";
   const serverStatus = stackHealthy ? "● Healthy" : "● Check";
 
@@ -140,6 +166,8 @@ export function PanelMobileDashboard({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search panel"
+          enterKeyHint="search"
+          autoComplete="off"
         />
       </div>
 
@@ -189,22 +217,17 @@ export function PanelMobileDashboard({
         <div className="panel-mobile-activity-list">
           {filteredExpiring.map((line) => (
             <article key={line.id} className="panel-mobile-activity-card">
-              <div className="panel-mobile-activity-card-body">
+              <div className="panel-mobile-activity-card-body min-w-0 flex-1">
                 <p className="panel-mobile-activity-card-title">{line.username}</p>
                 <p className="panel-mobile-activity-card-meta">
-                  <span
-                    className="panel-mobile-status-badge panel-mobile-status-badge--active"
-                  >
+                  <span className="panel-mobile-status-badge panel-mobile-status-badge--active">
                     {line.daysLeft <= 0 ? "Expired" : "Active"}
                   </span>
                   {" · "}
                   Expires: {line.expiresAt ? formatDateTime(line.expiresAt).split(",")[0] : "—"}
                 </p>
               </div>
-              <Link
-                href={`${linesHref}?edit=${line.id}`}
-                className="panel-mobile-activity-manage"
-              >
+              <Link href={`${linesHref}?edit=${line.id}`} className="panel-mobile-activity-manage">
                 Manage
                 <ChevronRight size={16} />
               </Link>

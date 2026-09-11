@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { DashboardWidgetsPayload } from "@/lib/dashboard-widgets";
+import { startVisibleInterval } from "@/lib/perf-polling";
 
 type DashboardWidgetsContextValue = {
   data: DashboardWidgetsPayload | null;
@@ -42,8 +43,7 @@ export function DashboardWidgetsProvider({
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 90_000);
-    return () => clearInterval(t);
+    return startVisibleInterval(refresh, 120_000);
   }, [refresh]);
 
   return (

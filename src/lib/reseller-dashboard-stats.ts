@@ -3,6 +3,23 @@ import { PanelRole } from "@prisma/client";
 import { getResellerDashboardSummary } from "@/lib/dashboard-server-metrics";
 import { formatAuditAction } from "@/lib/audit-log";
 import type { SessionUser } from "@/lib/auth";
+import { cacheGetOrSet } from "@/lib/cache";
+
+export async function loadResellerHeaderStats(session: SessionUser) {
+  const [dashboard, credits] = await Promise.all([
+    cacheGetOrSet(`stats:reseller-summary:${session.id}`, 30, () =>
+      getResellerDashboardSummary(session.id),
+    ),
+    prisma.panelUser.findUnique({
+      where: { id: session.id },
+      select: { credits: true },
+    }),
+  ]);
+  return {
+    credits: credits?.credits ?? 0,
+    dashboard,
+  };
+}
 
 export async function loadResellerDashboardStats(session: SessionUser) {
   const user = await prisma.panelUser.findUnique({
@@ -10,13 +27,14 @@ export async function loadResellerDashboardStats(session: SessionUser) {
     include: { resellerBouquets: { include: { bouquet: true } } },
   });
 
-  const lines = await prisma.line.count({ where: { ownerId: session.id } });
-  const activeLines = await prisma.line.count({
-    where: { ownerId: session.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
-  });
-
-  const [dashboard, logs] = await Promise.all([
-    getResellerDashboardSummary(session.id),
+  const [lines, activeLines, dashboard, logs] = await Promise.all([
+    prisma.line.count({ where: { ownerId: session.id } }),
+    prisma.line.count({
+      where: { ownerId: session.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
+    }),
+    cacheGetOrSet(`stats:reseller-summary:${session.id}`, 30, () =>
+      getResellerDashboardSummary(session.id),
+    ),
     prisma.activityLog.findMany({
       where: {
         userId: session.id,

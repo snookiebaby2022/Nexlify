@@ -6,8 +6,9 @@ test("connectionCapacityAllows allows first session on a 1-conn line", () => {
   assert.equal(connectionCapacityAllows(0, 1, 0, "192.0.2.10"), true);
 });
 
-test("connectionCapacityAllows rejects a different IP when line is at capacity", () => {
-  assert.equal(connectionCapacityAllows(1, 1, 0, "198.51.100.5"), false);
+test("connectionCapacityAllows admits a different IP on maxConnections=1 (reclaim/kick)", () => {
+  // Single-slot lines reclaim via pruneViewerStreamsToCap — do not 403 on CF IP drift.
+  assert.equal(connectionCapacityAllows(1, 1, 0, "198.51.100.5"), true);
 });
 
 test("connectionCapacityAllows allows same-stream reconnect at capacity", () => {

@@ -1,9 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo, useCallback, Suspense, useRef } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  memo,
+  useCallback,
+  Suspense,
+  useRef,
+  type DragEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen, GripVertical, Plus, Zap } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowUpToLine,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+  FolderOpen,
+  GripVertical,
+  Plus,
+  Zap,
+} from "lucide-react";
 import {
   CategoryTypeTabs,
   CATEGORY_TYPE_LABELS,
@@ -220,40 +242,62 @@ function flattenTree(nodes: CategoryNode[], expanded: Set<string>): CategoryNode
   return result;
 }
 
+type CategoryDropMode = "before" | "after" | "nest";
+
+type CategoryDropHint = {
+  targetId: string;
+  mode: CategoryDropMode;
+};
+
+function categoryDropModeForPointer(
+  dragId: string,
+  targetId: string,
+  clientY: number,
+  rowTop: number,
+  rowHeight: number,
+  allCategories: CategoryRow[]
+): CategoryDropMode | null {
+  if (dragId === targetId) return null;
+  if (collectDescendantIdsLocal(dragId, allCategories).has(targetId)) return null;
+  const from = allCategories.find((c) => c.id === dragId);
+  const to = allCategories.find((c) => c.id === targetId);
+  if (!from || !to) return null;
+  const sameParent = (from.parentId ?? null) === (to.parentId ?? null);
+  if (!sameParent) return "nest";
+  const rel = (clientY - rowTop) / Math.max(rowHeight, 1);
+  return rel < 0.5 ? "before" : "after";
+}
+
 const TreeRow = memo(function TreeRow({
   node,
   expanded,
   allCategories,
   dragId,
-  dropTargetId,
+  dropHint,
   onToggle,
   onRemove,
   onMove,
+  onMoveToTop,
+  onMoveToBottom,
   onRename,
   onReparent,
   onStreamsChanged,
-  onDragStart,
-  onDragEnd,
-  onDragOverRow,
-  onDragLeaveRow,
-  onDropOnRow,
+  onPointerDragStart,
 }: {
   node: CategoryNode;
   expanded: boolean;
   allCategories: CategoryRow[];
   dragId: string | null;
-  dropTargetId: string | null;
+  dropHint: CategoryDropHint | null;
   onToggle: () => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  onMoveToTop: () => void;
+  onMoveToBottom: () => void;
   onRename: (id: string, name: string) => void;
   onReparent: (id: string, parentId: string | null) => void;
   onStreamsChanged: () => void;
-  onDragStart: (id: string) => void;
-  onDragEnd: () => void;
-  onDragOverRow: (id: string) => void;
-  onDragLeaveRow: () => void;
-  onDropOnRow: (id: string) => void;
+  onPointerDragStart: (id: string, e: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(node.name);
@@ -265,12 +309,10 @@ const TreeRow = memo(function TreeRow({
   const [bulkBusy, setBulkBusy] = useState(false);
   const didDragRef = useRef(false);
   const hasChildren = node.children.length > 0;
+  const rowRef = useRef<HTMLDivElement>(null);
   const isDragging = dragId === node.id;
-  const isDropTarget =
-    dropTargetId === node.id &&
-    dragId != null &&
-    dragId !== node.id &&
-    !collectDescendantIdsLocal(dragId, allCategories).has(node.id);
+  const isDropRow = dropHint?.targetId === node.id && dragId != null && !isDragging;
+  const dropMode = isDropRow ? dropHint!.mode : null;
   const indent = node.depth * 24;
   const activeCount = node.activeCount ?? 0;
   const inactiveCount = node.inactiveCount ?? 0;
@@ -402,26 +444,31 @@ const TreeRow = memo(function TreeRow({
   }
 
   return (
-    <div>
+    <div className="relative">
+      {dropMode === "before" ? (
+        <div
+          className="pointer-events-none absolute left-2 right-2 top-0 z-10 h-0.5 rounded-full"
+          style={{ background: "var(--accent)", boxShadow: "0 0 8px rgba(0,192,239,0.65)" }}
+          aria-hidden
+        />
+      ) : null}
       <div
-        className="flex items-center gap-2 px-3 py-2 border-b"
+        ref={rowRef}
+        data-category-row-id={node.id}
+        className="relative flex items-center gap-2 px-3 py-2.5 border-b min-h-[48px] transition-[opacity,transform] duration-100"
         style={{
           borderColor: "var(--border)",
           paddingLeft: `${12 + indent}px`,
-          background: isDropTarget ? "rgba(0,192,239,0.12)" : isDragging ? "rgba(0,192,239,0.08)" : undefined,
-        }}
-          onDragOver={(e) => {
-          if (dragId == null || dragId === node.id) return;
-          if (collectDescendantIdsLocal(dragId, allCategories).has(node.id)) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-          onDragOverRow(node.id);
-        }}
-        onDrop={(e) => {
-          if (dragId == null || dragId === node.id) return;
-          if (collectDescendantIdsLocal(dragId, allCategories).has(node.id)) return;
-          e.preventDefault();
-          onDropOnRow(node.id);
+          opacity: isDragging ? 0.38 : 1,
+          transform: isDragging ? "scale(0.985)" : undefined,
+          background:
+            dropMode === "nest"
+              ? "rgba(0,192,239,0.14)"
+              : isDragging
+                ? "rgba(0,192,239,0.06)"
+                : undefined,
+          outline: dropMode === "nest" ? "2px dashed var(--accent)" : undefined,
+          outlineOffset: dropMode === "nest" ? -2 : undefined,
         }}
       >
         <button
@@ -488,23 +535,25 @@ const TreeRow = memo(function TreeRow({
         ) : (
           <>
             <div
-              className="flex flex-1 items-center gap-1.5 min-w-0 cursor-grab active:cursor-grabbing select-none"
-              draggable={!editing}
-              onDragStart={(e) => {
+              role="button"
+              tabIndex={editing ? -1 : 0}
+              aria-disabled={editing}
+              className="shrink-0 flex items-center justify-center w-11 h-11 -ml-1 rounded-md touch-none cursor-grab active:cursor-grabbing hover:bg-white/10 select-none"
+              style={{ opacity: editing ? 0.35 : 1, pointerEvents: editing ? "none" : "auto" }}
+              title="Press and drag to reorder (top/bottom half of row = insert line). Save when done."
+              aria-label={`Drag ${node.name} to reorder`}
+              onPointerDown={(e) => {
+                if (editing || e.button !== 0) return;
+                e.preventDefault();
+                e.stopPropagation();
                 didDragRef.current = true;
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", node.id);
-                onDragStart(node.id);
+                onPointerDragStart(node.id, e);
               }}
-              onDragEnd={() => {
-                onDragEnd();
-                setTimeout(() => {
-                  didDragRef.current = false;
-                }, 0);
-              }}
-              title="Drag to reorder among siblings"
+              onClick={(e) => e.preventDefault()}
             >
-              <GripVertical size={14} className="shrink-0 touch-none" style={{ color: "var(--muted)" }} />
+              <GripVertical size={20} style={{ color: "var(--muted)" }} />
+            </div>
+            <div className="flex flex-1 items-center gap-1.5 min-w-0 select-none min-h-[40px]">
               <button
                 type="button"
                 className="flex-1 text-left font-medium text-sm hover:opacity-90 min-w-0 truncate"
@@ -579,20 +628,38 @@ const TreeRow = memo(function TreeRow({
               <button
                 type="button"
                 className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
-                title="Move up"
-                aria-label="Move category up"
-                onClick={() => onMove(-1)}
+                title="Move to top of sibling list"
+                aria-label="Move category to top"
+                onClick={onMoveToTop}
               >
-                <ArrowUp size={18} />
+                <ArrowUpToLine size={16} />
               </button>
               <button
                 type="button"
                 className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
-                title="Move down"
+                title="Move up one"
+                aria-label="Move category up"
+                onClick={() => onMove(-1)}
+              >
+                <ArrowUp size={16} />
+              </button>
+              <button
+                type="button"
+                className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move down one"
                 aria-label="Move category down"
                 onClick={() => onMove(1)}
               >
-                <ArrowDown size={18} />
+                <ArrowDown size={16} />
+              </button>
+              <button
+                type="button"
+                className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move to bottom of sibling list"
+                aria-label="Move category to bottom"
+                onClick={onMoveToBottom}
+              >
+                <ArrowDownToLine size={16} />
               </button>
               <button
                 type="button"
@@ -605,6 +672,13 @@ const TreeRow = memo(function TreeRow({
           </>
         )}
       </div>
+      {dropMode === "after" ? (
+        <div
+          className="pointer-events-none absolute left-2 right-2 bottom-0 z-10 h-0.5 rounded-full"
+          style={{ background: "var(--accent)", boxShadow: "0 0 8px rgba(0,192,239,0.65)" }}
+          aria-hidden
+        />
+      ) : null}
 
       {showStreams && (
         <div
@@ -1399,8 +1473,21 @@ function ManagementCategoriesInner() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
-  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<CategoryDropHint | null>(null);
+  const [rootDropActive, setRootDropActive] = useState(false);
+  const [pointerDragging, setPointerDragging] = useState(false);
+  const [orderDirty, setOrderDirty] = useState(false);
   const [catQuery, setCatQuery] = useState("");
+  const categoryListRef = useRef<HTMLDivElement>(null);
+  const tabCategoriesRef = useRef<CategoryRow[]>([]);
+  const dropHintRef = useRef<CategoryDropHint | null>(null);
+  const rootDropActiveRef = useRef(false);
+
+  function sortSiblings(categories: CategoryRow[], parentId: string | null): CategoryRow[] {
+    return categories
+      .filter((c) => (c.parentId ?? null) === parentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }
 
   function loadType(type: CategoryTab) {
     setLoadingCategories(true);
@@ -1451,6 +1538,11 @@ function ManagementCategoriesInner() {
   }, [searchParams]);
 
   function changeTab(next: CategoryTab) {
+    if (next === tab) return;
+    if (orderDirty && !confirm("You have unsaved category order changes. Discard them and switch tab?")) {
+      return;
+    }
+    setOrderDirty(false);
     setTab(next);
     const base = pathname.includes("/management/categories")
       ? "/admin/management/categories"
@@ -1458,6 +1550,114 @@ function ManagementCategoriesInner() {
     router.replace(`${base}?type=${next}`);
   }
   const tabCategories = categoriesByType[tab] ?? [];
+  tabCategoriesRef.current = tabCategories;
+  dropHintRef.current = dropHint;
+  rootDropActiveRef.current = rootDropActive;
+
+  function updateCategoryDropFromPoint(clientX: number, clientY: number, fromId: string) {
+    const cats = tabCategoriesRef.current;
+    const rootEl = document.querySelector("[data-category-root-drop]");
+    if (rootEl) {
+      const r = rootEl.getBoundingClientRect();
+      if (
+        clientX >= r.left &&
+        clientX <= r.right &&
+        clientY >= r.top &&
+        clientY <= r.bottom
+      ) {
+        setDropHint(null);
+        setRootDropActive(true);
+        return;
+      }
+    }
+    setRootDropActive(false);
+    const row = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest("[data-category-row-id]") as HTMLElement | null;
+    if (!row) {
+      setDropHint(null);
+      return;
+    }
+    const targetId = row.getAttribute("data-category-row-id");
+    if (!targetId) {
+      setDropHint(null);
+      return;
+    }
+    const rect = row.getBoundingClientRect();
+    const mode = categoryDropModeForPointer(
+      fromId,
+      targetId,
+      clientY,
+      rect.top,
+      rect.height,
+      cats
+    );
+    if (!mode) {
+      setDropHint(null);
+      return;
+    }
+    setDropHint((prev) =>
+      prev?.targetId === targetId && prev.mode === mode ? prev : { targetId, mode }
+    );
+  }
+
+  function scrollCategoryListWhileDragging(clientY: number) {
+    const list = categoryListRef.current;
+    if (!list) return;
+    const rect = list.getBoundingClientRect();
+    const edge = 72;
+    if (clientY < rect.top + edge) list.scrollTop -= 18;
+    else if (clientY > rect.bottom - edge) list.scrollTop += 18;
+  }
+
+  function commitCategoryDrop(fromId: string) {
+    const cats = tabCategoriesRef.current;
+    const hint = dropHintRef.current;
+    const toRoot = rootDropActiveRef.current;
+    const from = cats.find((c) => c.id === fromId);
+    if (!from) return;
+
+    if (toRoot) {
+      void reparentCategory(fromId, null);
+      setMsg("Moved to top level.");
+      return;
+    }
+
+    if (!hint) {
+      setMsg("Release over another category row (blue line) to reorder.");
+      return;
+    }
+
+    const to = cats.find((c) => c.id === hint.targetId);
+    if (!to) return;
+    if (collectDescendantIdsLocal(fromId, cats).has(hint.targetId)) return;
+
+    const sameParent = (from.parentId ?? null) === (to.parentId ?? null);
+    if (sameParent && hint.mode !== "nest") {
+      reorderSiblings(fromId, hint.targetId, hint.mode);
+      setMsg("Order updated — click Save order to publish to apps.");
+    } else if (!sameParent) {
+      void reparentCategory(fromId, hint.targetId);
+      setExpanded((prev) => new Set(prev).add(hint.targetId));
+      setMsg("Nested under new parent — click Save order to keep.");
+    } else {
+      setMsg("Could not drop here — try another row.");
+      return;
+    }
+  }
+
+  function endCategoryPointerDrag(fromId: string | null) {
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+    setPointerDragging(false);
+    if (fromId) commitCategoryDrop(fromId);
+    setDragId(null);
+    setDropHint(null);
+    setRootDropActive(false);
+  }
+
+  const draggingCategoryName =
+    dragId != null ? tabCategories.find((c) => c.id === dragId)?.name : undefined;
 
   const parentSelectOptions = useMemo(
     () => labeledCategoryOptions(tabCategories),
@@ -1495,7 +1695,7 @@ function ManagementCategoriesInner() {
       setMsg(data.error ?? "Failed");
       return;
     }
-    setMsg("Category added — drag the name or use arrows to reorder siblings.");
+    setMsg("Category added — reorder it below, then click Save order.");
     setName("");
     setParentId("");
     setIsAdult(false);
@@ -1542,7 +1742,7 @@ function ManagementCategoriesInner() {
     refreshCategories();
   }
 
-  async function saveSiblingOrder(list: CategoryRow[]) {
+  function applySiblingOrder(list: CategoryRow[]) {
     const orderIndex = new Map(list.map((c, i) => [c.id, i]));
     setCategoriesByType((prev) => ({
       ...prev,
@@ -1550,53 +1750,127 @@ function ManagementCategoriesInner() {
         orderIndex.has(c.id) ? { ...c, sortOrder: orderIndex.get(c.id)! } : c
       ),
     }));
-    setBusy(true);
-    const res = await fetch("/api/admin/categories", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order: list.map((c) => c.id) }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setMsg(data.error ?? "Reorder failed");
-      refreshCategories();
-      return false;
-    }
-    return true;
+    setOrderDirty(true);
   }
 
-  async function move(id: string, dir: -1 | 1) {
+  async function saveCategoryOrder() {
+    const groups = new Map<string, CategoryRow[]>();
+    for (const c of tabCategories) {
+      const key = c.parentId ?? "";
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(c);
+      else groups.set(key, [c]);
+    }
+    setBusy(true);
+    setMsg("");
+    let failed = false;
+    for (const siblings of groups.values()) {
+      const list = [...siblings].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+      );
+      const res = await fetch("/api/admin/categories", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: list.map((c) => c.id) }),
+      });
+      if (!res.ok) {
+        failed = true;
+        const data = await res.json().catch(() => ({}));
+        setMsg(data.error ?? "Failed to save category order");
+        break;
+      }
+    }
+    setBusy(false);
+    if (failed) {
+      refreshCategories();
+      setOrderDirty(false);
+      return;
+    }
+    setOrderDirty(false);
+    setMsg("Category order saved.");
+    refreshCategories();
+  }
+
+  function discardCategoryOrder() {
+    if (!orderDirty) return;
+    if (!confirm("Discard unsaved order changes and reload from the server?")) return;
+    setOrderDirty(false);
+    setMsg("");
+    refreshCategories();
+  }
+
+  function move(id: string, dir: -1 | 1) {
     const target = tabCategories.find((c) => c.id === id);
     if (!target) return;
-    const siblings = tabCategories
-      .filter((c) => (c.parentId ?? null) === (target.parentId ?? null))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const siblings = sortSiblings(tabCategories, target.parentId ?? null);
     const idx = siblings.findIndex((c) => c.id === id);
     const j = idx + dir;
     if (idx < 0 || j < 0 || j >= siblings.length) return;
     const list = [...siblings];
     [list[idx], list[j]] = [list[j], list[idx]];
-    await saveSiblingOrder(list);
+    applySiblingOrder(list);
   }
 
-  async function reorderSiblings(fromId: string, toId: string) {
+  function moveToExtreme(id: string, where: "top" | "bottom") {
+    const target = tabCategories.find((c) => c.id === id);
+    if (!target) return;
+    const siblings = sortSiblings(tabCategories, target.parentId ?? null);
+    const idx = siblings.findIndex((c) => c.id === id);
+    if (idx < 0) return;
+    const list = [...siblings];
+    const [item] = list.splice(idx, 1);
+    if (where === "top") list.unshift(item);
+    else list.push(item);
+    applySiblingOrder(list);
+  }
+
+  function reorderSiblings(fromId: string, toId: string, place: "before" | "after") {
     if (fromId === toId) return;
     const from = tabCategories.find((c) => c.id === fromId);
     const to = tabCategories.find((c) => c.id === toId);
     if (!from || !to) return;
     if ((from.parentId ?? null) !== (to.parentId ?? null)) return;
-    const siblings = tabCategories
-      .filter((c) => (c.parentId ?? null) === (from.parentId ?? null))
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const siblings = sortSiblings(tabCategories, from.parentId ?? null);
     const fromIdx = siblings.findIndex((c) => c.id === fromId);
     const toIdx = siblings.findIndex((c) => c.id === toId);
     if (fromIdx < 0 || toIdx < 0) return;
+    let insertAt = toIdx + (place === "after" ? 1 : 0);
     const list = [...siblings];
     const [item] = list.splice(fromIdx, 1);
-    list.splice(toIdx, 0, item);
-    await saveSiblingOrder(list);
+    if (fromIdx < insertAt) insertAt -= 1;
+    list.splice(insertAt, 0, item);
+    applySiblingOrder(list);
   }
+
+  function beginCategoryPointerDrag(id: string, e: ReactPointerEvent<HTMLElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragId(id);
+    setDropHint(null);
+    setRootDropActive(false);
+    setPointerDragging(true);
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+    updateCategoryDropFromPoint(e.clientX, e.clientY, id);
+  }
+
+  useEffect(() => {
+    if (!pointerDragging || !dragId) return;
+    const fromId = dragId;
+    const onMove = (e: PointerEvent) => {
+      updateCategoryDropFromPoint(e.clientX, e.clientY, fromId);
+      scrollCategoryListWhileDragging(e.clientY);
+    };
+    const onUp = () => endCategoryPointerDrag(fromId);
+    const onCancel = () => endCategoryPointerDrag(fromId);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+  }, [pointerDragging, dragId]);
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -1669,7 +1943,7 @@ function ManagementCategoriesInner() {
       >
         <p>
           <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories use XUI folder names like{" "}
-          <code>UK | Entertainment</code>, <code>US | Fubo</code>, <code>XXX | Adult</code> — same order in StbEmu/Xtream apps (drag names or use auto-order below).
+          <code>UK | Entertainment</code>, <code>US | Fubo</code>, <code>XXX | Adult</code> — same order in StbEmu/Xtream apps. Drag rows or use the arrow buttons, then click <strong>Save order</strong>.
         </p>
         <ul className="list-disc pl-5 space-y-1" style={{ color: "var(--muted)" }}>
           <li>
@@ -1760,28 +2034,63 @@ function ManagementCategoriesInner() {
 
       {dragId ? (
         <div
+          data-category-root-drop
           className="rounded-lg border px-3 py-2 text-sm"
           style={{
-            borderColor: dropTargetId === "__root__" ? "var(--accent)" : "var(--border)",
-            background: dropTargetId === "__root__" ? "rgba(0,192,239,0.12)" : "var(--bg-card)",
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            setDropTargetId("__root__");
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragId) void reparentCategory(dragId, null);
-            setDragId(null);
-            setDropTargetId(null);
+            borderColor: rootDropActive ? "var(--accent)" : "var(--border)",
+            background: rootDropActive ? "rgba(0,192,239,0.12)" : "var(--bg-card)",
+            boxShadow: rootDropActive ? "0 0 0 2px rgba(0,192,239,0.35)" : undefined,
           }}
         >
-          Drop here to make this category top-level
+          <span className="font-medium" style={{ color: "var(--accent)" }}>
+            Dragging: {draggingCategoryName ?? "category"}
+          </span>
+          <span style={{ color: "var(--muted)" }}>
+            {" "}
+            — release over a row (blue line = insert, dashed = nest under). Or highlight this box and release to make
+            top-level. Then click <strong>Save order</strong>.
+          </span>
         </div>
       ) : null}
 
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+      <div
+        className="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
+        style={{
+          borderColor: orderDirty ? "var(--accent)" : "var(--border)",
+          background: orderDirty ? "rgba(0,192,239,0.08)" : "var(--bg-card)",
+        }}
+      >
+        <p className="text-sm flex-1 min-w-[200px]" style={{ color: "var(--muted)" }}>
+          Drag the grip: blue line above/below a row inserts there among siblings; dashed highlight nests under another parent. Arrows and top/bottom buttons work too.
+          {orderDirty ? (
+            <span className="block mt-1 text-amber-400/90">Unsaved order changes — save before leaving this tab.</span>
+          ) : null}
+        </p>
+        <button
+          type="button"
+          disabled={!orderDirty || busy}
+          onClick={() => void saveCategoryOrder()}
+          className="rounded px-5 py-2 text-sm font-medium text-white disabled:opacity-40"
+          style={{ background: "var(--accent)" }}
+        >
+          {busy ? "Saving…" : "Save order"}
+        </button>
+        <button
+          type="button"
+          disabled={!orderDirty || busy}
+          onClick={discardCategoryOrder}
+          className="rounded px-4 py-2 text-sm border disabled:opacity-40"
+          style={{ borderColor: "var(--border)" }}
+        >
+          Discard
+        </button>
+      </div>
+
+      <div
+        ref={categoryListRef}
+        className="rounded-lg border overflow-y-auto max-h-[min(70vh,720px)]"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
         {loadingCategories && flat.length === 0 ? (
           <p className="p-6 text-sm text-center" style={{ color: "var(--muted)" }}>
             Loading categories…
@@ -1798,7 +2107,7 @@ function ManagementCategoriesInner() {
             expanded={displayExpanded.has(node.id)}
             allCategories={tabCategories}
             dragId={dragId}
-            dropTargetId={dropTargetId}
+            dropHint={dropHint}
             onToggle={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
@@ -1809,36 +2118,16 @@ function ManagementCategoriesInner() {
             }
             onRemove={() => remove(node.id)}
             onMove={(dir) => move(node.id, dir)}
+            onMoveToTop={() => moveToExtreme(node.id, "top")}
+            onMoveToBottom={() => moveToExtreme(node.id, "bottom")}
             onRename={renameCategory}
             onReparent={reparentCategory}
             onStreamsChanged={refreshCategories}
-            onDragStart={setDragId}
-            onDragEnd={() => {
-              setDragId(null);
-              setDropTargetId(null);
-            }}
-            onDragOverRow={setDropTargetId}
-            onDragLeaveRow={() => {}}
-            onDropOnRow={(targetId) => {
-              if (!dragId) return;
-              const from = tabCategories.find((c) => c.id === dragId);
-              const to = tabCategories.find((c) => c.id === targetId);
-              if (!from || !to) return;
-              if (collectDescendantIdsLocal(dragId, tabCategories).has(targetId)) return;
-              if ((from.parentId ?? null) === (to.parentId ?? null)) {
-                void reorderSiblings(dragId, targetId);
-              } else {
-                void reparentCategory(dragId, targetId);
-                setExpanded((prev) => new Set(prev).add(targetId));
-              }
-              setDragId(null);
-              setDropTargetId(null);
-            }}
+            onPointerDragStart={beginCategoryPointerDrag}
           />
         ))
         )}
       </div>
-      {busy && <p className="text-sm" style={{ color: "var(--muted)" }}>Saving order…</p>}
     </div>
   );
 }

@@ -109,45 +109,51 @@ async function claimNextPlexSync(): Promise<{
 } | null> {
   return withPrismaRetry(() =>
     prisma.$transaction(
-    async (tx) => {
-      const locked = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM "MediaIntegration"
-        WHERE type = 'plex' AND (config->>'syncQueued') = 'true'
-        LIMIT 1
-        FOR UPDATE SKIP LOCKED
-      `;
-      const id = locked[0]?.id;
-      if (!id) return null;
-      const row = await tx.mediaIntegration.findUnique({ where: { id } });
-      if (!row) return null;
-      const cfg = asConfig(row.config);
-      if (cfg.syncQueued !== true) return null;
-      const progress = readSyncProgress(cfg);
-      const jobId = String(cfg.syncJobId ?? progress?.jobId ?? "") || randomUUID();
-      const at = new Date().toISOString();
-      const starting: IntegrationSyncProgress = {
-        ...(progress ?? queuedProgress(jobId)),
-        jobId,
-        status: "running",
-        phase: "starting",
-        message: "Worker picked up the job. Connecting to Plex…",
-        updatedAt: at,
-        steps: [...(progress?.steps ?? []), { at, text: "Worker picked up the job…" }].slice(-20),
-      };
-      cfg.syncQueued = false;
-      cfg.syncClaimedAt = at;
-      cfg.syncJobId = jobId;
-      cfg.syncProgress = starting;
-      await tx.mediaIntegration.update({
-        where: { id: row.id },
-        data: { config: cfg as Prisma.InputJsonValue },
-      });
-      const serverId =
-        (cfg.syncServerId ? String(cfg.syncServerId) : null) ||
-        (cfg.serverId ? String(cfg.serverId) : null);
-      return { id: row.id, jobId, serverId };
-    },
-    { timeout: 15_000 }
+      async (tx) => {
+        // Keep this claim path short: lock one queued row, stamp claim fields, exit.
+        // Long Plex imports run AFTER the transaction (see pumpPlexSyncQueue).
+        const locked = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id FROM "MediaIntegration"
+          WHERE type = 'plex' AND (config->>'syncQueued') = 'true'
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        `;
+        const id = locked[0]?.id;
+        if (!id) return null;
+        const row = await tx.mediaIntegration.findUnique({
+          where: { id },
+          select: { id: true, config: true },
+        });
+        if (!row) return null;
+        const cfg = asConfig(row.config);
+        if (cfg.syncQueued !== true) return null;
+        const progress = readSyncProgress(cfg);
+        const jobId = String(cfg.syncJobId ?? progress?.jobId ?? "") || randomUUID();
+        const at = new Date().toISOString();
+        const starting: IntegrationSyncProgress = {
+          ...(progress ?? queuedProgress(jobId)),
+          jobId,
+          status: "running",
+          phase: "starting",
+          message: "Worker picked up the job. Connecting to Plex…",
+          updatedAt: at,
+          steps: [...(progress?.steps ?? []), { at, text: "Worker picked up the job…" }].slice(-20),
+        };
+        cfg.syncQueued = false;
+        cfg.syncClaimedAt = at;
+        cfg.syncJobId = jobId;
+        cfg.syncProgress = starting;
+        await tx.mediaIntegration.update({
+          where: { id: row.id },
+          data: { config: cfg as Prisma.InputJsonValue },
+        });
+        const serverId =
+          (cfg.syncServerId ? String(cfg.syncServerId) : null) ||
+          (cfg.serverId ? String(cfg.serverId) : null);
+        return { id: row.id, jobId, serverId };
+      },
+      // Under panel load, claim can wait on locks; keep timeout above observed 17s stalls.
+      { maxWait: 10_000, timeout: 30_000 }
     )
   );
 }

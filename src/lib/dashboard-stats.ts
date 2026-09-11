@@ -15,8 +15,8 @@ import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 export async function loadHeaderStats() {
   const now = new Date();
   try {
-    const [counts, totalIn, totalOut] = await Promise.all([
-      cacheGetOrSet("stats:header-counts:v2", 15, async () => {
+    const [counts, totalIn, totalOut, dashboard] = await Promise.all([
+      cacheGetOrSet("stats:header-counts:v2", 30, async () => {
         const [lines, activeLines, liveStreams, onlineConnections] =
           await Promise.all([
             prisma.line.count(),
@@ -36,6 +36,8 @@ export async function loadHeaderStats() {
       prisma.panelSetting.findUnique({
         where: { key: "network_bytes_out_total" },
       }),
+      // Shared with full dashboard — keeps mobile/desktop light polls useful.
+      cacheGetOrSet("stats:summary", 60, () => getDashboardSummary()).catch(() => null),
     ]);
 
     const { networkInMbps, networkOutMbps, panelProxyMbps } =
@@ -50,6 +52,7 @@ export async function loadHeaderStats() {
       networkOutPerMin: networkOutMbps,
       networkBytesInTotal: totalIn?.value ?? "0",
       networkBytesOutTotal: totalOut?.value ?? "0",
+      ...(dashboard ? { dashboard } : {}),
     };
   } catch (e) {
     console.error("[stats] loadHeaderStats error:", e);
@@ -69,7 +72,8 @@ export async function loadHeaderStats() {
 }
 
 export async function loadAdminDashboardStats() {
-  await ensureMainServerOnline();
+  // Fire-and-forget role/health reconcile — do not block the dashboard payload.
+  void ensureMainServerOnline().catch(() => {});
   const now = new Date();
 
   let onlineConnections = 0;

@@ -215,7 +215,7 @@ export type PanelDashboardProps = {
 
   variant?: "admin" | "reseller";
 
-  initialStats?: Stats | null;
+  initialStats?: Stats | Record<string, unknown> | null;
 
 };
 
@@ -247,10 +247,15 @@ export function PanelDashboard({
 
   const isReseller = variant === "reseller";
   const { isMdUp } = usePanelLayout();
+  const [layoutReady, setLayoutReady] = useState(false);
 
-  const [stats, setStats] = useState<Stats | null>(initialStats);
+  const [stats, setStats] = useState<Stats | null>((initialStats as Stats | null) ?? null);
   const [stackItems, setStackItems] = useState<StackComponentStatus[]>([]);
   const { data: liveStats, connected: liveConnected } = useDashboardLiveMetrics();
+
+  useEffect(() => {
+    setLayoutReady(true);
+  }, []);
 
 
 
@@ -279,17 +284,19 @@ export function PanelDashboard({
   }, [statsUrl]);
 
   useEffect(() => {
-    if (!isMdUp) return;
+    // Wait for breakpoint hydration so desktop never mounts mobile fetchers.
+    if (!layoutReady || !isMdUp) return;
     loadHeader();
     let cancelled = false;
     const runFull = () => {
       if (!cancelled) loadFull();
     };
+    const fullDelayMs = initialStats ? 3500 : 800;
     const idleId =
       typeof requestIdleCallback !== "undefined"
-        ? requestIdleCallback(runFull, { timeout: 2500 })
+        ? requestIdleCallback(runFull, { timeout: initialStats ? 5000 : 2500 })
         : null;
-    const timeoutId = idleId == null ? setTimeout(runFull, 800) : null;
+    const timeoutId = idleId == null ? setTimeout(runFull, fullDelayMs) : null;
     const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
     const onHealth = () => loadFull();
     window.addEventListener(STREAM_HEALTH_CHANGED, onHealth);
@@ -302,13 +309,13 @@ export function PanelDashboard({
       if (timeoutId != null) clearTimeout(timeoutId);
       t();
     };
-  }, [loadHeader, loadFull, isReseller, isMdUp]);
+  }, [loadHeader, loadFull, isReseller, isMdUp, layoutReady, initialStats]);
 
 
 
   useEffect(() => {
 
-    if (isReseller || !isMdUp) return;
+    if (!layoutReady || isReseller || !isMdUp) return;
 
     fetch("/api/admin/stack/status")
 
@@ -316,7 +323,7 @@ export function PanelDashboard({
 
       .then((d) => setStackItems(d.items ?? []));
 
-  }, [isReseller, isMdUp]);
+  }, [isReseller, isMdUp, layoutReady]);
 
 
 
@@ -377,7 +384,11 @@ export function PanelDashboard({
   return (
 
     <>
-    <div className="md:hidden">
+    {!layoutReady ? (
+      <div className="min-h-[12rem] rounded-xl border p-6 text-sm" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+        Loading dashboard…
+      </div>
+    ) : !isMdUp ? (
       <PanelMobileDashboard
         variant={variant}
         statsUrl={statsUrl}
@@ -389,9 +400,9 @@ export function PanelDashboard({
         dashboard={d ?? undefined}
         stackHealthy={stackHealthy}
       />
-    </div>
+    ) : (
 
-    <div className="dashboard-v2 space-y-5 hidden md:block">
+    <div className="dashboard-v2 space-y-5">
 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
@@ -608,6 +619,7 @@ export function PanelDashboard({
       ) : null}
 
     </div>
+    )}
     </>
 
   );

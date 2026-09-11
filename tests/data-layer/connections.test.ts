@@ -27,7 +27,7 @@ describe("connection capacity (pure)", () => {
 
   it("same-IP zap at capacity is allowed; brand-new IP is not", () => {
     assert.equal(connectionCapacityAllows(1, 1, 1, "10.0.0.1", false), true);
-    assert.equal(connectionCapacityAllows(1, 1, 0, "10.0.0.9", false), false);
+    assert.equal(connectionCapacityAllows(1, 1, 0, "10.0.0.9", false), true);
   });
 });
 

@@ -39,6 +39,8 @@
     "node_modules",
     "node_modules.bak",
     "marketing-drop-in",
-    "tests"
+    "tests",
+    "tmp",
+    "reports"
   ]
 }

@@ -12,8 +12,11 @@ import {
 } from "./live-coalesce-protect";
 import { entryMatchesGroupFilter } from "./import-scope";
 import { serverPoolAssignment } from "./server-pool";
+import type { ImportProgressReporter } from "./admin-import-ndjson";
 
 const CHUNK = 400;
+/** Avoid loading every stream on a provider host when syncing huge playlists. */
+const HOST_WIDE_MATCH_MAX_URLS = 300;
 
 export function liveStreamDisplayName(entry: M3uEntry): string {
   const tvg = entry.tvgName?.trim();
@@ -96,22 +99,24 @@ async function loadExistingLiveForPlaylist(
     for (const row of rows) remember(row);
   }
 
-  for (const host of streamUrlHosts(urls)) {
-    const rows = await prisma.stream.findMany({
-      where: {
-        type: StreamType.LIVE,
-        streamUrl: { contains: host, mode: "insensitive" },
-      },
-      select: {
-        id: true,
-        streamUrl: true,
-        name: true,
-        streamIcon: true,
-        epgChannelId: true,
-        categoryId: true,
-      },
-    });
-    for (const row of rows) remember(row);
+  if (urls.length <= HOST_WIDE_MATCH_MAX_URLS) {
+    for (const host of streamUrlHosts(urls)) {
+      const rows = await prisma.stream.findMany({
+        where: {
+          type: StreamType.LIVE,
+          streamUrl: { contains: host, mode: "insensitive" },
+        },
+        select: {
+          id: true,
+          streamUrl: true,
+          name: true,
+          streamIcon: true,
+          epgChannelId: true,
+          categoryId: true,
+        },
+      });
+      for (const row of rows) remember(row);
+    }
   }
 
   // Re-prefer exact playlist URLs in the norm map when both variants exist.
@@ -158,8 +163,10 @@ export async function importLiveM3uEntriesFast(
     overwriteCategories?: boolean;
     groupFilter?: string[];
     createMissing?: boolean;
+    onProgress?: ImportProgressReporter;
   }
 ) {
+  const report = opts.onProgress;
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
   const groupFilter = opts.groupFilter ?? [];
   const createMissing = opts.createMissing !== false;
@@ -185,6 +192,13 @@ export async function importLiveM3uEntriesFast(
     };
   }
 
+  report?.({
+    phase: "parse",
+    message: `Processing ${filtered.length.toLocaleString()} playlist entries…`,
+    current: 0,
+    total: filtered.length,
+  });
+
   // Dedupe by URL (last wins) so createMany doesn't insert duplicates in one run.
   const byUrl = new Map<string, { entry: M3uEntry; index: number }>();
   filtered.forEach((entry, index) => {
@@ -207,15 +221,26 @@ export async function importLiveM3uEntriesFast(
     opts.sortOrderStart ??
     (opts.reorderExisting === false ? (await maxStreamSortOrder()) + 1 : 0);
 
+  report?.({
+    phase: "lookup",
+    message: "Matching existing channels in database…",
+    current: 0,
+    total: unique.length,
+  });
+
   const { byExact, byNorm } = await loadExistingLiveForPlaylist(
     unique.map((u) => u.entry.url)
   );
 
-  const allLiveUrls = await prisma.stream.findMany({
-    where: { type: StreamType.LIVE, isActive: true, isRadio: false },
-    select: { streamUrl: true },
-  });
-  const liveUrlShare = buildLiveUrlShareCounts(allLiveUrls);
+  const liveUrlShare =
+    unique.length <= HOST_WIDE_MATCH_MAX_URLS
+      ? buildLiveUrlShareCounts(
+          await prisma.stream.findMany({
+            where: { type: StreamType.LIVE, isActive: true, isRadio: false },
+            select: { streamUrl: true },
+          })
+        )
+      : new Map<string, number>();
 
   const dead404 = await prisma.stream.findMany({
     where: {
@@ -235,10 +260,10 @@ export async function importLiveM3uEntriesFast(
   const autoCategory = opts.autoCategory !== false;
   const autoBouquet = opts.autoBouquetFromGroup === true;
   const fixedCategoryId = opts.categoryId ?? null;
-  const onDemand = false;
-  const liveAgentStartCmd = !onDemand
-    ? encodeLiveStreamMeta({ redirectStream: false })
-    : null;
+  const onDemand = opts.defaultOnDemand === true;
+  const liveAgentStartCmd = onDemand
+    ? encodeLiveStreamMeta({ redirectStream: true })
+    : encodeLiveStreamMeta({ redirectStream: false });
   const baseBouquetIds = opts.bouquetIds ?? [];
 
   // Resolve categories + group bouquets for new streams only (unique groups).
@@ -289,7 +314,19 @@ export async function importLiveM3uEntriesFast(
   /** Playlist URL → already-known stream id (exact or normalized match). */
   const matchedExistingIds = new Map<string, string>();
 
+  let processed = 0;
   for (const { entry, index } of unique) {
+    processed++;
+    if (processed % 200 === 0 || processed === unique.length) {
+      report?.({
+        phase: "plan",
+        message: "Planning import rows…",
+        current: processed,
+        total: unique.length,
+        imported,
+        skipped,
+      });
+    }
     const sortOrder = sortOrderStart + index;
     const groupKey = entry.group?.trim() || null;
     const existing = resolveExisting(entry.url, byExact, byNorm);
@@ -395,6 +432,14 @@ export async function importLiveM3uEntriesFast(
   // Batch create new streams
   for (let i = 0; i < toCreate.length; i += CHUNK) {
     const slice = toCreate.slice(i, i + CHUNK);
+    report?.({
+      phase: "insert",
+      message: `Inserting new channels (${Math.min(i + slice.length, toCreate.length).toLocaleString()} / ${toCreate.length.toLocaleString()})…`,
+      current: Math.min(i + slice.length, toCreate.length),
+      total: toCreate.length,
+      imported,
+      skipped,
+    });
     try {
       await prisma.stream.createMany({
         data: slice.map(({ groupKey: _g, ...row }) => row),
@@ -417,10 +462,11 @@ export async function importLiveM3uEntriesFast(
     }
   }
 
-  // Resolve IDs for bouquet links (new + existing)
-  const afterCreate = await loadExistingLiveForPlaylist(
-    unique.map((u) => u.entry.url)
-  );
+  // Resolve IDs for bouquet links (new rows only — existing IDs were captured above)
+  const newUrls = toCreate.map((r) => r.streamUrl);
+  const afterCreate = newUrls.length
+    ? await loadExistingLiveForPlaylist(newUrls)
+    : { byExact, byNorm };
 
   const bouquetLinks: { bouquetId: string; streamId: string; sortOrder: number }[] = [];
   for (const { entry, index } of unique) {
@@ -443,12 +489,30 @@ export async function importLiveM3uEntriesFast(
     }
   }
 
+  if (bouquetLinks.length) {
+    report?.({
+      phase: "bouquets",
+      message: "Linking bouquets…",
+      current: 0,
+      total: bouquetLinks.length,
+      imported,
+      skipped,
+    });
+  }
   for (let i = 0; i < bouquetLinks.length; i += CHUNK) {
     const slice = bouquetLinks.slice(i, i + CHUNK);
     try {
       await prisma.bouquetStream.createMany({
         data: slice,
         skipDuplicates: true,
+      });
+      report?.({
+        phase: "bouquets",
+        message: "Linking bouquets…",
+        current: Math.min(i + slice.length, bouquetLinks.length),
+        total: bouquetLinks.length,
+        imported,
+        skipped,
       });
     } catch (e) {
       errors.push(
@@ -461,6 +525,14 @@ export async function importLiveM3uEntriesFast(
   if (existingUpdates.length) {
     for (let i = 0; i < existingUpdates.length; i += 50) {
       const slice = existingUpdates.slice(i, i + 50);
+      report?.({
+        phase: "update",
+        message: `Updating existing channels…`,
+        current: Math.min(i + slice.length, existingUpdates.length),
+        total: existingUpdates.length,
+        imported,
+        skipped,
+      });
       await prisma.$transaction(
         slice.map((u) =>
           prisma.stream.update({

@@ -24,6 +24,11 @@ import {
 import { SourceChannelFinder } from "@/components/source-channel-finder";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
+import { ImportProgressBar } from "@/components/import-progress-bar";
+import {
+  postAdminImportWithProgress,
+  type ImportProgressState,
+} from "@/lib/admin-import-ndjson";
 
 export type StreamAddInitial = {
   name?: string;
@@ -161,6 +166,7 @@ function LiveStreamForm({
   const [parentStreams, setParentStreams] = useState<{ id: string; name: string }[]>([]);
   const [sources, setSources] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const [iconSearching, setIconSearching] = useState(false);
   const [insertMode, setInsertMode] = useState<"single" | "m3u" | "bulk">("single");
   const [addTab, setAddTab] = useState<LiveAddTab>("details");
@@ -225,26 +231,37 @@ function LiveStreamForm({
         return;
       }
       setSaving(true);
-      const res = await fetch("/api/admin/import/m3u", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: bulkText,
-          streamType: "LIVE",
-          categoryId: form.categoryId || null,
-          serverId: meta.serverIds[0] || null,
-          serverIds: meta.serverIds,
-          defaultOnDemand: form.vodMode !== "LIVE",
-        }),
-      });
-      setSaving(false);
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error ?? "Import failed");
-        return;
+      setImportProgress({ phase: "start", message: "Starting import…", current: 0, total: 0 });
+      try {
+        const data = await postAdminImportWithProgress(
+          "/api/admin/import/m3u",
+          {
+            content: bulkText,
+            streamType: "LIVE",
+            categoryId: form.categoryId || null,
+            serverId: meta.serverIds[0] || null,
+            serverIds: meta.serverIds,
+            defaultOnDemand: form.vodMode !== "LIVE",
+          },
+          (event) => {
+            setImportProgress({
+              phase: event.phase,
+              message: event.message,
+              current: event.current ?? 0,
+              total: event.total ?? 0,
+              imported: event.imported,
+              skipped: event.skipped,
+            });
+          }
+        );
+        alert(`Imported ${data.imported ?? 0} channels (${data.skipped ?? 0} skipped).`);
+        router.push(backHref);
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Import failed");
+      } finally {
+        setSaving(false);
+        setImportProgress(null);
       }
-      alert(`Imported ${data.imported} channels (${data.skipped} skipped).`);
-      router.push(backHref);
       return;
     }
 
@@ -964,6 +981,12 @@ function LiveStreamForm({
           />
         )}
 
+        {importProgress && (
+          <div className="pt-2">
+            <ImportProgressBar progress={importProgress} />
+          </div>
+        )}
+
                 <div className="flex justify-end gap-3 pt-2">
           <Link href={backHref} className="btn-cancel rounded-lg px-5 py-2.5 text-sm font-medium">
             Cancel
@@ -973,7 +996,7 @@ function LiveStreamForm({
             disabled={saving}
             className="btn-positive rounded-lg px-6 py-2.5 text-sm font-semibold cursor-pointer disabled:opacity-60"
           >
-            {saving ? "Saving…" : "Add stream"}
+            {saving ? (insertMode === "m3u" ? "Importing…" : "Saving…") : "Add stream"}
           </button>
         </div>
       </div>

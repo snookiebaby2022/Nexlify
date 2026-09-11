@@ -14,6 +14,11 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
+import { ImportProgressBar } from "@/components/import-progress-bar";
+import {
+  postAdminImportWithProgress,
+  type ImportProgressState,
+} from "@/lib/admin-import-ndjson";
 
 type ReviewEntry = {
   id: string;
@@ -56,6 +61,7 @@ export default function M3uReviewPage() {
   const [review, setReview] = useState<ReviewResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("");
@@ -89,7 +95,7 @@ export default function M3uReviewPage() {
       setOpts((prev) => ({
         ...prev,
         serverId: prev.serverId || online?.id || serverList[0]?.id || "",
-        bouquetIds: prev.bouquetIds.length ? prev.bouquetIds : bouquetList.map((b: { id: string }) => b.id),
+        bouquetIds: prev.bouquetIds,
       }));
     });
   }, []);
@@ -193,14 +199,14 @@ export default function M3uReviewPage() {
     }
     setImporting(true);
     setMsg("");
+    setImportProgress({ phase: "start", message: "Starting import…", current: 0, total: 0 });
     setStep(3);
     try {
       const content = paste.trim() ? paste : undefined;
       const serverName = servers.find((s) => s.id === opts.serverId)?.name ?? "server";
-      const res = await fetch("/api/admin/import/m3u", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await postAdminImportWithProgress(
+        "/api/admin/import/m3u",
+        {
           content,
           url: url.trim() || undefined,
           selectedUrls,
@@ -211,19 +217,28 @@ export default function M3uReviewPage() {
           autoAssignEpg: opts.autoAssignEpg,
           bouquetIds: opts.bouquetIds.length ? opts.bouquetIds : undefined,
           defaultOnDemand: opts.onDemand,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Import failed");
-      const epgNote = data.epgAssigned ? ` · EPG matched ${data.epgAssigned}` : "";
+        },
+        (event) => {
+          setImportProgress({
+            phase: event.phase,
+            message: event.message,
+            current: event.current ?? 0,
+            total: event.total ?? 0,
+            imported: event.imported,
+            skipped: event.skipped,
+          });
+        }
+      );
+      const epgNote = data.epgAssigned != null ? ` · EPG matched ${data.epgAssigned}` : "";
       const modeNote = opts.onDemand ? " · on-demand" : " · 24/7 live";
       setMsg(
-        `Imported ${data.imported} channel(s), skipped ${data.skipped ?? 0}${epgNote}${modeNote} on ${serverName}. Icons and categories were applied from the playlist.`
+        `Imported ${data.imported ?? 0} channel(s), skipped ${data.skipped ?? 0}${epgNote}${modeNote} on ${serverName}. Icons and categories were applied from the playlist.`
       );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Import failed");
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -655,7 +670,11 @@ export default function M3uReviewPage() {
 
       {step === 3 && (
         <div className="rounded-lg border p-8 text-center space-y-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-          {importing ? (
+          {importing && importProgress ? (
+            <div className="max-w-lg mx-auto text-left">
+              <ImportProgressBar progress={importProgress} />
+            </div>
+          ) : importing ? (
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               Importing channels and running EPG match…
             </p>

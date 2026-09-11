@@ -434,41 +434,44 @@ async function getStreamHealth(): Promise<StreamHealthSummary> {
 }
 
 async function getTicketQueue(createdById?: string): Promise<TicketQueueSummary> {
-  const where = {
-    status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
-    ...(createdById ? { createdById } : {}),
-  };
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet(`dash:tickets:${createdById ?? "all"}`, 45, async () => {
+    const where = {
+      status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] },
+      ...(createdById ? { createdById } : {}),
+    };
 
-  const [open, inProgress, urgent, rows] = await Promise.all([
-    prisma.ticket.count({ where: { ...where, status: TicketStatus.OPEN } }),
-    prisma.ticket.count({ where: { ...where, status: TicketStatus.IN_PROGRESS } }),
-    prisma.ticket.count({
-      where: {
-        ...where,
-        priority: TicketPriority.URGENT,
-      },
-    }),
-    prisma.ticket.findMany({
-      where,
-      orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
-      take: 8,
-      include: { createdBy: { select: { username: true } } },
-    }),
-  ]);
+    const [open, inProgress, urgent, rows] = await Promise.all([
+      prisma.ticket.count({ where: { ...where, status: TicketStatus.OPEN } }),
+      prisma.ticket.count({ where: { ...where, status: TicketStatus.IN_PROGRESS } }),
+      prisma.ticket.count({
+        where: {
+          ...where,
+          priority: TicketPriority.URGENT,
+        },
+      }),
+      prisma.ticket.findMany({
+        where,
+        orderBy: [{ priority: "desc" }, { updatedAt: "desc" }],
+        take: 8,
+        include: { createdBy: { select: { username: true } } },
+      }),
+    ]);
 
-  return {
-    open,
-    inProgress,
-    urgent,
-    rows: rows.map((t) => ({
-      id: t.id,
-      subject: t.subject,
-      status: t.status,
-      priority: t.priority,
-      updatedAt: t.updatedAt.toISOString(),
-      createdByUsername: t.createdBy.username,
-    })),
-  };
+    return {
+      open,
+      inProgress,
+      urgent,
+      rows: rows.map((t) => ({
+        id: t.id,
+        subject: t.subject,
+        status: t.status,
+        priority: t.priority,
+        updatedAt: t.updatedAt.toISOString(),
+        createdByUsername: t.createdBy.username,
+      })),
+    };
+  });
 }
 
 async function getTopResellers(limit: number): Promise<TopResellerRow[]> {
@@ -585,65 +588,74 @@ async function childUserIds(parentId: string): Promise<string[]> {
 }
 
 async function connectionsBreakdown(ownerId?: string) {
-  const connections = await listActiveConnections(ownerId);
-  if (connections.length === 0) {
-    return { total: 0, lines: 0, devices: 0, restreamers: 0 };
-  }
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet(`dash:conn-breakdown:${ownerId ?? "all"}`, 30, async () => {
+    const connections = await listActiveConnections(ownerId);
+    if (connections.length === 0) {
+      return { total: 0, lines: 0, devices: 0, restreamers: 0 };
+    }
 
-  const lineIds = [...new Set(connections.map((c) => c.lineId))];
-  const [magLines, enigmaLines] = await Promise.all([
-    prisma.magDevice.findMany({
-      where: { lineId: { in: lineIds } },
-      select: { lineId: true },
-    }),
-    prisma.enigmaDevice.findMany({
-      where: { lineId: { in: lineIds } },
-      select: { lineId: true },
-    }),
-  ]);
-  const deviceLineIds = new Set([
-    ...magLines.map((m) => m.lineId),
-    ...enigmaLines.map((e) => e.lineId),
-  ]);
+    const lineIds = [...new Set(connections.map((c) => c.lineId))];
+    const [magLines, enigmaLines] = await Promise.all([
+      prisma.magDevice.findMany({
+        where: { lineId: { in: lineIds } },
+        select: { lineId: true },
+      }),
+      prisma.enigmaDevice.findMany({
+        where: { lineId: { in: lineIds } },
+        select: { lineId: true },
+      }),
+    ]);
+    const deviceLineIds = new Set([
+      ...magLines.map((m) => m.lineId),
+      ...enigmaLines.map((e) => e.lineId),
+    ]);
 
-  let devices = 0;
-  let lines = 0;
-  for (const c of connections) {
-    if (deviceLineIds.has(c.lineId)) devices++;
-    else lines++;
-  }
+    let devices = 0;
+    let lines = 0;
+    for (const c of connections) {
+      if (deviceLineIds.has(c.lineId)) devices++;
+      else lines++;
+    }
 
-  return { total: connections.length, lines, devices, restreamers: 0 };
+    return { total: connections.length, lines, devices, restreamers: 0 };
+  });
 }
 
-async function subscriptionStats(where: Prisma.LineWhereInput) {
-  const now = new Date();
-  const staleBefore = new Date(Date.now() - STALE_MS);
+async function subscriptionStats(
+  where: Prisma.LineWhereInput,
+  cacheKey = "custom",
+) {
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet(`dash:subs:${cacheKey}`, 45, async () => {
+    const now = new Date();
+    const staleBefore = new Date(Date.now() - STALE_MS);
 
-  const [total, enabled, expired, onlineLineIds] = await Promise.all([
-    prisma.line.count({ where }),
-    prisma.line.count({
-      where: { ...where, status: LineStatus.ACTIVE, expiresAt: { gt: now } },
-    }),
-    prisma.line.count({
-      where: {
-        ...where,
-        OR: [{ status: LineStatus.EXPIRED }, { expiresAt: { lte: now } }],
-      },
-    }),
-    prisma.liveConnection.findMany({
-      where: { lastSeenAt: { gte: staleBefore }, line: where },
-      select: { lineId: true },
-      distinct: ["lineId"],
-    }),
-  ]);
+    const [total, enabled, expired, onlineLineIds] = await Promise.all([
+      prisma.line.count({ where }),
+      prisma.line.count({
+        where: { ...where, status: LineStatus.ACTIVE, expiresAt: { gt: now } },
+      }),
+      prisma.line.count({
+        where: {
+          ...where,
+          OR: [{ status: LineStatus.EXPIRED }, { expiresAt: { lte: now } }],
+        },
+      }),
+      prisma.liveConnection.findMany({
+        where: { lastSeenAt: { gte: staleBefore }, line: where },
+        select: { lineId: true },
+        distinct: ["lineId"],
+      }),
+    ]);
 
-  return {
-    total,
-    enabled,
-    expired,
-    online: onlineLineIds.length,
-  };
+    return {
+      total,
+      enabled,
+      expired,
+      online: onlineLineIds.length,
+    };
+  });
 }
 
 async function creditStats(userId: string) {
@@ -741,11 +753,34 @@ async function computeMostWatchedByCountry(ownerId?: string): Promise<CountryWat
     .slice(0, 8);
 }
 
+export async function getAdminDashboardWidgetsLight(): Promise<
+  Pick<DashboardWidgetsPayload, "expiringLines">
+> {
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  const expiringLines = await cacheGetOrSet("dash:admin-expiring-light", 60, () =>
+    getExpiringLineRows({}, 8, "soon"),
+  );
+  return { expiringLines };
+}
+
+export async function getResellerDashboardWidgetsLight(
+  ownerId: string,
+): Promise<Pick<DashboardWidgetsPayload, "expiringLines">> {
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  const expiringLines = await cacheGetOrSet(`dash:reseller-expiring-light:${ownerId}`, 60, () =>
+    getExpiringLineRows({ ownerId }, 8, "soon"),
+  );
+  return { expiringLines };
+}
+
 export async function getAdminDashboardWidgets(): Promise<DashboardWidgetsPayload> {
-  const childIds = await prisma.panelUser.findMany({
-    where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } },
-    select: { id: true },
-  });
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  const childIds = await cacheGetOrSet("dash:reseller-ids", 120, () =>
+    prisma.panelUser.findMany({
+      where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } },
+      select: { id: true },
+    }),
+  );
   const subOwnerIds = childIds.map((c) => c.id);
   const subLineWhere: Prisma.LineWhereInput = subOwnerIds.length
     ? { ownerId: { in: subOwnerIds } }
@@ -773,20 +808,20 @@ export async function getAdminDashboardWidgets(): Promise<DashboardWidgetsPayloa
   ] = await Promise.all([
     getMostWatchedByCountry(),
     connectionsBreakdown(),
-    subscriptionStats({}),
-    connectionsBreakdownForLines(subLineWhere),
-    subscriptionStats(subLineWhere),
-    getExpiringSummary(lineWhere),
-    getExpiringLineRows(lineWhere, 12, "soon"),
-    getExpiringLineRows(lineWhere, 8, "recent"),
-    getDeviceSummary(lineWhere),
-    getNewLinesSummary(lineWhere),
-    getTrialExpiringLines(lineWhere, 10),
+    subscriptionStats({}, "all"),
+    cacheGetOrSet("dash:sub-conn", 30, () => connectionsBreakdownForLines(subLineWhere)),
+    subscriptionStats(subLineWhere, "reseller-owned"),
+    cacheGetOrSet("dash:expiring-summary", 60, () => getExpiringSummary(lineWhere)),
+    cacheGetOrSet("dash:expiring-soon", 60, () => getExpiringLineRows(lineWhere, 12, "soon")),
+    cacheGetOrSet("dash:expiring-recent", 60, () => getExpiringLineRows(lineWhere, 8, "recent")),
+    cacheGetOrSet("dash:devices", 60, () => getDeviceSummary(lineWhere)),
+    cacheGetOrSet("dash:new-lines", 60, () => getNewLinesSummary(lineWhere)),
+    cacheGetOrSet("dash:trial-expiring", 60, () => getTrialExpiringLines(lineWhere, 10)),
     getStreamHealth(),
     getTicketQueue(),
-    getTopResellers(8),
-    getLowCreditResellers(LOW_CREDIT_THRESHOLD),
-    getBandwidthSummary(),
+    cacheGetOrSet("dash:top-resellers", 60, () => getTopResellers(8)),
+    cacheGetOrSet("dash:low-credits", 60, () => getLowCreditResellers(LOW_CREDIT_THRESHOLD)),
+    cacheGetOrSet("dash:bw-summary", 30, () => getBandwidthSummary()),
   ]);
 
   const cards: SummaryCardData[] = [
@@ -894,10 +929,10 @@ export async function getResellerDashboardWidgets(
   ] = await Promise.all([
     getMostWatchedByCountry(ownerId),
     connectionsBreakdown(ownerId),
-    subscriptionStats(ownerWhere),
+    subscriptionStats(ownerWhere, `owner:${ownerId}`),
     creditStats(ownerId),
     hasChildren
-      ? subscriptionStats({ ownerId: { in: childIds } })
+      ? subscriptionStats({ ownerId: { in: childIds } }, `children:${ownerId}`)
       : Promise.resolve({ total: 0, online: 0, enabled: 0, expired: 0 }),
     hasChildren
       ? connectionsBreakdownForLines({ ownerId: { in: childIds } })

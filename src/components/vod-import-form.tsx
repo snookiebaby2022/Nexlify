@@ -14,6 +14,11 @@ import {
 } from "@/components/form-page-shell";
 import { CategorySelect } from "@/components/category-select";
 import type { CategoryOptionInput } from "@/lib/category-options";
+import { ImportProgressBar } from "@/components/import-progress-bar";
+import {
+  postAdminImportWithProgress,
+  type ImportProgressState,
+} from "@/lib/admin-import-ndjson";
 
 type ImportSource = "m3u" | "file" | "paste";
 
@@ -123,6 +128,7 @@ export function VodImportForm({
   const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<ImportProgressState | null>(null);
   const [result, setResult] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
@@ -215,7 +221,8 @@ export function VodImportForm({
       return;
     }
     setImporting(true);
-    setResult("Importing…");
+    setResult("");
+    setProgress({ phase: "start", message: "Starting import…", current: 0, total: 0 });
     const body = {
       url: source === "m3u" && url.trim() ? url.trim() : undefined,
       content: source !== "m3u" || !url.trim() ? content || undefined : undefined,
@@ -242,20 +249,28 @@ export function VodImportForm({
         notes: meta.notes,
       },
     };
-    const res = await fetch("/api/admin/import/m3u", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    setImporting(false);
-    setResult(
-      res.ok
-        ? `Imported ${data.imported}, skipped ${data.skipped}${
-            data.errors?.length ? ` · ${data.errors.slice(0, 3).join("; ")}` : ""
-          }`
-        : data.error ?? "Import failed"
-    );
+    try {
+      const done = await postAdminImportWithProgress("/api/admin/import/m3u", body, (event) => {
+        setProgress({
+          phase: event.phase,
+          message: event.message,
+          current: event.current ?? 0,
+          total: event.total ?? 0,
+          imported: event.imported,
+          skipped: event.skipped,
+        });
+      });
+      setResult(
+        `Imported ${done.imported ?? 0}, skipped ${done.skipped ?? 0}${
+          done.errors?.length ? ` · ${done.errors.slice(0, 3).join("; ")}` : ""
+        }`
+      );
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setImporting(false);
+      setProgress(null);
+    }
   }
 
   return (
@@ -544,20 +559,28 @@ export function VodImportForm({
         </FormField>
       </Section>
 
-      <div className="flex flex-wrap gap-3 pt-2">
-        <button
-          type="button"
-          disabled={importing || !selectedUrls.length}
-          onClick={runImport}
-          className="btn-positive rounded px-6 py-2.5 font-medium cursor-pointer disabled:opacity-50"
-        >
-          {importing ? "Importing…" : "Import selected"}
-        </button>
-        {result && (
-          <p className="text-sm self-center" style={{ color: "var(--muted)" }}>
-            {result}
-          </p>
-        )}
+      <div className="space-y-3 pt-2">
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={importing || !selectedUrls.length}
+            onClick={() => void runImport()}
+            className="btn-positive rounded px-6 py-2.5 font-medium cursor-pointer disabled:opacity-50"
+          >
+            {importing ? "Importing…" : "Import selected"}
+          </button>
+          {result && !importing && (
+            <p
+              className="text-sm self-center"
+              style={{
+                color: result.startsWith("Imported") ? "var(--muted)" : "#f87171",
+              }}
+            >
+              {result}
+            </p>
+          )}
+        </div>
+        {progress && <ImportProgressBar progress={progress} />}
       </div>
 
       {previewOpen && (

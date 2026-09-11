@@ -8,6 +8,11 @@ import {
 import { Upload, FileText, X } from "lucide-react";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
+import { ImportProgressBar } from "@/components/import-progress-bar";
+import {
+  postAdminImportWithProgress,
+  type ImportProgressState,
+} from "@/lib/admin-import-ndjson";
 
 export function ImportForm({
   title,
@@ -36,7 +41,9 @@ export function ImportForm({
   const [bouquetIds, setBouquetIds] = useState<string[]>([]);
   const [serversList, setServersList] = useState<{ id: string; name: string }[]>([]);
   const [result, setResult] = useState("");
-  const [onDemandDefault, setOnDemandDefault] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<ImportProgressState | null>(null);
+  const [onDemandDefault, setOnDemandDefault] = useState(true);
   const [autoBouquetFromGroup, setAutoBouquetFromGroup] = useState(false);
   const [serverIds, setServerIds] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
@@ -54,7 +61,6 @@ export function ImportForm({
       .then((d) => {
         const list = Array.isArray(d.bouquets) ? d.bouquets : [];
         setBouquets(list);
-        setBouquetIds(list.map((b: { id: string }) => b.id));
       });
     fetch("/api/admin/servers")
       .then((r) => r.json())
@@ -100,7 +106,9 @@ export function ImportForm({
   }
 
   async function runImport() {
-    setResult("Importing…");
+    setImporting(true);
+    setProgress({ phase: "start", message: "Starting import…", current: 0, total: 0 });
+    setResult("");
     const endpoint =
       tab === "m3u"
         ? "/api/admin/import/m3u"
@@ -136,19 +144,28 @@ export function ImportForm({
               serverId: serverId || null,
             };
 
-    const res = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    setResult(
-      res.ok
-        ? `Imported ${data.imported}, skipped ${data.skipped}${
-            data.errors?.length ? ` · ${data.errors.slice(0, 3).join("; ")}` : ""
-          }`
-        : data.error ?? "Import failed"
-    );
+    try {
+      const done = await postAdminImportWithProgress(endpoint, body, (event) => {
+        setProgress({
+          phase: event.phase,
+          message: event.message,
+          current: event.current ?? 0,
+          total: event.total ?? 0,
+          imported: event.imported,
+          skipped: event.skipped,
+        });
+      });
+      setResult(
+        `Imported ${done.imported ?? 0}, skipped ${done.skipped ?? 0}${
+          done.updated ? `, updated ${done.updated}` : ""
+        }${done.errors?.length ? ` · ${done.errors.slice(0, 3).join("; ")}` : ""}`
+      );
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setImporting(false);
+      setProgress(null);
+    }
   }
 
   const tabs: { id: typeof tab; label: string; show: boolean }[] = [
@@ -408,14 +425,26 @@ export function ImportForm({
 
         <button
           type="button"
-          onClick={runImport}
-          disabled={!content && !url && !path}
+          onClick={() => void runImport()}
+          disabled={importing || (!content && !url && !path)}
           className="rounded py-2 px-4 font-medium cursor-pointer disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#fff" }}
         >
-          {streamType === "LIVE" && tab === "m3u" ? "Import live streams" : "Start import"}
+          {importing
+            ? "Importing…"
+            : streamType === "LIVE" && tab === "m3u"
+              ? "Import live streams"
+              : "Start import"}
         </button>
-        {result && <p className="text-sm">{result}</p>}
+        {progress && <ImportProgressBar progress={progress} />}
+        {result && (
+          <p
+            className="text-sm"
+            style={{ color: result.includes("failed") || result.includes("Failed") ? "#f87171" : undefined }}
+          >
+            {result}
+          </p>
+        )}
       </div>
     </div>
   );

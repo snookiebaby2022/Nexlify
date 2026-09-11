@@ -221,6 +221,10 @@ export function connectionCapacityAllows(
   if (maxConnections <= 0) return true;
   if (sameStreamReconnect) return true;
   if (activeSessionCount < maxConnections) return true;
+  // Single-slot lines: always admit the newest play request. Cloudflare / proxy
+  // IP identity can drift between zaps and look like a second device; trackConnection
+  // + pruneViewerStreamsToCap reclaim the prior session immediately.
+  if (maxConnections === 1) return true;
   if (!clientIp) return false;
   // At capacity: only an existing viewer may continue (refresh / zap). A brand-new
   // IP must wait. Zap reclaim is handled by pruneViewerStreamsToCap on track.
@@ -525,6 +529,25 @@ export async function pruneViewerStreamsToCap(
   if (!normalized || !streamId) return;
   const cap = maxConnections <= 0 ? 0 : Math.max(1, Math.floor(maxConnections));
 
+  // maxConnections=1: keep only this viewer+stream; drop other streams and other IPs.
+  // Channel zaps and Cloudflare IP drift must not leave a stale blocker.
+  if (cap <= 1) {
+    await prisma.liveConnection.deleteMany({
+      where: {
+        lineId,
+        OR: [
+          { streamId: { not: streamId } },
+          {
+            AND: [{ streamId }, { NOT: connectionIpPrismaFilter(normalized) }],
+          },
+        ],
+      },
+    });
+    void setViewerActiveStream(lineId, streamId, normalized);
+    invalidateConnectionCaches({ lineId });
+    return;
+  }
+
   const others = await prisma.liveConnection.findMany({
     where: {
       lineId,
@@ -540,7 +563,7 @@ export async function pruneViewerStreamsToCap(
     return;
   }
 
-  const keepExtra = cap <= 1 ? 0 : cap - 1;
+  const keepExtra = cap - 1;
   const keepIds = new Set(others.slice(0, keepExtra).map((r) => r.id));
   const drop = others.filter((r) => !keepIds.has(r.id));
   if (!drop.length) {
@@ -828,7 +851,31 @@ export async function trackConnection(opts: {
     return conn.id;
   } catch (err: unknown) {
     const code = (err as { code?: string })?.code;
+    // P2003: FK missing. P2002: concurrent create race on (lineId,streamId,ip).
     if (code === "P2003") return null;
+    if (code === "P2002") {
+      const raced = await prisma.liveConnection.findFirst({
+        where: {
+          lineId: opts.lineId,
+          ...(streamId ? { streamId } : {}),
+          ...connectionIpPrismaFilter(clientIp),
+        },
+        orderBy: { lastSeenAt: "desc" },
+        select: { id: true },
+      });
+      if (raced) {
+        await prisma.liveConnection.updateMany({
+          where: { id: raced.id },
+          data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
+        });
+        invalidateConnectionCaches();
+        notifyLiveConnectionsChanged();
+        touchQuality();
+        if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
+        return raced.id;
+      }
+      return null;
+    }
     throw err;
   } finally {
     if (streamId) {

@@ -531,7 +531,7 @@ describe("Xtream stream URLs /live/{user}/{pass}/{id}.ts|.m3u8", () => {
 
     // Pure production helper
     assert.equal(connectionCapacityAllows(0, 1, 0, "10.0.0.1"), true);
-    assert.equal(connectionCapacityAllows(1, 1, 0, "10.0.0.2"), false);
+    assert.equal(connectionCapacityAllows(1, 1, 0, "10.0.0.2"), true);
     assert.equal(connectionCapacityAllows(1, 1, 1, "10.0.0.1", false), true);
 
     state.liveConnections.push({

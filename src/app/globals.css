@@ -1651,14 +1651,28 @@ button {
     cursor: pointer;
     text-decoration: none;
     transition: color 0.15s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .panel-mobile-bottom-nav-item svg {
+    flex-shrink: 0;
   }
 
   .panel-mobile-bottom-nav-item--active {
     color: #60a5fa;
   }
 
-  .panel-mobile-bottom-nav-item svg {
-    flex-shrink: 0;
+  .panel-mobile-drawer {
+    overscroll-behavior: contain;
+  }
+
+  .panel-mobile-dashboard {
+    padding-bottom: 0.5rem;
+  }
+
+  .panel-mobile-activity-manage {
+    touch-action: manipulation;
   }
 
   /* Mobile dashboard */
@@ -1756,6 +1770,91 @@ button {
     font-weight: 600;
     text-decoration: none;
     color: var(--text);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .panel-mobile-expiring {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--bg-card);
+    overflow: hidden;
+  }
+
+  .panel-mobile-expiring-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-mobile-expiring-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  .panel-mobile-expiring-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    min-height: 44px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    touch-action: manipulation;
+  }
+
+  .panel-mobile-expiring-empty {
+    padding: 1rem 0.85rem;
+    font-size: 0.875rem;
+    color: var(--muted);
+  }
+
+  .panel-mobile-expiring-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .panel-mobile-expiring-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.85rem;
+    min-height: 52px;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid var(--border);
+    touch-action: manipulation;
+  }
+
+  .panel-mobile-expiring-list li:last-child .panel-mobile-expiring-row {
+    border-bottom: none;
+  }
+
+  .panel-mobile-expiring-user {
+    font-size: 0.9375rem;
+    font-weight: 700;
+  }
+
+  .panel-mobile-expiring-meta {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .panel-mobile-search-input {
+    touch-action: manipulation;
+  }
+
+  .panel-mobile-stat-tile-link {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .panel-mobile-activity-list {

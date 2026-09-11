@@ -24,6 +24,7 @@ import {
   shouldPreserveCoalescedLiveUrl,
 } from "./live-coalesce-protect";
 import { entryMatchesGroupFilter } from "./import-scope";
+import type { ImportProgressReporter } from "./admin-import-ndjson";
 
 const VIDEO_EXT = new Set([
   ".mp4",
@@ -261,6 +262,7 @@ type ImportM3uOpts = {
   groupFilter?: string[];
   /** When false, refresh existing matches only — do not create new streams. */
   createMissing?: boolean;
+  onProgress?: ImportProgressReporter;
 };
 
 type ExistingTyped = {
@@ -423,6 +425,7 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
         overwriteCategories: opts.overwriteCategories,
         groupFilter: opts.groupFilter,
         createMissing: opts.createMissing,
+        onProgress: opts.onProgress,
       })
     );
   }
@@ -456,6 +459,7 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
           reorderExisting: opts.reorderExisting,
           updateNamesOnSync: opts.updateNamesOnSync,
           overwriteCategories: opts.overwriteCategories,
+          onProgress: opts.onProgress,
         })
       : emptyImportResult();
     const vodResult = vodEntries.length
@@ -527,9 +531,22 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
     liveUrlShareByType.set(StreamType.LIVE, buildLiveUrlShareCounts(allLiveUrls));
   }
 
+  const totalRows = [...byType.values()].reduce((n, rows) => n + rows.length, 0);
+  let rowDone = 0;
   for (const [type, rows] of byType) {
     const maps = existingMaps.get(type)!;
     for (const { entry, index } of rows) {
+      rowDone++;
+      if (rowDone % 25 === 0 || rowDone === totalRows) {
+        opts.onProgress?.({
+          phase: "vod",
+          message: `Importing ${type.toLowerCase()} entries…`,
+          current: rowDone,
+          total: totalRows,
+          imported,
+          skipped,
+        });
+      }
       const entrySortOrder = sortOrderStart + index;
       const existing = resolveTypedExisting(entry.url, maps.byExact, maps.byNorm);
       const seriesMeta = type === StreamType.SERIES ? parseSeriesFromM3uEntry(entry) : null;
@@ -721,6 +738,7 @@ export async function importFromFolder(
     serverIds?: string[];
     allowedRoot?: string;
     isAdult?: boolean;
+    onProgress?: ImportProgressReporter;
   }
 ) {
   clearTmdbImportCache();
@@ -748,7 +766,18 @@ export async function importFromFolder(
 
   const videos = walkVideos(safe).filter((f) => !f.endsWith(".m3u") && !f.endsWith(".m3u8"));
 
-  for (const file of videos) {
+  for (let vi = 0; vi < videos.length; vi++) {
+    const file = videos[vi]!;
+    if (vi % 20 === 0 || vi === videos.length - 1) {
+      opts.onProgress?.({
+        phase: "folder",
+        message: "Scanning video files…",
+        current: vi + 1,
+        total: videos.length,
+        imported,
+        skipped,
+      });
+    }
     const url = fileUrlForPath(file);
     const series = parseSeriesFromPath(file, safe);
     const type =
@@ -817,6 +846,7 @@ export async function importFromVodRows(
     categoryId?: string | null;
     serverId?: string | null;
     allowedRoot?: string;
+    onProgress?: ImportProgressReporter;
   }
 ) {
   clearTmdbImportCache();
@@ -827,7 +857,18 @@ export async function importFromVodRows(
   const { pickVodLoadBalancerId } = await import("@/lib/server-load");
   const defaultServerId = opts.serverId ?? (await pickVodLoadBalancerId());
 
-  for (const row of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex]!;
+    if (rowIndex % 10 === 0 || rowIndex === rows.length - 1) {
+      opts.onProgress?.({
+        phase: "vod",
+        message: "Importing VOD rows…",
+        current: rowIndex + 1,
+        total: rows.length,
+        imported,
+        skipped,
+      });
+    }
     try {
       let streamUrl = "";
       let providerId: string | null = null;

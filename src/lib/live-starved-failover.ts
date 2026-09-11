@@ -17,10 +17,40 @@ export const LIVE_STARVED_KBPS = 2000;
 export const LIVE_STARVED_CONFIRM_MS = 10 * 60 * 1000;
 const CONFIRM_KEY = (id: string) => `live-starved:confirm:${id}`;
 const MAX_PER_RUN = 10;
+/** Hard ceiling so one hung origin cannot block the cron minute job. */
+const PROBE_HARD_TIMEOUT_MS = Number(process.env.LIVE_STARVED_PROBE_TIMEOUT_MS || 12_000);
+const RUN_BUDGET_MS = Number(process.env.LIVE_STARVED_BUDGET_MS || 45_000);
+
+async function probeWithHardTimeout(opts: {
+  streamId: string;
+  url: string;
+}): Promise<{ probe: { status: string; bitrateKbps?: number; message?: string }; skipped: boolean; reason?: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      // Fast HTTP probe only — ffprobe on live IPTV origins routinely hangs past 18s.
+      probeStreamWithScheduler({ ...opts, fast: true }),
+      new Promise<{ probe: { status: string; message: string }; skipped: true; reason: string }>((resolve) => {
+        timer = setTimeout(
+          () =>
+            resolve({
+              probe: { status: "offline", message: "probe hard-timeout" },
+              skipped: true,
+              reason: "hard_timeout",
+            }),
+          Math.max(3_000, PROBE_HARD_TIMEOUT_MS)
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export type ProbeLike = {
   status: string;
   bitrateKbps?: number;
+  message?: string;
 };
 
 export function isProbeStarved(probe: ProbeLike): boolean {
@@ -148,16 +178,17 @@ export async function runLiveStarvedFailover(opts?: {
     }
   }
 
+  const startedAt = Date.now();
   for (const row of hot) {
+    if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
     out.scanned++;
     if (isBadLiveHostUrl(row.streamUrl)) {
       // Catalog heal owns bad hosts; still try immediate sibling swap here.
     }
 
-    const primaryResult = await probeStreamWithScheduler({
+    const primaryResult = await probeWithHardTimeout({
       streamId: row.id,
       url: row.streamUrl,
-      fast: false,
     });
     if (primaryResult.skipped) continue;
 
@@ -199,10 +230,10 @@ export async function runLiveStarvedFailover(opts?: {
       continue;
     }
 
-    const bakResult = await probeStreamWithScheduler({
+    if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+    const bakResult = await probeWithHardTimeout({
       streamId: row.id,
       url: candidate,
-      fast: false,
     });
     if (bakResult.skipped || !isProbeHealthy(bakResult.probe)) continue;
 
