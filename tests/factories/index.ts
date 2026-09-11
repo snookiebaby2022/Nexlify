@@ -107,7 +107,7 @@ export function buildLiveStream(overrides: {
   return {
     name: overrides.name ?? next("live"),
     streamUrl: overrides.streamUrl ?? "http://127.0.0.1/mock/live.ts",
-    type: StreamType.LIVE as const,
+    type: StreamType.LIVE,
     categoryId: overrides.categoryId ?? null,
     isActive: true,
   };
@@ -127,7 +127,7 @@ export function buildSeriesEpisode(overrides: {
     seasonNum: overrides.seasonNum ?? 1,
     episodeNum: overrides.episodeNum ?? 1,
     streamUrl: overrides.streamUrl ?? "http://127.0.0.1/mock/ep1.mp4",
-    type: StreamType.SERIES as const,
+    type: StreamType.SERIES,
     categoryId: overrides.categoryId ?? null,
     isActive: true,
     containerExtension: "mp4",
