@@ -24,7 +24,11 @@ export async function POST(req: NextRequest) {
   }
 
   const action = String(body.action ?? "enable_all_inactive");
-  if (action !== "enable_all_inactive" && action !== "enable_by_type") {
+  if (
+    action !== "enable_all_inactive" &&
+    action !== "enable_by_type" &&
+    action !== "delete_all_inactive"
+  ) {
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   }
 
@@ -32,7 +36,9 @@ export async function POST(req: NextRequest) {
   const allowedTypes = ["LIVE", "MOVIE", "SERIES"] as const;
   type StreamTypeFilter = (typeof allowedTypes)[number];
   const typed =
-    action === "enable_by_type" && type && (allowedTypes as readonly string[]).includes(type)
+    (action === "enable_by_type" || action === "delete_all_inactive") &&
+    type &&
+    (allowedTypes as readonly string[]).includes(type)
       ? (type as StreamTypeFilter)
       : null;
 
@@ -46,6 +52,35 @@ export async function POST(req: NextRequest) {
   const where = typed
     ? { isActive: false as const, type: typed as "LIVE" | "MOVIE" | "SERIES" }
     : { isActive: false as const };
+
+  if (action === "delete_all_inactive") {
+    const BATCH = 500;
+    let deleted = 0;
+    for (;;) {
+      const batch = await prisma.stream.findMany({
+        where,
+        select: { id: true },
+        take: BATCH,
+      });
+      if (!batch.length) break;
+      const result = await prisma.stream.deleteMany({
+        where: { id: { in: batch.map((row) => row.id) } },
+      });
+      if (result.count === 0) break;
+      deleted += result.count;
+      if (batch.length < BATCH) break;
+    }
+
+    await logActivity("delete_inactive_streams", {
+      userId: session.id,
+      entity: "stream",
+      meta: { deleted, type: typed ?? "ALL" },
+    });
+    await invalidateXtreamCategories().catch(() => {});
+    await invalidateDashboardStats().catch(() => {});
+
+    return NextResponse.json({ ok: true, deleted });
+  }
 
   const result = await prisma.stream.updateMany({
     where,

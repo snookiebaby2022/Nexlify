@@ -262,6 +262,9 @@ export function DashboardIssuesPanel({
                   {inactiveSeries ? ` · Series ${inactiveSeries}` : ""}
                 </p>
               </div>
+              <Link href="/admin/streams/disabled" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                View all
+              </Link>
               <button
                 type="button"
                 disabled={busy === "activate"}

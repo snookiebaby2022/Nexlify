@@ -74,6 +74,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/diagnostics", label: "Panel diagnostics", section: "Hub", keywords: "fix recover probe reboot health nginx" },
           { href: "/admin/stream_errors", label: "Stream errors", section: "Streams" },
+          { href: "/admin/streams/disabled", label: "Disabled streams", section: "Streams" },
         ],
       },
     },
