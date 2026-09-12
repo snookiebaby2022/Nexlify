@@ -269,6 +269,13 @@ export async function PUT(req: NextRequest) {
       packages: result.packages,
       coupons: result.coupons,
       epgSources: result.epgSources,
+      streamServers: result.streamServers,
+      streamProviders: result.streamProviders,
+      magDevices: result.magDevices,
+      enigmaDevices: result.enigmaDevices,
+      watchFolders: result.watchFolders,
+      m3uSyncJobs: result.m3uSyncJobs,
+      mediaIntegrations: result.mediaIntegrations,
     },
     errors: result.errors,
     message:

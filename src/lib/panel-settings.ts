@@ -322,7 +322,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     remotePassword: "",
     remotePath: "/backups/nexlify",
     keepDays: 7,
-    fullExportOnBackup: false,
+    fullExportOnBackup: true,
+    includePasswords: true,
     allowRestoreUpload: true,
     exportFormat: "zip",
     s3Bucket: "",
@@ -1035,6 +1036,14 @@ export async function ensureAddonSettingsHealed(): Promise<{
         _healedV4: true,
       });
       touched.push("backup-json-off");
+    }
+    if (!backup._healedV5) {
+      await setSettingGroup("backup", {
+        fullExportOnBackup: true,
+        includePasswords: true,
+        _healedV5: true,
+      });
+      touched.push("backup-full-secrets");
     }
   } catch {
     /* ignore */

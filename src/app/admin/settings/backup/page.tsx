@@ -15,6 +15,8 @@ type BackupSettings = {
   remotePassword: string;
   remotePath: string;
   keepDays: number;
+  fullExportOnBackup?: boolean;
+  includePasswords?: boolean;
   exportFormat?: string;
   s3Bucket?: string;
   s3Region?: string;
@@ -142,7 +144,8 @@ export default function BackupSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Backup</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Automatic panel backup every 24 hours (when cron daemon is running).
+          JSON/ZIP exports include streams, lines (with passwords when enabled), servers, providers, MAG/Enigma,
+          bouquets, and settings. PostgreSQL dumps (below) are a full database snapshot.
         </p>
       </div>
 
@@ -227,6 +230,24 @@ export default function BackupSettingsPage() {
         </div>
       </SettingsPanel>
       </div>
+
+      <SettingsPanel
+        title="Export contents"
+        info="Scheduled cron backups always write a full catalog. Disable line passwords only if you share backup files outside your trust boundary."
+      >
+        <div className="grid md:grid-cols-2 gap-4 w-full">
+          <YesNo
+            label="Full export (streams, lines, servers, providers, devices)"
+            value={data.fullExportOnBackup !== false}
+            onChange={(fullExportOnBackup) => setData({ ...data, fullExportOnBackup })}
+          />
+          <YesNo
+            label="Include line + panel login secrets in JSON export"
+            value={data.includePasswords !== false}
+            onChange={(includePasswords) => setData({ ...data, includePasswords })}
+          />
+        </div>
+      </SettingsPanel>
 
       <SettingsPanel title="Export format">
         <label className="block text-sm">
@@ -378,7 +399,10 @@ export default function BackupSettingsPage() {
         </button>
       </SettingsSaveBar>
 
-      <SettingsPanel title="Restore settings" info="Upload a backup JSON to restore panel settings keys only. Use Panel Transfer for lines and streams.">
+      <SettingsPanel
+        title="Restore from JSON export"
+        info="Upload a v3/v4 nexlify-backup JSON (or use Admin → Backup & Restore). Backups without line passwords skip password fields on restore. EPG programme data is not in JSON — restore from a PostgreSQL dump if needed."
+      >
         <label className="block text-sm">
           <span style={{ color: "var(--muted)" }}>Backup JSON file</span>
           <input

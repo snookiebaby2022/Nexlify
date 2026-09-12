@@ -6,6 +6,12 @@ import { once } from "events";
 import { createGzip } from "zlib";
 import { writeBackupArchive, zipJsonFileOnDisk } from "@/lib/backup-archive";
 import { resolveBackupDir } from "@/lib/backup-path";
+import {
+  BACKUP_MANIFEST,
+  BACKUP_VERSION,
+  loadBackupPanelUsers,
+  loadBackupSideTables,
+} from "@/lib/backup-catalog";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -99,27 +105,14 @@ export async function buildFullBackupSnapshot(options?: {
   const onProgress = options?.onProgress;
   onProgress?.("meta", 0, 8);
 
-  const [panelSettings, bouquets, categories, users, packages, coupons, epgSources] =
+  const includeSecrets = options?.includePasswords === true;
+  const [panelSettings, bouquets, categories, side, users, packages, coupons, epgSources] =
     await Promise.all([
       prisma.panelSetting.findMany(),
       prisma.bouquet.findMany({ include: { streams: true } }),
       prisma.category.findMany(),
-      prisma.panelUser.findMany({
-        select: {
-          id: true,
-          username: true,
-          role: true,
-          credits: true,
-          email: true,
-          displayName: true,
-          isActive: true,
-          maxLines: true,
-          groupId: true,
-          parentId: true,
-          resellerDns: true,
-          defaultLanguage: true,
-        },
-      }),
+      loadBackupSideTables(),
+      loadBackupPanelUsers(includeSecrets),
       prisma.package.findMany(),
       prisma.coupon.findMany(),
       prisma.epgSource.findMany(),
@@ -128,15 +121,17 @@ export async function buildFullBackupSnapshot(options?: {
 
   const streams = await loadStreamsBatched(onProgress);
   onProgress?.("meta", 6, 8);
-  const lines = await loadLinesBatched(options?.includePasswords === true, onProgress);
+  const lines = await loadLinesBatched(includeSecrets, onProgress);
   onProgress?.("meta", 8, 8);
 
   return {
-    version: 3,
+    version: BACKUP_VERSION,
+    manifest: [...BACKUP_MANIFEST],
     createdAt: new Date().toISOString(),
     panelSettings,
     bouquets,
     categories,
+    ...side,
     streams,
     lines,
     users,
@@ -148,6 +143,10 @@ export async function buildFullBackupSnapshot(options?: {
       lines: lines.length,
       users: users.length,
       bouquets: bouquets.length,
+      streamServers: side.streamServers.length,
+      streamProviders: side.streamProviders.length,
+      magDevices: side.magDevices.length,
+      enigmaDevices: side.enigmaDevices.length,
     },
   };
 }
@@ -261,27 +260,13 @@ async function writeFullBackupStreaming(options: {
 
   onProgress?.("building", 0, 100);
 
-  const [panelSettings, bouquets, categories, users, packages, coupons, epgSources, streamTotal, lineTotal] =
+  const [panelSettings, bouquets, categories, side, users, packages, coupons, epgSources, streamTotal, lineTotal] =
     await Promise.all([
       prisma.panelSetting.findMany(),
       prisma.bouquet.findMany({ include: { streams: true } }),
       prisma.category.findMany(),
-      prisma.panelUser.findMany({
-        select: {
-          id: true,
-          username: true,
-          role: true,
-          credits: true,
-          email: true,
-          displayName: true,
-          isActive: true,
-          maxLines: true,
-          groupId: true,
-          parentId: true,
-          resellerDns: true,
-          defaultLanguage: true,
-        },
-      }),
+      loadBackupSideTables(),
+      loadBackupPanelUsers(includePasswords),
       prisma.package.findMany(),
       prisma.coupon.findMany(),
       prisma.epgSource.findMany(),
@@ -290,10 +275,17 @@ async function writeFullBackupStreaming(options: {
     ]);
 
   onProgress?.("writing", 5, 100);
-  await sink.write(`{"version":3,"createdAt":${JSON.stringify(new Date().toISOString())},`);
+  await sink.write(
+    `{"version":${BACKUP_VERSION},"manifest":${JSON.stringify([...BACKUP_MANIFEST])},"createdAt":${JSON.stringify(new Date().toISOString())},`
+  );
   await sink.write(`"panelSettings":${JSON.stringify(panelSettings)},`);
   await sink.write(`"bouquets":${JSON.stringify(bouquets)},`);
   await sink.write(`"categories":${JSON.stringify(categories)},`);
+  await sink.write(`"streamProxies":${JSON.stringify(side.streamProxies)},`);
+  await sink.write(`"vpnProfiles":${JSON.stringify(side.vpnProfiles)},`);
+  await sink.write(`"streamServers":${JSON.stringify(side.streamServers)},`);
+  await sink.write(`"streamProviders":${JSON.stringify(side.streamProviders)},`);
+  await sink.write(`"userGroups":${JSON.stringify(side.userGroups)},`);
   await sink.write(`"users":${JSON.stringify(users)},`);
   await sink.write(`"packages":${JSON.stringify(packages)},`);
   await sink.write(`"coupons":${JSON.stringify(coupons)},`);
@@ -345,8 +337,16 @@ async function writeFullBackupStreaming(options: {
     "lines"
   );
 
+  await sink.write(`,"magDevices":${JSON.stringify(side.magDevices)},`);
+  await sink.write(`"enigmaDevices":${JSON.stringify(side.enigmaDevices)},`);
+  await sink.write(`"watchFolders":${JSON.stringify(side.watchFolders)},`);
+  await sink.write(`"m3uSyncJobs":${JSON.stringify(side.m3uSyncJobs)},`);
+  await sink.write(`"blockedAsns":${JSON.stringify(side.blockedAsns)},`);
+  await sink.write(`"blockedUserAgents":${JSON.stringify(side.blockedUserAgents)},`);
+  await sink.write(`"accessCodes":${JSON.stringify(side.accessCodes)},`);
+  await sink.write(`"mediaIntegrations":${JSON.stringify(side.mediaIntegrations)},`);
   await sink.write(
-    `,"counts":{"streams":${streamsWritten},"lines":${linesWritten},"users":${users.length},"bouquets":${bouquets.length}}}`
+    `,"counts":{"streams":${streamsWritten},"lines":${linesWritten},"users":${users.length},"bouquets":${bouquets.length},"streamServers":${side.streamServers.length},"streamProviders":${side.streamProviders.length}}}`
   );
   await sink.end();
 
@@ -398,7 +398,9 @@ export async function writePanelBackupFile(options?: {
 }): Promise<WritePanelBackupResult> {
   const backup = await getSettingGroup("backup");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const includePasswords = options?.includePasswords ?? backup.includePasswords === true;
+  const includePasswords =
+    options?.includePasswords ??
+    (backup.includePasswords !== false && backup.includePasswords !== "false");
   const fullExport = options?.fullExport ?? backup.fullExportOnBackup !== false;
   const format =
     options?.format === "zip" || options?.format === "gzip" || options?.format === "json"
@@ -515,8 +517,8 @@ export async function runPanelBackup() {
   if (!backup.enabled) return { skipped: true as const, reason: "disabled" };
 
   const result = await writePanelBackupFile({
-    includePasswords: backup.includePasswords === true,
-    fullExport: backup.fullExportOnBackup !== false,
+    includePasswords: backup.includePasswords !== false && backup.includePasswords !== "false",
+    fullExport: true,
   });
   return result;
 }

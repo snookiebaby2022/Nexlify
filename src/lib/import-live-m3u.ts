@@ -4,7 +4,7 @@ import type { M3uEntry } from "./m3u-parser";
 import { categoryFromGroupName } from "./vod-category";
 import { encodeLiveStreamMeta } from "./stream-live-meta";
 import { maxStreamSortOrder } from "./stream-order";
-import { liveTitleExactKey, liveTitleQualityKey } from "./live-title-dedupe";
+import { livePlaylistEntryDedupeKey, liveTitleExactKey } from "./live-title-dedupe";
 import { normalizeStreamMatchKey, streamUrlHosts } from "./stream-url-match";
 import {
   buildLiveUrlShareCounts,
@@ -207,13 +207,15 @@ export async function importLiveM3uEntriesFast(
   const unique = [...byUrl.values()];
   const qualityCounts = new Map<string, number>();
   for (const { entry } of unique) {
-    const k = liveTitleQualityKey(liveStreamDisplayName(entry));
+    const k = liveTitleExactKey(liveStreamDisplayName(entry));
     if (!k) continue;
     qualityCounts.set(k, (qualityCounts.get(k) ?? 0) + 1);
   }
   for (const [label, n] of qualityCounts) {
     if (n >= 3) {
-      errors.push(`Playlist has ${n} copies of “${label}” (title + quality). Keep one source per event.`);
+      errors.push(
+        `Playlist has ${n} entries with the exact title “${label}”. Check for true duplicates (same stream id/URL).`
+      );
     }
   }
 
@@ -253,7 +255,7 @@ export async function importLiveM3uEntriesFast(
   });
   const dead404Urls = new Set(dead404.map((r) => r.streamUrl));
 
-  const seenExactName = new Set<string>();
+  const seenPlaylistIdentity = new Set<string>();
 
   const categoryCache = new Map<string, string>();
   const bouquetCache = new Map<string, string>();
@@ -402,13 +404,13 @@ export async function importLiveM3uEntriesFast(
     }
 
     const displayName = liveStreamDisplayName(entry);
-    const exactKey = liveTitleExactKey(displayName);
-    if (exactKey && seenExactName.has(exactKey)) {
+    const dedupeKey = livePlaylistEntryDedupeKey(entry.url);
+    if (dedupeKey && seenPlaylistIdentity.has(dedupeKey)) {
       skipped++;
-      errors.push(`${displayName}: skipped duplicate title in this playlist`);
+      errors.push(`${displayName}: skipped duplicate stream id/URL in this playlist`);
       continue;
     }
-    if (exactKey) seenExactName.add(exactKey);
+    if (dedupeKey) seenPlaylistIdentity.add(dedupeKey);
 
     const assigned = serverPoolAssignment(opts.serverIds ?? opts.serverPoolIds, opts.serverId);
     toCreate.push({
