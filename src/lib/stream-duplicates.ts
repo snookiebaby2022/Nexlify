@@ -1,8 +1,9 @@
 import { StreamType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { liveAliasDuplicateKey, liveExactDuplicateKey } from "@/lib/live-title-dedupe";
 
 export type DuplicateKind = "movies" | "series" | "live";
-export type DuplicateReason = "url" | "title" | "episode";
+export type DuplicateReason = "url" | "title" | "alias" | "episode";
 
 export type DuplicateScanRow = {
   id: string;
@@ -178,16 +179,30 @@ export function buildDuplicateGroups(rows: DuplicateScanRow[], kind: DuplicateKi
     }
     pushGroups(groups, used, byTitle, "title", (members) => members[0]!.name);
   } else if (kind === "live") {
-    const byTitle = new Map<string, DuplicateScanRow[]>();
+    const byExact = new Map<string, DuplicateScanRow[]>();
     for (const row of rows) {
       if (used.has(row.id)) continue;
-      const key = literalLiveNameKey(row.name);
+      const key = liveExactDuplicateKey(row.name, row.categoryId);
       if (!key) continue;
-      const list = byTitle.get(key) ?? [];
+      const list = byExact.get(key) ?? [];
       list.push(row);
-      byTitle.set(key, list);
+      byExact.set(key, list);
     }
-    pushGroups(groups, used, byTitle, "title", (members) => members[0]!.name);
+    pushGroups(groups, used, byExact, "title", (members) => members[0]!.name);
+
+    const byAlias = new Map<string, DuplicateScanRow[]>();
+    for (const row of rows) {
+      if (used.has(row.id)) continue;
+      const key = liveAliasDuplicateKey(row.name, row.categoryId);
+      if (!key) continue;
+      const list = byAlias.get(key) ?? [];
+      list.push(row);
+      byAlias.set(key, list);
+    }
+    pushGroups(groups, used, byAlias, "alias", (members) => {
+      const sample = [...members].sort((a, b) => a.name.length - b.name.length);
+      return sample.map((m) => m.name).join(" · ");
+    });
   } else {
     const byEpisode = new Map<string, DuplicateScanRow[]>();
     const parents: DuplicateScanRow[] = [];
@@ -456,6 +471,82 @@ export async function purgeUkUsaUrlDuplicateLive(): Promise<{ deleted: number; g
   }
   return { deleted, groups };
 }
+
+function duplicateExtraIdsFromGroups(groups: DuplicateGroup[]): string[] {
+  const ids: string[] = [];
+  for (const g of groups) {
+    for (const m of g.members) {
+      if (m.id !== g.keepId) ids.push(m.id);
+    }
+  }
+  return ids;
+}
+
+/** Delete all duplicate live copies (URL + exact name + channel alias), scoped by category. */
+export async function purgeAllLiveDuplicates(opts?: {
+  categoryId?: string;
+  categoryNameLike?: string;
+}): Promise<{ deleted: number; groups: number; scanned: number }> {
+  const type = StreamType.LIVE;
+  const categoryId = opts?.categoryId?.trim();
+  const categoryNameLike = opts?.categoryNameLike?.trim();
+
+  const rows = await prisma.stream.findMany({
+    where: {
+      type,
+      isRadio: false,
+      ...(categoryId ? { categoryId } : {}),
+      ...(categoryNameLike
+        ? { category: { name: { contains: categoryNameLike.replace(/%/g, ""), mode: "insensitive" } } }
+        : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      streamUrl: true,
+      type: true,
+      seriesName: true,
+      seasonNum: true,
+      episodeNum: true,
+      isActive: true,
+      categoryId: true,
+      createdAt: true,
+      isOnDemand: true,
+      vodMode: true,
+      streamIcon: true,
+      category: { select: { name: true } },
+      _count: { select: { bouquets: true } },
+    },
+  });
+
+  const mapped: DuplicateScanRow[] = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    streamUrl: r.streamUrl,
+    type: r.type,
+    seriesName: r.seriesName,
+    seasonNum: r.seasonNum,
+    episodeNum: r.episodeNum,
+    isActive: r.isActive,
+    categoryId: r.categoryId,
+    categoryName: r.category?.name ?? null,
+    bouquetCount: r._count.bouquets,
+    createdAt: r.createdAt,
+    isOnDemand: Boolean(r.isOnDemand || r.vodMode === "ON_DEMAND"),
+    hasIcon: Boolean(String(r.streamIcon ?? "").trim()),
+  }));
+
+  const allGroups = buildDuplicateGroups(mapped, "live");
+  const ids = duplicateExtraIdsFromGroups(allGroups);
+  let deleted = 0;
+  const chunkSize = 500;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const r = await deleteDuplicateStreams(ids.slice(i, i + chunkSize));
+    deleted += r.deleted;
+  }
+  return { deleted, groups: allGroups.length, scanned: mapped.length };
+}
+
 export async function findDuplicateGroups(
   kind: DuplicateKind,
   opts?: DuplicateScanOptions
@@ -496,6 +587,9 @@ export async function findDuplicateGroups(
       isActive: true,
       categoryId: true,
       createdAt: true,
+      isOnDemand: true,
+      vodMode: true,
+      streamIcon: true,
       category: { select: { name: true } },
       _count: { select: { bouquets: true } },
     },
@@ -514,6 +608,8 @@ export async function findDuplicateGroups(
     categoryName: r.category?.name ?? null,
     bouquetCount: r._count.bouquets,
     createdAt: r.createdAt,
+    isOnDemand: Boolean(r.isOnDemand || r.vodMode === "ON_DEMAND"),
+    hasIcon: Boolean(String(r.streamIcon ?? "").trim()),
   }));
 
   const allGroups = buildDuplicateGroups(mapped, kind);

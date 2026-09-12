@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/lines";
 import {
   deleteDuplicateStreams,
   findDuplicateGroups,
+  purgeAllLiveDuplicates,
   purgeUkUsaUrlDuplicateLive,
   type DuplicateKind,
 } from "@/lib/stream-duplicates";
@@ -67,7 +68,13 @@ export async function POST(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: { ids?: unknown; confirm?: unknown; purgeUkUsa?: unknown } = {};
+  let body: {
+    ids?: unknown;
+    confirm?: unknown;
+    purgeUkUsa?: unknown;
+    purgeAllLive?: unknown;
+    categoryId?: unknown;
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -84,6 +91,23 @@ export async function POST(req: NextRequest) {
       userId: session.id,
       entity: "stream",
       meta: { purgeUkUsa: true, ...result },
+    });
+    await invalidatePlaybackUrls();
+    await invalidateXtreamCategories();
+    await invalidateDashboardStats();
+    return NextResponse.json({ ok: true, ...result });
+  }
+
+  if (body.purgeAllLive === true) {
+    const categoryId =
+      typeof body.categoryId === "string" && body.categoryId.trim()
+        ? body.categoryId.trim()
+        : undefined;
+    const result = await purgeAllLiveDuplicates({ categoryId });
+    await logActivity("remove_duplicates", {
+      userId: session.id,
+      entity: "stream",
+      meta: { purgeAllLive: true, categoryId, ...result },
     });
     await invalidatePlaybackUrls();
     await invalidateXtreamCategories();

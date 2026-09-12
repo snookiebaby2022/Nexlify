@@ -10,23 +10,32 @@ try {
   const tsconfig = require(path.join(projectRoot, "tsconfig.json"));
   tsconfigPaths.register({
     baseUrl: projectRoot,
-    paths: tsconfig.compilerOptions?.paths ?? { "@/*": ["./src/*"] },
+    paths: { "@/*": ["./src/*"], ...(tsconfig.compilerOptions?.paths ?? {}) },
   });
 } catch {
   /* tsconfig-paths optional */
 }
 
 async function main() {
-  const { purgeUkUsaUrlDuplicateLive, findDuplicateGroups, deleteDuplicateStreams } = await import(
-    "../src/lib/stream-duplicates.ts"
-  );
+  const {
+    purgeUkUsaUrlDuplicateLive,
+    purgeAllLiveDuplicates,
+    findDuplicateGroups,
+    deleteDuplicateStreams,
+  } = await import("../src/lib/stream-duplicates.ts");
   const { invalidatePlaybackUrls, invalidateXtreamCategories, invalidateDashboardStats } = await import(
     "../src/lib/cache-invalidate.ts"
   );
 
-  console.log("Purging UK/USA URL duplicates…");
-  const uk = await purgeUkUsaUrlDuplicateLive();
-  console.log("UK/USA purge:", uk);
+  if (process.argv.includes("--all-live")) {
+    console.log("Purging all live duplicates (URL + title + alias)…");
+    const all = await purgeAllLiveDuplicates();
+    console.log("All live purge:", all);
+  } else {
+    console.log("Purging UK/USA URL duplicates…");
+    const uk = await purgeUkUsaUrlDuplicateLive();
+    console.log("UK/USA purge:", uk);
+  }
 
   if (process.argv.includes("--all-live-url")) {
     console.log("Scanning all live URL duplicates…");

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type DuplicateKind = "movies" | "series" | "live";
-type DuplicateReason = "url" | "title" | "episode";
+type DuplicateReason = "url" | "title" | "alias" | "episode";
 type MatchMode = "url" | "all";
 
 type DuplicateMember = {
@@ -32,6 +32,7 @@ type DuplicateGroup = {
 const REASON_LABEL: Record<DuplicateReason, string> = {
   url: "Same URL",
   title: "Same title",
+  alias: "Same channel (alias name)",
   episode: "Same episode",
 };
 
@@ -45,7 +46,7 @@ function categoryTypeForKind(kind: DuplicateKind): "LIVE" | "MOVIE" | "SERIES" {
 
 export default function RemoveDuplicatesPage() {
   const [kind, setKind] = useState<DuplicateKind>("live");
-  const [match, setMatch] = useState<MatchMode>("url");
+  const [match, setMatch] = useState<MatchMode>("all");
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
@@ -139,6 +140,46 @@ export default function RemoveDuplicatesPage() {
     },
     [categoryId, match, pageSize]
   );
+
+  async function purgeAllLive() {
+    const scope = categoryId
+      ? categories.find((c) => c.id === categoryId)?.name ?? "selected category"
+      : "all categories";
+    if (
+      !confirm(
+        `Remove ALL duplicate live streams in ${scope}?\n\nKeeps one copy per group (URL, exact name, or alias). FHD/HD/SD stay separate.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/streams/duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          purgeAllLive: true,
+          confirm: true,
+          ...(categoryId ? { categoryId } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? `Purge failed (HTTP ${res.status})`);
+        return;
+      }
+      setMsg(
+        `Removed ${data.deleted ?? 0} duplicate live stream(s) across ${data.groups ?? 0} groups (${data.scanned ?? 0} scanned).`
+      );
+      await scan("live", 0);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function purgeUkUsa() {
     if (
@@ -257,8 +298,8 @@ export default function RemoveDuplicatesPage() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-semibold">Remove duplicates</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Match by same URL (recommended for live) or title/episode. Results are paginated so large catalogs do not
-            crash the panel.
+            Live: same URL, exact name (per category), or alias names like &quot;UK: SKY CINEMA PREMIERE&quot; vs
+            &quot;Sky Cinema Premiere FHD&quot;. FHD, HD, and SD stay separate. Results are paginated.
           </p>
         </div>
         <Link href="/admin/management/tools" className="text-sm" style={{ color: "var(--accent)" }}>
@@ -314,8 +355,8 @@ export default function RemoveDuplicatesPage() {
             value={match}
             onChange={(e) => setMatch(e.target.value as MatchMode)}
           >
+            <option value="all">Full scan (recommended for live)</option>
             <option value="url">Same URL only</option>
-            <option value="all">URL + title/episode</option>
           </select>
         </label>
       </div>
@@ -359,6 +400,15 @@ export default function RemoveDuplicatesPage() {
           }}
         >
           {loading && kind === "live" ? "Scanning…" : "Scan live streams"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void purgeAllLive()}
+          disabled={loading || deleting}
+          className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
+          style={{ background: "#b91c1c", color: "#fff" }}
+        >
+          Remove all live duplicates
         </button>
         <button
           type="button"
