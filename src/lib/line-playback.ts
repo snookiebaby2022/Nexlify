@@ -77,6 +77,8 @@ export type LinePlaybackAuth = {
   forcedServerId: string | null;
   allowedUserAgents?: string | null;
   disallowedUserAgents?: string | null;
+  lockMac?: string | null;
+  lockDeviceId?: string | null;
 };
 
 export type PlaybackContext = {
@@ -117,6 +119,8 @@ export async function getLineForPlaybackAuth(username: string): Promise<LinePlay
       allowedUserAgents: (row as Line & { allowedUserAgents?: string | null }).allowedUserAgents ?? null,
       disallowedUserAgents:
         (row as Line & { disallowedUserAgents?: string | null }).disallowedUserAgents ?? null,
+      lockMac: (row as Line & { lockMac?: string | null }).lockMac ?? null,
+      lockDeviceId: (row as Line & { lockDeviceId?: string | null }).lockDeviceId ?? null,
     };
   });
 }
