@@ -16,6 +16,7 @@ import {
 import { LineRowActionsMenu } from "@/components/line-row-actions-menu";
 import { LineEditForm } from "@/components/line-edit-form";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { LinePasswordCell } from "@/components/line-password-cell";
 import { linesApiRoot } from "@/lib/panel-api";
 import { ConnInfoCell, LastWatchedCell } from "@/components/line-last-watched-cell";
 import { formatDateTime, formatExpireXui } from "@/lib/format";
@@ -26,6 +27,9 @@ import {
   ToolbarDropdown,
   useStoredColumnVisibility,
 } from "@/components/table-toolbar-menus";
+import { LineOwnerFilterSelect } from "@/components/line-owner-filter-select";
+import { ownerRoleLabel, type LineOwnerOption } from "@/lib/line-owner-filter";
+import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
 
 export type ManageLineRow = {
   id: string;
@@ -41,7 +45,7 @@ export type ManageLineRow = {
   isRestreamer?: boolean;
   isTrial?: boolean;
   notes?: string | null;
-  owner?: { id: string; username: string } | null;
+  owner?: { id: string; username: string; role?: string } | null;
   lastWatchedAt?: string | null;
   lastWatchedIp?: string | null;
   lastWatchedStream?: { id: string; name: string } | null;
@@ -56,9 +60,39 @@ export type ManageLineRow = {
 };
 const PAGE_SIZES = [10, 25, 50, 100];
 
-type LineSortKey = "username" | "expiresAt" | "owner" | "createdAt";
-type StatusFilter = "all" | "ACTIVE" | "DISABLED" | "BANNED";
-type TrialFilter = "all" | "yes" | "no";
+export type LineSortKey =
+  | "username"
+  | "expiresAt"
+  | "owner"
+  | "ownerRole"
+  | "createdAt"
+  | "maxConnections"
+  | "status";
+export type StatusFilter =
+  | "all"
+  | "ACTIVE"
+  | "DISABLED"
+  | "BANNED"
+  | "EXPIRED"
+  | "EXPIRED_TRIAL"
+  | "EXPIRING_7"
+  | "TRIAL_ACTIVE"
+  | "ONLINE"
+  | "NEVER_EXPIRE";
+export type TrialFilter = "all" | "yes" | "no";
+
+const STATUS_FILTER_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "ACTIVE", label: "Active" },
+  { value: "DISABLED", label: "Disabled" },
+  { value: "BANNED", label: "Banned" },
+  { value: "EXPIRED", label: "Expired lines" },
+  { value: "EXPIRED_TRIAL", label: "Expired trials" },
+  { value: "EXPIRING_7", label: "Expiring in 7 days" },
+  { value: "TRIAL_ACTIVE", label: "Active trials" },
+  { value: "ONLINE", label: "Online now" },
+  { value: "NEVER_EXPIRE", label: "Never expire" },
+];
 
 const LINE_COLUMN_DEFAULTS: Record<string, boolean> = {
   sta: true,
@@ -127,9 +161,13 @@ export function ManageLinesTable({
   serverSortDir,
   serverStatusFilter,
   serverTrialFilter,
+  serverOwnerFilter,
+  serverBouquetFilter,
   onServerSortChange,
   onServerStatusFilterChange,
   onServerTrialFilterChange,
+  onServerOwnerFilterChange,
+  onServerBouquetFilterChange,
   loading = false,
 }: {
   lines: ManageLineRow[];
@@ -153,6 +191,10 @@ export function ManageLinesTable({
   onServerSortChange?: (key: LineSortKey, dir: "asc" | "desc") => void;
   onServerStatusFilterChange?: (value: StatusFilter) => void;
   onServerTrialFilterChange?: (value: TrialFilter) => void;
+  serverOwnerFilter?: string;
+  serverBouquetFilter?: string;
+  onServerOwnerFilterChange?: (value: string) => void;
+  onServerBouquetFilterChange?: (value: string) => void;
 }) {
   const router = useRouter();
   const base = panel === "reseller" ? "/reseller" : "/admin";
@@ -170,16 +212,25 @@ export function ManageLinesTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">(serverSortDir ?? "desc");
   const [createdBanner, setCreatedBanner] = useState("");
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(panel === "reseller");
+  const { canDeleteLines } = useResellerGroupFlags();
+  const allowBulkDelete = panel !== "reseller" || canDeleteLines;
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(serverStatusFilter ?? "all");
   const [trialFilter, setTrialFilter] = useState<TrialFilter>(serverTrialFilter ?? "all");
+  const [ownerFilter, setOwnerFilter] = useState(serverOwnerFilter ?? "");
+  const [bouquetFilter, setBouquetFilter] = useState(serverBouquetFilter ?? "");
+  const [owners, setOwners] = useState<LineOwnerOption[]>([]);
+  const [trialOpen, setTrialOpen] = useState(false);
+  const [trialHours, setTrialHours] = useState(4);
+  const [trialBouquetId, setTrialBouquetId] = useState(bouquets[0]?.id ?? "");
+  const [trialBusy, setTrialBusy] = useState(false);
   const columns = useStoredColumnVisibility(`nexlify.lines.columns.${panel}`, LINE_COLUMN_DEFAULTS);
   const lineColumnOptions = [
     { id: "sta", label: "Status" },
     { id: "username", label: "Username", locked: true },
     { id: "password", label: "Password" },
-    ...(panel === "admin" ? [{ id: "owner", label: "Owner" }] : []),
+    { id: "owner", label: "Owner" },
     { id: "expire", label: "Expire" },
     { id: "ban", label: "Ban" },
     { id: "bouquet", label: "Bouquet" },
@@ -213,6 +264,12 @@ export function ManageLinesTable({
   useEffect(() => {
     if (serverTrialFilter) setTrialFilter(serverTrialFilter);
   }, [serverTrialFilter]);
+  useEffect(() => {
+    if (typeof serverOwnerFilter === "string") setOwnerFilter(serverOwnerFilter);
+  }, [serverOwnerFilter]);
+  useEffect(() => {
+    if (typeof serverBouquetFilter === "string") setBouquetFilter(serverBouquetFilter);
+  }, [serverBouquetFilter]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -237,6 +294,22 @@ export function ManageLinesTable({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL bootstrap
   }, []);
+
+  useEffect(() => {
+    const url = panel === "admin" ? "/api/admin/resellers" : "/api/reseller/users";
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => {
+        const users = (d.users ?? d.resellers ?? []) as LineOwnerOption[];
+        setOwners(
+          users.filter(
+            (u) =>
+              u.role === "ADMIN" || u.role === "RESELLER" || u.role === "SUB_RESELLER"
+          )
+        );
+      })
+      .catch(() => setOwners([]));
+  }, [panel]);
 
   // Debounce server search
   useEffect(() => {
@@ -274,6 +347,19 @@ export function ManageLinesTable({
     }
     if (trialFilter === "yes") list = list.filter((l) => isTrialLine(l));
     if (trialFilter === "no") list = list.filter((l) => !isTrialLine(l));
+    if (ownerFilter === "mine") list = list.filter((l) => l.owner?.id);
+    else if (ownerFilter === "admin" || ownerFilter === "role:ADMIN") {
+      list = list.filter((l) => !l.owner || l.owner.role === "ADMIN");
+    } else if (ownerFilter === "role:RESELLER") {
+      list = list.filter((l) => l.owner?.role === "RESELLER");
+    } else if (ownerFilter === "role:SUB_RESELLER" || ownerFilter === "subs") {
+      list = list.filter((l) => l.owner?.role === "SUB_RESELLER");
+    } else if (ownerFilter) {
+      list = list.filter((l) => l.owner?.id === ownerFilter);
+    }
+    if (bouquetFilter) {
+      list = list.filter((l) => (l.bouquets ?? []).some((b) => b.bouquet?.id === bouquetFilter));
+    }
     list.sort((a, b) => {
       let av: string | number = "";
       let bv: string | number = "";
@@ -283,9 +369,18 @@ export function ManageLinesTable({
       } else if (sortKey === "owner") {
         av = a.owner?.username?.toLowerCase() ?? "";
         bv = b.owner?.username?.toLowerCase() ?? "";
+      } else if (sortKey === "ownerRole") {
+        av = ownerRoleLabel(a.owner?.role);
+        bv = ownerRoleLabel(b.owner?.role);
       } else if (sortKey === "createdAt") {
         av = new Date(a.createdAt).getTime();
         bv = new Date(b.createdAt).getTime();
+      } else if (sortKey === "maxConnections") {
+        av = a.maxConnections <= 0 ? Number.MAX_SAFE_INTEGER : a.maxConnections;
+        bv = b.maxConnections <= 0 ? Number.MAX_SAFE_INTEGER : b.maxConnections;
+      } else if (sortKey === "status") {
+        av = a.status;
+        bv = b.status;
       } else {
         av = new Date(a.expiresAt).getTime();
         bv = new Date(b.expiresAt).getTime();
@@ -295,7 +390,7 @@ export function ManageLinesTable({
       return 0;
     });
     return list;
-  }, [lines, search, sortKey, sortDir, serverMode, statusFilter, trialFilter]);
+  }, [lines, search, sortKey, sortDir, serverMode, statusFilter, trialFilter, ownerFilter, bouquetFilter]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -334,6 +429,18 @@ export function ManageLinesTable({
   function applyTrialFilter(value: TrialFilter) {
     setTrialFilter(value);
     if (serverMode && onServerTrialFilterChange) onServerTrialFilterChange(value);
+    else setPage(1);
+  }
+
+  function applyOwnerFilter(value: string) {
+    setOwnerFilter(value);
+    if (serverMode && onServerOwnerFilterChange) onServerOwnerFilterChange(value);
+    else setPage(1);
+  }
+
+  function applyBouquetFilter(value: string) {
+    setBouquetFilter(value);
+    if (serverMode && onServerBouquetFilterChange) onServerBouquetFilterChange(value);
     else setPage(1);
   }
 
@@ -444,13 +551,16 @@ export function ManageLinesTable({
         ) : null}
         {columns.show("password") ? (
           <td className="xui-lines-td min-w-[6rem]">
-            <CopyableCredential value={l.password} masked />
+            <LinePasswordCell lineId={l.id} panel={panel} />
           </td>
         ) : null}
-        {panel === "admin" && columns.show("owner") ? (
-          <td className="xui-lines-td text-xs" style={{ color: "var(--muted)" }}>
-            {l.owner?.username ?? "admin"}
-          </td>
+        {columns.show("owner") ? (
+          <>
+            <td className="xui-lines-td text-xs">{l.owner?.username ?? "Admin"}</td>
+            <td className="xui-lines-td text-xs" style={{ color: "var(--muted)" }}>
+              {ownerRoleLabel(l.owner?.role)}
+            </td>
+          </>
         ) : null}
         {columns.show("expire") ? (
           <td className="xui-lines-td whitespace-nowrap text-xs">
@@ -536,11 +646,106 @@ export function ManageLinesTable({
               {lines.length.toLocaleString()} loaded · newest first
             </span>
           </div>
-          <Link href={`${base}/lines/add`} className="xui-lines-header-btn xui-lines-header-btn--primary">
-            <PackagePlus size={16} />
-            Add Line
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="xui-lines-header-btn"
+              onClick={() => setTrialOpen(true)}
+              title="Create a 1-connection trial in a few hours"
+            >
+              <PackagePlus size={16} />
+              Quick trial
+            </button>
+            <Link href={`${base}/lines/add`} className="xui-lines-header-btn xui-lines-header-btn--primary">
+              <PackagePlus size={16} />
+              Add Line
+            </Link>
+          </div>
         </div>
+
+      {trialOpen ? (
+        <div className="xui-modal-backdrop" onClick={() => setTrialOpen(false)}>
+          <div
+            className="xui-modal-panel p-4 space-y-3 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold">One-click trial line</h2>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Creates an active trial with 1 connection. Pick hours and a bouquet — same flow as the XUI setup tour.
+            </p>
+            <label className="block text-sm">
+              Hours
+              <select
+                className="xui-lines-select w-full mt-1"
+                value={trialHours}
+                onChange={(e) => setTrialHours(Number(e.target.value))}
+              >
+                {[1, 2, 4, 6, 8, 12, 24, 48].map((h) => (
+                  <option key={h} value={h}>
+                    {h} hour{h === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm">
+              Bouquet
+              <select
+                className="xui-lines-select w-full mt-1"
+                value={trialBouquetId}
+                onChange={(e) => setTrialBouquetId(e.target.value)}
+              >
+                {bouquets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="xui-lines-toolbar-btn" onClick={() => setTrialOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-positive"
+                disabled={trialBusy || !trialBouquetId}
+                onClick={() => {
+                  void (async () => {
+                    setTrialBusy(true);
+                    try {
+                      const expiresAt = new Date(Date.now() + trialHours * 3600_000).toISOString();
+                      const res = await fetch(linesApi, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          isTrial: true,
+                          maxConnections: 1,
+                          expiresAt,
+                          bouquetIds: [trialBouquetId],
+                          notes: `Quick trial · ${trialHours}h`,
+                        }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "Create failed");
+                      setCreatedBanner(
+                        `Trial ${data.line?.username ?? ""} / ${data.line?.password ?? ""} · ${trialHours}h · 1 conn`
+                      );
+                      setTrialOpen(false);
+                      onRefresh();
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : "Could not create trial");
+                    } finally {
+                      setTrialBusy(false);
+                    }
+                  })();
+                }}
+              >
+                {trialBusy ? "Creating…" : "Create trial"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {createdBanner ? (
         <div
@@ -571,7 +776,7 @@ export function ManageLinesTable({
           >
             <option value="">Bulk Actions</option>
             <option value="disable">Disable selected</option>
-            <option value="delete">Delete selected</option>
+            {allowBulkDelete ? <option value="delete">Delete selected</option> : null}
           </select>
           <button type="button" className="xui-lines-toolbar-btn" onClick={() => void runBulk()} disabled={!bulk}>
             Apply
@@ -637,10 +842,11 @@ export function ManageLinesTable({
               value={statusFilter}
               onChange={(e) => applyStatusFilter(e.target.value as StatusFilter)}
             >
-              <option value="all">All</option>
-              <option value="ACTIVE">Active</option>
-              <option value="DISABLED">Disabled</option>
-              <option value="BANNED">Banned</option>
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="mt-3">
@@ -653,6 +859,58 @@ export function ManageLinesTable({
               <option value="all">All</option>
               <option value="yes">Trial</option>
               <option value="no">Paid</option>
+            </select>
+          </label>
+          <label className="mt-3">
+            Owner
+            <LineOwnerFilterSelect
+              className="xui-lines-select w-full"
+              panel={panel}
+              owners={owners}
+              value={ownerFilter}
+              onChange={applyOwnerFilter}
+            />
+          </label>
+          <label className="mt-3">
+            Bouquet
+            <select
+              className="xui-lines-select w-full"
+              value={bouquetFilter}
+              onChange={(e) => applyBouquetFilter(e.target.value)}
+            >
+              <option value="">All bouquets</option>
+              {bouquets.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="mt-3">
+            Sort
+            <select
+              className="xui-lines-select w-full"
+              value={sortKey}
+              onChange={(e) => {
+                const key = e.target.value as LineSortKey;
+                if (key === sortKey) return;
+                const nextDir = key === "createdAt" || key === "expiresAt" ? "desc" : "asc";
+                if (serverMode && onServerSortChange) {
+                  onServerSortChange(key, nextDir);
+                  onServerPageChange?.(1);
+                  return;
+                }
+                setSortKey(key);
+                setSortDir(nextDir);
+              }}
+            >
+              <option value="createdAt">Created</option>
+              <option value="username">Username</option>
+              <option value="expiresAt">Expiry</option>
+              <option value="owner">Owner</option>
+              <option value="ownerRole">Role</option>
+              <option value="maxConnections">Connections</option>
+              <option value="status">Status</option>
             </select>
           </label>
           <label className="mt-3">
@@ -734,8 +992,43 @@ export function ManageLinesTable({
           </ToolbarDropdown>
         </div>
       </div>
-      {filtersOpen ? (
+      {filtersOpen || panel === "reseller" ? (
         <div className="xui-lines-extra-filters">
+          <label className="flex items-center gap-2">
+            <span style={{ color: "var(--muted)" }}>Sort</span>
+            <select
+              className="xui-lines-select"
+              value={sortKey}
+              onChange={(e) => {
+                const key = e.target.value as LineSortKey;
+                if (key === sortKey) return;
+                const nextDir = key === "createdAt" || key === "expiresAt" ? "desc" : "asc";
+                if (serverMode && onServerSortChange) {
+                  onServerSortChange(key, nextDir);
+                  onServerPageChange?.(1);
+                  return;
+                }
+                setSortKey(key);
+                setSortDir(nextDir);
+              }}
+            >
+              <option value="createdAt">Created</option>
+              <option value="username">Username</option>
+              <option value="expiresAt">Expiry</option>
+              <option value="owner">Owner</option>
+              <option value="ownerRole">Role</option>
+              <option value="maxConnections">Connections</option>
+              <option value="status">Status</option>
+            </select>
+            <button
+              type="button"
+              className="xui-lines-toolbar-btn"
+              onClick={() => toggleSort(sortKey)}
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+            >
+              {sortDir === "asc" ? "A→Z" : "Z→A"}
+            </button>
+          </label>
           <label className="flex items-center gap-2">
             <span style={{ color: "var(--muted)" }}>Status</span>
             <select
@@ -746,10 +1039,11 @@ export function ManageLinesTable({
                 setPage(1);
               }}
             >
-              <option value="all">All</option>
-              <option value="ACTIVE">Active</option>
-              <option value="DISABLED">Disabled</option>
-              <option value="BANNED">Banned</option>
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="flex items-center gap-2">
@@ -765,6 +1059,31 @@ export function ManageLinesTable({
               <option value="all">All</option>
               <option value="yes">Trial</option>
               <option value="no">Paid</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span style={{ color: "var(--muted)" }}>Owner</span>
+            <LineOwnerFilterSelect
+              className="xui-lines-select min-w-[12rem]"
+              panel={panel}
+              owners={owners}
+              value={ownerFilter}
+              onChange={applyOwnerFilter}
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <span style={{ color: "var(--muted)" }}>Bouquet</span>
+            <select
+              className="xui-lines-select min-w-[10rem]"
+              value={bouquetFilter}
+              onChange={(e) => applyBouquetFilter(e.target.value)}
+            >
+              <option value="">All bouquets</option>
+              {bouquets.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -796,6 +1115,8 @@ export function ManageLinesTable({
                     {l.status === "BANNED" ? "Banned" : "Active"}
                   </span>
                   {" · "}
+                  {l.owner?.username ?? "Admin"} ({ownerRoleLabel(l.owner?.role)})
+                  {" · "}
                   {exp.kind === "unlimited" ? "Unlimited" : exp.text}
                 </p>
               </div>
@@ -824,10 +1145,15 @@ export function ManageLinesTable({
                   onChange={(e) => toggleAll(e.target.checked)}
                 />
               </th>
-              {columns.show("sta") ? <th className="xui-lines-th">Sta</th> : null}
+              {columns.show("sta") ? <SortHead label="Sta" col="status" /> : null}
               {columns.show("username") ? <SortHead label="Username" col="username" /> : null}
               {columns.show("password") ? <th className="xui-lines-th">Password</th> : null}
-              {panel === "admin" && columns.show("owner") ? <SortHead label="Owner" col="owner" /> : null}
+              {columns.show("owner") ? (
+                <>
+                  <SortHead label="Owner" col="owner" />
+                  <SortHead label="Role" col="ownerRole" />
+                </>
+              ) : null}
               {columns.show("expire") ? <SortHead label="Expire" col="expiresAt" /> : null}
               {columns.show("ban") ? <th className="xui-lines-th">Ban</th> : null}
               {columns.show("bouquet") ? (
@@ -836,7 +1162,7 @@ export function ManageLinesTable({
                 </th>
               ) : null}
               {columns.show("trial") ? <th className="xui-lines-th">Trial</th> : null}
-              {columns.show("conns") ? <th className="xui-lines-th">Conns</th> : null}
+              {columns.show("conns") ? <SortHead label="Conns" col="maxConnections" /> : null}
               {columns.show("connInfo") ? <th className="xui-lines-th">Conn Info</th> : null}
               {columns.show("lastWatched") ? <th className="xui-lines-th">Last Watched</th> : null}
               {columns.show("notes") ? <th className="xui-lines-th">Notes</th> : null}

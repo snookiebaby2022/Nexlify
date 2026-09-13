@@ -16,7 +16,7 @@ export default function SecuritySettingsPage() {
               key: "logoutOnIpChange",
               label: "Logout on IP change",
               type: "yesno",
-              hint: "Ends the session if the client IP changes (uses X-Forwarded-For behind nginx).",
+              hint: "Ends the session if the client IP changes (nginx X-Real-IP / last X-Forwarded-For hop).",
             },
             {
               key: "ipWhitelist",

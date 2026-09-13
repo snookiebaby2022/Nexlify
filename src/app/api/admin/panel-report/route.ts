@@ -8,6 +8,7 @@ import { PanelRole } from "@prisma/client";
 
 import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { getClientIp } from "@/lib/client-ip";
 const COOLDOWN_MS = 5 * 60 * 1000;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -88,11 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "panel").split(",")[0].trim();
-  const clientIp =
-    req.headers.get("cf-connecting-ip") ??
-    req.headers.get("x-real-ip") ??
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "";
+  const clientIp = getClientIp(req) ?? "";
 
   try {
     const report = await buildPanelReport({

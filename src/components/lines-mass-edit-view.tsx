@@ -11,7 +11,10 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { CopyableCredential } from "@/components/copyable-credential";
-import type { ManageLineRow } from "@/components/manage-lines-table";
+import { LinePasswordCell } from "@/components/line-password-cell";
+import type { ManageLineRow, StatusFilter, TrialFilter } from "@/components/manage-lines-table";
+import { LineOwnerFilterSelect, LineOwnerOptions } from "@/components/line-owner-filter-select";
+import { ownerRoleLabel } from "@/lib/line-owner-filter";
 import {
   ColumnPickerList,
   ToolbarDropdown,
@@ -31,7 +34,7 @@ import {
   type AccessOutputId,
 } from "@/lib/line-access-output";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
-import { linesApiRoot, linesMassApiRoot } from "@/lib/panel-api";
+import { bouquetsApiRoot, linesApiRoot, linesMassApiRoot } from "@/lib/panel-api";
 
 const MASS_PAGE_SIZE_OPTIONS = [...LIST_PAGE_SIZE_OPTIONS, 500, 2000] as const;
 
@@ -42,6 +45,7 @@ const MASS_COLUMN_DEFAULTS: Record<string, boolean> = {
   owner: true,
   expire: true,
   ban: true,
+  bouquet: true,
 };
 
 function XuiPill({ value, variant }: { value: string; variant: "yes" | "no" }) {
@@ -139,6 +143,9 @@ const DEFAULT_FORM = {
   accessOutputsSelected: defaultAccessOutputSelection() as Set<AccessOutputId>,
   accessOutputsTouched: false,
   lockToIp: "unchanged" as TriState,
+  bouquetUnchanged: true,
+  bouquetMode: "replace" as "replace" | "add" | "remove",
+  bouquetIds: [] as string[],
 };
 
 export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "reseller" }) {
@@ -154,20 +161,25 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
-  const [sort, setSort] = useState<"username" | "expiresAt" | "owner" | "createdAt" | "status">("expiresAt");
+  const [sort, setSort] = useState<"username" | "expiresAt" | "owner" | "ownerRole" | "createdAt" | "status">("expiresAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [ownerFilter, setOwnerFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
+  const [bouquetFilter, setBouquetFilter] = useState("");
   const [owners, setOwners] = useState<{ id: string; username: string; role: string }[]>([]);
   const [filterOwners, setFilterOwners] = useState<{ id: string; username: string; role: string }[]>([]);
+  const [bouquets, setBouquets] = useState<{ id: string; name: string }[]>([]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const columns = useStoredColumnVisibility(`nexlify.mass-edit.columns.${panel}`, MASS_COLUMN_DEFAULTS);
   const massColumnOptions = [
     { id: "sta", label: "Status" },
     { id: "username", label: "Username", locked: true },
     { id: "password", label: "Password" },
-    ...(panel === "admin" ? [{ id: "owner", label: "Owner" }] : []),
+    { id: "owner", label: "Owner" },
     { id: "expire", label: "Expire" },
     { id: "ban", label: "Ban" },
+    { id: "bouquet", label: "Bouquets" },
   ];
 
   function load() {
@@ -178,7 +190,10 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
       sortDir,
     });
     if (search.trim()) params.set("search", search.trim());
-    if (panel === "admin" && ownerFilter) params.set("ownerId", ownerFilter);
+    if (ownerFilter) params.set("ownerId", ownerFilter);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (trialFilter !== "all") params.set("trial", trialFilter);
+    if (bouquetFilter) params.set("bouquetId", bouquetFilter);
     fetch(`${linesApiRoot(panel)}?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -188,11 +203,18 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   }
 
   useEffect(() => {
-    if (panel !== "admin") return;
-    fetch("/api/admin/resellers")
+    fetch(bouquetsApiRoot(panel))
+      .then((r) => r.json())
+      .then((d) => setBouquets((d.bouquets ?? []) as { id: string; name: string }[]))
+      .catch(() => setBouquets([]));
+  }, [panel]);
+
+  useEffect(() => {
+    const url = panel === "admin" ? "/api/admin/resellers" : "/api/reseller/users";
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
-        const users = (d.users ?? []) as { id: string; username: string; role: string }[];
+        const users = (d.users ?? d.resellers ?? []) as { id: string; username: string; role: string }[];
         setFilterOwners(
           users.filter(
             (u) => u.role === "ADMIN" || u.role === "RESELLER" || u.role === "SUB_RESELLER"
@@ -220,7 +242,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on page/size/search/sort
-  }, [page, pageSize, search, sort, sortDir, ownerFilter]);
+  }, [page, pageSize, search, sort, sortDir, ownerFilter, statusFilter, trialFilter, bouquetFilter]);
 
   function toggleSort(key: typeof sort) {
     if (sort === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -267,6 +289,10 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     }
     if (form.lockToIp !== "unchanged") patch.lockToIp = form.lockToIp;
     if (panel === "admin" && !form.ownerId.unchanged) patch.ownerId = form.ownerId;
+    if (!form.bouquetUnchanged) {
+      patch.bouquetMode = form.bouquetMode;
+      patch.bouquetIds = form.bouquetIds;
+    }
     return patch;
   }
 
@@ -279,6 +305,15 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     if (Object.keys(patch).length === 0) {
       setMsg("Change at least one field in the Mass Edit Form");
       return;
+    }
+    if (patch.bouquetMode === "replace" && !(patch.bouquetIds ?? []).length) {
+      if (
+        !window.confirm(
+          `Clear all bouquets on ${selected.size} line${selected.size === 1 ? "" : "s"}? Clients will lose package access.`
+        )
+      ) {
+        return;
+      }
     }
     if (patch.ownerId && !patch.ownerId.unchanged) {
       const ownerPatch = patch.ownerId;
@@ -317,7 +352,10 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     load();
   }
 
-  const colSpan = 1 + massColumnOptions.filter((c) => columns.show(c.id)).length;
+  const colSpan =
+    1 +
+    massColumnOptions.filter((c) => columns.show(c.id)).length +
+    (columns.show("owner") ? 1 : 0);
 
   return (
     <div className="xui-lines-panel xui-mass-edit-panel rounded-lg overflow-hidden border" style={{ borderColor: "var(--border)" }}>
@@ -353,7 +391,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
               >
                 <Search size={16} />
               </button>
-              {(searchOpen || search || ownerFilter) && (
+              {(searchOpen || search || ownerFilter || statusFilter !== "all" || trialFilter !== "all" || bouquetFilter) && (
                 <button
                   type="button"
                   className="xui-lines-icon-btn"
@@ -361,6 +399,9 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                     setSearch("");
                     setSearchInput("");
                     setOwnerFilter("");
+                    setStatusFilter("all");
+                    setTrialFilter("all");
+                    setBouquetFilter("");
                     setSearchOpen(false);
                     setPage(1);
                   }}
@@ -389,35 +430,82 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
             </div>
           </div>
 
-          {panel === "admin" && (
-            <div
-              className="px-4 py-2 border-b flex flex-wrap items-center gap-3 text-sm"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <label className="flex items-center gap-2 min-w-[240px]">
-                <span style={{ color: "var(--muted)" }}>Current owner</span>
-                <select
-                  className="flex-1 rounded border px-3 py-1.5 text-sm bg-transparent"
-                  style={{ borderColor: "var(--border)" }}
-                  value={ownerFilter}
-                  onChange={(e) => {
-                    setOwnerFilter(e.target.value);
-                    setPage(1);
-                    setSelected(new Set());
-                  }}
-                >
-                  <option value="">All</option>
-                  <option value="admin">Unassigned (no owner)</option>
-                  {filterOwners.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.username}
-                      {o.role === "ADMIN" ? " (admin)" : o.role === "SUB_RESELLER" ? " (sub)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          )}
+          <div
+            className="px-4 py-2 border-b flex flex-wrap items-center gap-3 text-sm"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <label className="flex items-center gap-2 min-w-[220px]">
+              <span style={{ color: "var(--muted)" }}>Owner</span>
+              <LineOwnerFilterSelect
+                className="flex-1 rounded border px-3 py-1.5 text-sm bg-transparent"
+                panel={panel}
+                owners={filterOwners}
+                value={ownerFilter}
+                onChange={(value) => {
+                  setOwnerFilter(value);
+                  setPage(1);
+                  setSelected(new Set());
+                }}
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <span style={{ color: "var(--muted)" }}>Status</span>
+              <select
+                className="rounded border px-3 py-1.5 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as StatusFilter);
+                  setPage(1);
+                  setSelected(new Set());
+                }}
+              >
+                <option value="all">All</option>
+                <option value="ACTIVE">Active</option>
+                <option value="DISABLED">Disabled</option>
+                <option value="BANNED">Banned</option>
+                <option value="EXPIRED">Expired</option>
+                <option value="EXPIRED_TRIAL">Expired trials</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2">
+              <span style={{ color: "var(--muted)" }}>Trial</span>
+              <select
+                className="rounded border px-3 py-1.5 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                value={trialFilter}
+                onChange={(e) => {
+                  setTrialFilter(e.target.value as TrialFilter);
+                  setPage(1);
+                  setSelected(new Set());
+                }}
+              >
+                <option value="all">All</option>
+                <option value="yes">Trial</option>
+                <option value="no">Paid</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 min-w-[180px]">
+              <span style={{ color: "var(--muted)" }}>Bouquet</span>
+              <select
+                className="flex-1 rounded border px-3 py-1.5 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                value={bouquetFilter}
+                onChange={(e) => {
+                  setBouquetFilter(e.target.value);
+                  setPage(1);
+                  setSelected(new Set());
+                }}
+              >
+                <option value="">All bouquets</option>
+                {bouquets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           {(searchOpen || search) && (
             <div
@@ -459,13 +547,21 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                     </th>
                   ) : null}
                   {columns.show("password") ? <th className="xui-lines-th">Password</th> : null}
-                  {panel === "admin" && columns.show("owner") ? (
-                    <th
-                      className="xui-lines-th cursor-pointer select-none"
-                      onClick={() => toggleSort("owner")}
-                    >
-                      Owner{sort === "owner" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                    </th>
+                  {columns.show("owner") ? (
+                    <>
+                      <th
+                        className="xui-lines-th cursor-pointer select-none"
+                        onClick={() => toggleSort("owner")}
+                      >
+                        Owner{sort === "owner" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                      </th>
+                      <th
+                        className="xui-lines-th cursor-pointer select-none"
+                        onClick={() => toggleSort("ownerRole")}
+                      >
+                        Role{sort === "ownerRole" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                      </th>
+                    </>
                   ) : null}
                   {columns.show("expire") ? (
                     <th
@@ -483,6 +579,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                       Ban{sort === "status" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
                     </th>
                   ) : null}
+                  {columns.show("bouquet") ? <th className="xui-lines-th">Bouquets</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -519,13 +616,16 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                         ) : null}
                         {columns.show("password") ? (
                           <td className="xui-lines-td">
-                            <CopyableCredential value={l.password} className="text-xs font-mono" />
+                            <LinePasswordCell lineId={l.id} panel={panel} className="text-xs font-mono" />
                           </td>
                         ) : null}
-                        {panel === "admin" && columns.show("owner") ? (
-                          <td className="xui-lines-td" style={{ color: "var(--muted)" }}>
-                            {l.owner?.username ?? "admin"}
-                          </td>
+                        {columns.show("owner") ? (
+                          <>
+                            <td className="xui-lines-td">{l.owner?.username ?? "Admin"}</td>
+                            <td className="xui-lines-td" style={{ color: "var(--muted)" }}>
+                              {ownerRoleLabel(l.owner?.role)}
+                            </td>
+                          </>
                         ) : null}
                         {columns.show("expire") ? (
                           <td className="xui-lines-td whitespace-nowrap text-xs">
@@ -538,6 +638,14 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                         {columns.show("ban") ? (
                           <td className="xui-lines-td">
                             <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
+                          </td>
+                        ) : null}
+                        {columns.show("bouquet") ? (
+                          <td
+                            className="xui-lines-td text-xs max-w-[10rem] truncate"
+                            title={(l.bouquets ?? []).map((b) => b.bouquet?.name).filter(Boolean).join(", ")}
+                          >
+                            {(l.bouquets ?? []).map((b) => b.bouquet?.name).filter(Boolean).join(", ") || "—"}
                           </td>
                         ) : null}
                       </tr>
@@ -637,17 +745,83 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                   value={form.ownerId.value}
                   onChange={(e) => setForm({ ...form, ownerId: { unchanged: false, value: e.target.value } })}
                 >
-                  <option value="">Unassigned (admin pool)</option>
-                  {owners.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.username}
-                      {o.role === "SUB_RESELLER" ? " (sub)" : ""}
-                    </option>
-                  ))}
+                    <option value="">Unassigned (admin pool)</option>
+                  <LineOwnerOptions owners={owners} />
                 </select>
               )}
             </div>
           )}
+          <div className="xui-mass-field">
+            <div className="xui-mass-field-label">Bouquets</div>
+            <label className="xui-mass-checkbox">
+              <input
+                type="checkbox"
+                checked={form.bouquetUnchanged}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    bouquetUnchanged: e.target.checked,
+                    bouquetIds: e.target.checked ? [] : form.bouquetIds,
+                  })
+                }
+              />
+              <span>Do Not Change</span>
+            </label>
+            {!form.bouquetUnchanged ? (
+              <>
+                <select
+                  className="xui-mass-input"
+                  value={form.bouquetMode}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      bouquetMode: e.target.value as "replace" | "add" | "remove",
+                    })
+                  }
+                >
+                  <option value="replace">Replace (set these only)</option>
+                  <option value="add">Add to existing</option>
+                  <option value="remove">Remove from existing</option>
+                </select>
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  {form.bouquetMode === "replace"
+                    ? "Leave none checked to clear every bouquet on the selected lines."
+                    : "Tick the bouquets to add or remove."}
+                </p>
+                <div
+                  className="mt-2 max-h-44 overflow-auto rounded border px-2 py-1 space-y-1"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  {bouquets.length === 0 ? (
+                    <p className="text-xs py-2" style={{ color: "var(--muted)" }}>
+                      No bouquets loaded.
+                    </p>
+                  ) : (
+                    bouquets.map((b) => {
+                      const checked = form.bouquetIds.includes(b.id);
+                      return (
+                        <label key={b.id} className="flex items-center gap-2 text-xs py-0.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setForm({
+                                ...form,
+                                bouquetIds: checked
+                                  ? form.bouquetIds.filter((id) => id !== b.id)
+                                  : [...form.bouquetIds, b.id],
+                              })
+                            }
+                          />
+                          <span>{b.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
           <MassEditTriStateField
             label="Enabled"
             value={form.enabled}

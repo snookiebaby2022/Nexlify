@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { allowedHostsFromEnv } from "@/lib/domains-host";
 import { ipv4InAnyCidr, parseIpList, CLOUDFLARE_IPV4_FALLBACK, BUNNY_IPV4_FALLBACK } from "@/lib/cdn-ip-ranges";
+import { lastUntrustedHop, parseForwardedHops, resolveClientIp } from "@/lib/client-ip";
 
 /** Env-only — no fetch/Prisma (middleware self-fetch caused slow/hung pages). */
 export function resolveAllowedHosts(): Set<string> {
@@ -8,11 +9,9 @@ export function resolveAllowedHosts(): Set<string> {
 }
 
 function peerIp(req: NextRequest): string {
-  const real = req.headers.get("x-real-ip");
-  if (real) return real.trim();
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]?.trim() ?? "";
-  return "";
+  const real = req.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  return lastUntrustedHop(parseForwardedHops(req.headers.get("x-forwarded-for"))) ?? "";
 }
 
 function cloudflareCidrs(): string[] {
@@ -39,15 +38,11 @@ export function clientIp(req: NextRequest): string {
   }
 
   if (process.env.PANEL_TRUST_BUNNY === "1") {
-    const bunnyClient = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const bunnyClient = lastUntrustedHop(parseForwardedHops(req.headers.get("x-forwarded-for")));
     if (bunnyClient && remote && ipv4InAnyCidr(remote, bunnyCidrs())) return bunnyClient;
   }
 
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]?.trim() ?? "";
-  const real = req.headers.get("x-real-ip");
-  if (real) return real.trim();
-  return "";
+  return resolveClientIp(req.headers) ?? "";
 }
 
 /** Compare session IPs without ::ffff: / whitespace mismatches (Firefox vs nginx headers). */

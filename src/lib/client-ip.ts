@@ -1,5 +1,9 @@
 import type { NextRequest } from "next/server";
 
+export type ClientIpHeaders = {
+  get(name: string): string | null;
+};
+
 function cleanIp(raw: string | null | undefined): string | undefined {
   let s = String(raw ?? "").trim();
   if (!s) return undefined;
@@ -38,29 +42,41 @@ export function isInfraHopIp(ip?: string | null): boolean {
   return false;
 }
 
-/** Viewer IP for live-auth / connections. Skip loopback and fleet edge/panel hops. */
-export function getClientIp(req: NextRequest): string | undefined {
-  const named = [
-    req.headers.get("cf-connecting-ip"),
-    req.headers.get("true-client-ip"),
-    req.headers.get("x-nexlify-client-ip"),
-    req.headers.get("x-nexlify-viewer-ip"),
-    req.headers.get("x-client-ip"),
-    req.headers.get("x-real-ip"),
-  ];
+export function parseForwardedHops(xff: string | null | undefined): string[] {
   const hops: string[] = [];
-  for (const h of named) {
-    const ip = cleanIp(h);
-    if (ip) hops.push(ip);
-  }
-  const xff = req.headers.get("x-forwarded-for") ?? "";
-  for (const part of xff.split(",")) {
+  for (const part of String(xff ?? "").split(",")) {
     const ip = cleanIp(part);
     if (ip) hops.push(ip);
   }
+  return hops;
+}
 
-  const publicHop = hops.find((ip) => isPublicish(ip) && !isInfraHopIp(ip));
-  if (publicHop) return publicHop;
-  const any = hops.find((ip) => !isLoopback(ip) && !isInfraHopIp(ip));
-  return any;
+/** Last non-loopback, non-infra hop (rightmost). XFF is client, proxy1, proxy2, nginx-peer. */
+export function lastUntrustedHop(hops: string[]): string | undefined {
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const ip = hops[i];
+    if (!isLoopback(ip) && !isInfraHopIp(ip)) return ip;
+  }
+  return undefined;
+}
+
+/**
+ * Viewer / login IP.
+ * Prefer nginx X-Real-IP ($remote_addr) when it is a real client, then the
+ * last XFF hop. Never the first XFF hop (clients can spoof that).
+ */
+export function resolveClientIp(headers: ClientIpHeaders): string | undefined {
+  const real = cleanIp(headers.get("x-real-ip"));
+  const lastXff = lastUntrustedHop(parseForwardedHops(headers.get("x-forwarded-for")));
+
+  if (real && isPublicish(real) && !isInfraHopIp(real)) return real;
+  if (lastXff && isPublicish(lastXff)) return lastXff;
+  if (real && !isLoopback(real) && !isInfraHopIp(real)) return real;
+  if (lastXff) return lastXff;
+  return undefined;
+}
+
+/** Viewer IP for live-auth / connections. Skip loopback and fleet edge/panel hops. */
+export function getClientIp(req: NextRequest): string | undefined {
+  return resolveClientIp(req.headers);
 }

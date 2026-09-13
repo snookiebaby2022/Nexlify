@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { LIVE_STALE_MS } from "@/lib/connections";
 import type { SessionUser } from "@/lib/auth";
 import type { ManageLineRow } from "@/components/manage-lines-table";
+import { applyOwnerFilter, lineOwnerIdsForSession } from "@/lib/line-owner-filter";
+import { listedLinePassword } from "@/lib/listed-line-password";
+
+export { listedLinePassword };
 
 export type ManageLinesPageResult = {
   lines: ManageLineRow[];
@@ -19,31 +23,59 @@ function lineWhereForSession(
   search: string,
   ownerFilter?: string,
   statusFilter?: string,
-  trialFilter?: string
+  trialFilter?: string,
+  scopedOwnerIds?: string[] | null,
+  bouquetId?: string
 ): Prisma.LineWhereInput {
-  const where: Prisma.LineWhereInput =
-    session.role === PanelRole.ADMIN ? {} : { ownerId: session.id };
-
-  if (session.role === PanelRole.ADMIN && ownerFilter) {
-    if (ownerFilter === "admin" || ownerFilter === "__none__") {
-      where.ownerId = null;
-    } else {
-      where.ownerId = ownerFilter;
-    }
+  const where: Prisma.LineWhereInput = {};
+  if (scopedOwnerIds) {
+    where.ownerId = { in: scopedOwnerIds };
   }
 
+  applyOwnerFilter(where, ownerFilter, session);
+
+  const now = new Date();
+  const in7d = new Date(now.getTime() + 7 * 86400000);
+  const farFuture = new Date(now.getTime() + 1000 * 86400000);
+
   if (statusFilter && statusFilter !== "all") {
-    const status =
-      statusFilter === "DISABLED"
-        ? LineStatus.DISABLED
-        : statusFilter === "BANNED"
-          ? LineStatus.BANNED
-          : LineStatus.ACTIVE;
-    where.status = status;
+    if (statusFilter === "EXPIRED") {
+      where.expiresAt = { lt: now };
+      where.status = { not: LineStatus.BANNED };
+    } else if (statusFilter === "EXPIRED_TRIAL") {
+      where.isTrial = true;
+      where.expiresAt = { lt: now };
+    } else if (statusFilter === "EXPIRING_7") {
+      where.expiresAt = { gte: now, lte: in7d };
+      where.status = LineStatus.ACTIVE;
+    } else if (statusFilter === "TRIAL_ACTIVE") {
+      where.isTrial = true;
+      where.expiresAt = { gte: now };
+      where.status = LineStatus.ACTIVE;
+    } else if (statusFilter === "NEVER_EXPIRE") {
+      where.expiresAt = { gte: farFuture };
+    } else if (statusFilter === "ONLINE") {
+      where.liveConnections = {
+        some: { lastSeenAt: { gte: new Date(Date.now() - LIVE_STALE_MS) } },
+      };
+    } else {
+      const status =
+        statusFilter === "DISABLED"
+          ? LineStatus.DISABLED
+          : statusFilter === "BANNED"
+            ? LineStatus.BANNED
+            : LineStatus.ACTIVE;
+      where.status = status;
+    }
   }
 
   if (trialFilter === "yes") where.isTrial = true;
   else if (trialFilter === "no") where.isTrial = false;
+
+  const bouquet = bouquetId?.trim();
+  if (bouquet) {
+    where.bouquets = { some: { bouquetId: bouquet } };
+  }
 
   if (search.trim()) {
     where.AND = [
@@ -72,32 +104,41 @@ export async function listManageLinesPage(opts: {
   ownerFilter?: string;
   statusFilter?: string;
   trialFilter?: string;
+  bouquetId?: string;
   sort?: string;
   sortDir?: "asc" | "desc";
 }): Promise<ManageLinesPageResult> {
   const page = Math.max(1, opts.page ?? 1);
-  const pageSize = Math.min(5000, Math.max(1, opts.pageSize ?? 50));
+  const pageSize = Math.min(200, Math.max(1, opts.pageSize ?? 50));
   const skip = (page - 1) * pageSize;
   const search = opts.search?.trim() ?? "";
   const sortRaw = (opts.sort ?? "createdAt").trim();
   const sortDir = opts.sortDir === "asc" ? "asc" : "desc";
+  const dir = sortDir as "asc" | "desc";
   const orderBy =
     sortRaw === "username"
-      ? { username: sortDir as "asc" | "desc" }
+      ? { username: dir }
       : sortRaw === "expiresAt"
-        ? { expiresAt: sortDir as "asc" | "desc" }
+        ? { expiresAt: dir }
         : sortRaw === "owner"
-          ? { owner: { username: sortDir as "asc" | "desc" } }
-          : sortRaw === "status"
-            ? { status: sortDir as "asc" | "desc" }
-            : { createdAt: sortDir as "asc" | "desc" };
+          ? { owner: { username: dir } }
+          : sortRaw === "ownerRole"
+            ? { owner: { role: dir } }
+            : sortRaw === "status"
+              ? { status: dir }
+              : sortRaw === "maxConnections"
+                ? { maxConnections: dir }
+                : { createdAt: dir };
 
+  const scopedOwnerIds = await lineOwnerIdsForSession(opts.session);
   const where = lineWhereForSession(
     opts.session,
     search,
     opts.ownerFilter,
     opts.statusFilter,
-    opts.trialFilter
+    opts.trialFilter,
+    scopedOwnerIds,
+    opts.bouquetId
   );
   const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
 
@@ -106,7 +147,7 @@ export async function listManageLinesPage(opts: {
       where,
       include: {
         bouquets: { include: { bouquet: { select: { id: true, name: true, isActive: true } } } },
-        owner: { select: { id: true, username: true } },
+        owner: { select: { id: true, username: true, role: true } },
         lastWatchedStream: { select: { id: true, name: true } },
       },
       orderBy,
@@ -160,6 +201,7 @@ export async function listManageLinesPage(opts: {
       const activeCount = activeConnCountByLineId.get(line.id) ?? 0;
       return {
         ...line,
+        password: listedLinePassword(line.password),
         displayId: skip + index + 1,
         expiresAt: line.expiresAt.toISOString(),
         createdAt: line.createdAt.toISOString(),
