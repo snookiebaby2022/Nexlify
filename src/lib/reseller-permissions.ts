@@ -72,8 +72,10 @@ export async function loadResellerPermissionSet(
   const perms = new Set(
     cfg.permissions.length ? cfg.permissions : defaultPermissions(role)
   );
-  // Legacy groups toggled "Can delete users" without lines.delete in permissions[].
-  if (cfg.canDeleteUsers) perms.add(RESELLER_PERMS.LINES_DELETE);
+  // Legacy groups omitted lines.delete even when they can edit / "Can delete users".
+  if (cfg.canDeleteUsers || perms.has(RESELLER_PERMS.LINES_EDIT)) {
+    perms.add(RESELLER_PERMS.LINES_DELETE);
+  }
   permCache.set(userId, { at: Date.now(), perms });
   return perms;
 }

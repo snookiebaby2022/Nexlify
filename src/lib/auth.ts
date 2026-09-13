@@ -68,6 +68,7 @@ export async function destroySession() {
   const token = jar.get(COOKIE)?.value;
   if (token) sessionByToken.delete(token);
   jar.delete(COOKIE);
+  jar.delete("nexlify_impersonator");
 }
 
 const SESSION_USER_TTL_MS = 60_000;

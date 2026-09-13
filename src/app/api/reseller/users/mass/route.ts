@@ -7,6 +7,8 @@ import { logActivity } from "@/lib/lines";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
+import { assertResellerAssignableGroupId } from "@/lib/reseller-assignable-group";
 /** Mass enable / disable / setGroup for the reseller’s direct sub-users only. */
 export async function POST(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -17,6 +19,8 @@ export async function POST(req: NextRequest) {
   if (!session || !canManageSubUsers(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const editDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.USERS_EDIT);
+  if (editDenied) return editDenied;
 
   const parsed = await parseJsonBody(req);
 
@@ -49,15 +53,8 @@ export async function POST(req: NextRequest) {
     const raw = body.groupId;
     const groupId =
       raw === null || raw === undefined || raw === "" ? null : String(raw);
-    if (groupId) {
-      const group = await prisma.userGroup.findUnique({
-        where: { id: groupId },
-        select: { id: true },
-      });
-      if (!group) {
-        return NextResponse.json({ error: "Group not found" }, { status: 400 });
-      }
-    }
+    const groupOk = await assertResellerAssignableGroupId(session, groupId);
+    if (!groupOk.ok) return NextResponse.json({ error: groupOk.error }, { status: 400 });
     const r = await prisma.panelUser.updateMany({
       where: { id: { in: ownedIds } },
       data: { groupId },

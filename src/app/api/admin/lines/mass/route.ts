@@ -12,6 +12,9 @@ import { LineStatus, PanelRole } from "@prisma/client";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
+import { lineOwnerIdsForSession } from "@/lib/line-owner-filter";
+import { resolveResellerLineBouquets } from "@/lib/reseller-line-guards";
+import { deleteManagedLines } from "@/lib/line-delete";
 function applyMassEditPatch(patch: MassEditPatch) {
   const data: {
     password?: string;
@@ -77,6 +80,7 @@ export async function POST(req: NextRequest) {
     PanelRole.SUB_RESELLER,
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const actor = session;
 
   const parsed = await parseJsonBody(req);
 
@@ -94,12 +98,63 @@ export async function POST(req: NextRequest) {
   if (action === "delete") {
     const deleteDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_DELETE);
     if (deleteDenied) return deleteDenied;
+  } else if (action === "extend") {
+    const extendDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_EXTEND);
+    if (extendDenied) return extendDenied;
+  } else {
+    const editDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_EDIT);
+    if (editDenied) return editDenied;
   }
 
+  const scopedOwnerIds = await lineOwnerIdsForSession(session);
   const where =
-    session.role === PanelRole.ADMIN
+    scopedOwnerIds === null
       ? { id: { in: lineIds } }
-      : { id: { in: lineIds }, ownerId: session.id };
+      : { id: { in: lineIds }, ownerId: { in: scopedOwnerIds } };
+
+  async function allowedBouquetIds(requested: string[]): Promise<string[] | NextResponse> {
+    const ids = [...new Set(requested.map(String).filter(Boolean))];
+    if (actor.role === PanelRole.ADMIN) return ids;
+    const resolved = await resolveResellerLineBouquets(actor.id, actor.role, ids);
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 });
+    }
+    const allowed = new Set(resolved.bouquetIds);
+    const matched = ids.filter((id) => allowed.has(id));
+    if (ids.length && !matched.length) {
+      return NextResponse.json({ error: "Those bouquets are not assigned to your account" }, { status: 400 });
+    }
+    return matched;
+  }
+
+  async function applyBouquetChange(
+    targetIds: string[],
+    mode: "replace" | "add" | "remove",
+    bouquetIds: string[]
+  ) {
+    if (mode === "replace") {
+      await prisma.lineBouquet.deleteMany({ where: { lineId: { in: targetIds } } });
+      if (bouquetIds.length) {
+        await prisma.lineBouquet.createMany({
+          data: targetIds.flatMap((lineId) => bouquetIds.map((bouquetId) => ({ lineId, bouquetId }))),
+          skipDuplicates: true,
+        });
+      }
+      return;
+    }
+    if (mode === "add" && bouquetIds.length) {
+      await prisma.lineBouquet.createMany({
+        data: targetIds.flatMap((lineId) => bouquetIds.map((bouquetId) => ({ lineId, bouquetId }))),
+        skipDuplicates: true,
+      });
+      return;
+    }
+    if (mode === "remove" && bouquetIds.length) {
+      await prisma.lineBouquet.deleteMany({
+        where: { lineId: { in: targetIds }, bouquetId: { in: bouquetIds } },
+      });
+    }
+  }
 
   let affected = 0;
 
@@ -192,25 +247,22 @@ export async function POST(req: NextRequest) {
       break;
     }
     case "set_bouquets": {
-      const bouquetIds: string[] = body.bouquetIds ?? [];
-      const validLineIds = lineIds.filter(Boolean);
-      if (validLineIds.length > 0 && bouquetIds.length > 0) {
-        await prisma.$transaction([
-          prisma.lineBouquet.deleteMany({ where: { lineId: { in: validLineIds } } }),
-          prisma.lineBouquet.createMany({
-            data: validLineIds.flatMap((lineId) =>
-              bouquetIds.map((bouquetId) => ({ lineId, bouquetId }))
-            ),
-          }),
-        ]);
+      const scoped = await prisma.line.findMany({ where, select: { id: true } });
+      const validLineIds = scoped.map((l) => l.id);
+      const bouquetIds = await allowedBouquetIds(body.bouquetIds ?? []);
+      if (bouquetIds instanceof NextResponse) return bouquetIds;
+      if (validLineIds.length > 0) {
+        await applyBouquetChange(validLineIds, "replace", bouquetIds);
         affected = validLineIds.length;
       }
       await invalidateXtreamCategories();
       break;
     }
-    case "delete":
-      affected = (await prisma.line.deleteMany({ where })).count;
+    case "delete": {
+      const doomed = await prisma.line.findMany({ where, select: { id: true } });
+      affected = await deleteManagedLines(doomed.map((l) => l.id));
       break;
+    }
     case "mass_edit": {
       const patch = (body.patch ?? {}) as MassEditPatch;
       if (session.role !== PanelRole.ADMIN) {
@@ -218,8 +270,19 @@ export async function POST(req: NextRequest) {
       }
       const data = applyMassEditPatch(patch);
       const hasResellerNotes = patch.resellerNotes && !patch.resellerNotes.unchanged;
+      const bouquetMode = patch.bouquetMode;
+      const hasBouquets = bouquetMode === "replace" || bouquetMode === "add" || bouquetMode === "remove";
+      let bouquetIds: string[] = [];
+      if (hasBouquets) {
+        const resolved = await allowedBouquetIds(patch.bouquetIds ?? []);
+        if (resolved instanceof NextResponse) return resolved;
+        bouquetIds = resolved;
+        if (bouquetMode !== "replace" && !bouquetIds.length) {
+          return NextResponse.json({ error: "Select at least one bouquet" }, { status: 400 });
+        }
+      }
       const staticKeys = Object.keys(data).filter((k) => k !== "notes");
-      if (!staticKeys.length && !hasResellerNotes) {
+      if (!staticKeys.length && !hasResellerNotes && !hasBouquets) {
         return NextResponse.json({ error: "No fields to update" }, { status: 400 });
       }
 
@@ -270,6 +333,15 @@ export async function POST(req: NextRequest) {
         if (!Object.keys(rowData).length) continue;
         await prisma.line.update({ where: { id: line.id }, data: rowData });
         affected++;
+      }
+      if (hasBouquets && lines.length) {
+        await applyBouquetChange(
+          lines.map((l) => l.id),
+          bouquetMode,
+          bouquetIds
+        );
+        affected = Math.max(affected, lines.length);
+        await invalidateXtreamCategories();
       }
       break;
     }

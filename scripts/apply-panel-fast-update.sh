@@ -27,6 +27,35 @@ sanitize_vendor_ip() {
   printf '%s' "${1:-}" | tr -d '\r\n"'"'"'[:space:]'
 }
 
+assert_panel_archive_url() {
+  local raw="${1%%\?*}"
+  case "$raw" in
+    https://nexlify.live/downloads/*|https://www.nexlify.live/downloads/*) return 0 ;;
+    *)
+      echo "ERROR: PANEL_ARCHIVE_URL must be https://nexlify.live/downloads/… (got ${raw:-empty})" >&2
+      return 1
+      ;;
+  esac
+}
+
+script_looks_safe() {
+  local f="$1" bytes
+  [ -s "$f" ] || return 1
+  bytes="$(wc -c < "$f" | tr -d ' ')"
+  [ "$bytes" -ge 20 ] && [ "$bytes" -le 2000000 ] || return 1
+  head -n 1 "$f" | grep -q '^#!' || return 1
+}
+
+verify_bootstrapped_script() {
+  local f="$1" name="$2" expect actual
+  script_looks_safe "$f" || return 1
+  [ -n "${SCRIPT_MANIFEST:-}" ] && [ -f "$SCRIPT_MANIFEST" ] || return 0
+  expect="$(awk -v n="$name" '$2==n || $2==("./" n) || $2~(n "$") {print $1; exit}' "$SCRIPT_MANIFEST")"
+  [ -n "$expect" ] || return 1
+  actual="$(sha256sum "$f" | awk '{print $1}')"
+  [ "$expect" = "$actual" ]
+}
+
 is_gzip_file() {
   local f="$1" magic
   [ -s "$f" ] || return 1
@@ -53,8 +82,7 @@ resolve_vendor_ip() {
   if curl -fsSL -A "NexlifyPanelUpdater/1.0" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
     sed -i 's/\r$//' /tmp/nexlify-vendor-origin.env 2>/dev/null || true
     # shellcheck disable=SC1091
-    source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
-    ip="$(sanitize_vendor_ip "${PANEL_VENDOR_IP:-}")"
+    ip="$(sanitize_vendor_ip "$(grep -E '^PANEL_VENDOR_IP=' /tmp/nexlify-vendor-origin.env 2>/dev/null | tail -1 | cut -d= -f2-)")"
     [ -n "$ip" ] && echo "$ip" && return 0
   fi
   return 1
@@ -80,14 +108,12 @@ curl_vendor() {
   elif [[ "$url" == http://nexlify.live* ]]; then
     path="${url#http://nexlify.live}"
   fi
-  # HTTPS to origin via --resolve. Do NOT follow HTTP 301 back to Cloudflare.
+  # HTTPS to origin via --resolve. Keep TLS verify on. Do NOT follow HTTP 301 back to Cloudflare.
   if [ -n "$ip" ] && [ -n "$path" ]; then
     echo "WARN: CDN blocked — retry origin https://${host}${path} (--resolve ${host}:443:${ip})" >&2
-    if curl -fsS -A "$ua" --max-time 90 --resolve "${host}:443:${ip}" --resolve "${host}:80:${ip}" \
+    if curl -fsS -A "$ua" --max-time 90 --proto '=https' --tlsv1.2 \
+      --resolve "${host}:443:${ip}" \
       "https://${host}${path}" -o "$dest" 2>/dev/null; then
-      return 0
-    fi
-    if curl -fsS -k -A "$ua" --max-time 90 "https://${ip}${path}" -H "Host: ${host}" -o "$dest" 2>/dev/null; then
       return 0
     fi
   fi
@@ -102,14 +128,18 @@ curl_vendor() {
     /install/scripts/*) gh_path="scripts/${path#/install/scripts/}" ;;
     /install/*) gh_path="marketing-drop-in/public/install/${path#/install/}" ;;
     /downloads/nexlify-panel.tar.gz*|/downloads/next-*.tar.gz*)
-      echo "WARN: vendor archive failed — retry GitHub main tarball" >&2
-      curl -fsSL -A "$ua" --max-time 180 -L "$gh_archive" -o "$dest"
-      return $?
+      if [ "${NEXLIFY_ALLOW_GITHUB_ARCHIVE:-}" = "1" ]; then
+        echo "WARN: vendor archive failed — retry GitHub main tarball (break-glass)" >&2
+        curl -fsSL -A "$ua" --max-time 180 --proto '=https' --tlsv1.2 -L "$gh_archive" -o "$dest"
+        return $?
+      fi
+      echo "ERROR: vendor archive failed (set NEXLIFY_ALLOW_GITHUB_ARCHIVE=1 to use GitHub main)" >&2
+      return 1
       ;;
   esac
   if [ -n "$gh_path" ]; then
     echo "WARN: vendor origin failed — retry GitHub ${gh_path}" >&2
-    curl -fsSL -A "$ua" --max-time 90 "${gh}/${gh_path}" -o "$dest"
+    curl -fsSL -A "$ua" --max-time 90 --proto '=https' --tlsv1.2 "${gh}/${gh_path}" -o "$dest"
     return $?
   fi
   echo "ERROR: could not download $url (Cloudflare 403? Set PANEL_VENDOR_IP)" >&2
@@ -203,16 +233,31 @@ update_trap_exit() {
 }
 
 bootstrap_patch_scripts() {
+  if [ -f /etc/nexlify/panel-node-role ] && grep -qx '1' /etc/nexlify/panel-node-role && [ "${NEXLIFY_BOOTSTRAP_SCRIPTS:-}" != "1" ]; then
+    echo "Node 1: skip CDN script bootstrap (recover/watchdog stay local)"
+    return 0
+  fi
   local cache="${PANEL_CACHE_BUST}" fetched=0
   local base="${PANEL_INSTALL_BASE}"
+  SCRIPT_MANIFEST=""
+  if curl_vendor "${base}/scripts.sha256?${cache}" /tmp/nexlify-scripts.sha256 2>/dev/null \
+    && [ -s /tmp/nexlify-scripts.sha256 ]; then
+    SCRIPT_MANIFEST="/tmp/nexlify-scripts.sha256"
+  fi
   fetch_one() {
-    local url="$1" dest="$2"
+    local url="$1" dest="$2" name
+    name="$(basename "$dest")"
     mkdir -p "$(dirname "$dest")"
     if curl_vendor "$url" "${dest}.new"; then
       sed -i 's/\r$//' "${dest}.new" 2>/dev/null || true
+      if ! verify_bootstrapped_script "${dest}.new" "$name"; then
+        echo "WARN: skip $name — failed shebang/hash check" >&2
+        rm -f "${dest}.new"
+        return 0
+      fi
       chmod +x "${dest}.new"
       mv "${dest}.new" "$dest"
-      echo "Bootstrapped $(basename "$dest")"
+      echo "Bootstrapped $name"
       fetched=$((fetched + 1))
     fi
   }
@@ -383,16 +428,23 @@ cmd_sync_git() {
 
 cmd_sync_tarball() {
   local tmp archive src
+  assert_panel_archive_url "$PANEL_ARCHIVE_URL" || exit 1
   tmp="$(mktemp -d /tmp/nexlify-panel-patch-XXXXXX)"
   archive="$tmp/panel.tar.gz"
   echo "Downloading $PANEL_ARCHIVE_URL ..."
   if ! curl_vendor "$PANEL_ARCHIVE_URL" "$archive"; then
-    echo "WARN: vendor tarball failed — downloading GitHub main archive" >&2
-    if ! curl -fsSL --max-time 180 -L \
-      "https://codeload.github.com/snookiebaby2022/Nexlify/tar.gz/refs/heads/main" \
-      -o "$archive"; then
+    if [ "${NEXLIFY_ALLOW_GITHUB_ARCHIVE:-}" = "1" ]; then
+      echo "WARN: vendor tarball failed — downloading GitHub main archive (break-glass)" >&2
+      if ! curl -fsSL --max-time 180 --proto '=https' --tlsv1.2 -L \
+        "https://codeload.github.com/snookiebaby2022/Nexlify/tar.gz/refs/heads/main" \
+        -o "$archive"; then
+        rm -rf "$tmp"
+        echo "ERROR: could not download panel archive from vendor or GitHub" >&2
+        exit 1
+      fi
+    else
       rm -rf "$tmp"
-      echo "ERROR: could not download panel archive from vendor or GitHub" >&2
+      echo "ERROR: could not download panel archive (set NEXLIFY_ALLOW_GITHUB_ARCHIVE=1 to use GitHub main)" >&2
       exit 1
     fi
   fi
@@ -758,6 +810,11 @@ cmd_restart() {
   fi
   PANEL_RESTARTED=1
   echo "PM2 restart complete."
+
+  if [ -f "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" ]; then
+    echo "Starting background Xtream catalog warm (post-restart) …"
+    nohup node "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" >>"$ROOT/logs/warm-xtream-catalogs.log" 2>&1 &
+  fi
 
   # Ensure watchdog cron is installed
   if [ -f "$ROOT/scripts/nexlify-watchdog.sh" ]; then

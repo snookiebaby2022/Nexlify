@@ -7,6 +7,8 @@ import {
   describeResellerPermission,
   hasResellerPermission,
 } from "./reseller-permissions";
+import { DEFAULT_GROUP_CONFIG } from "./group-config";
+import { flagsFromGroupConfig } from "./reseller-group-flags";
 
 test("isAdminRole — admin bypasses ownership gates", () => {
   assert.equal(isAdminRole(PanelRole.ADMIN), true);
@@ -29,4 +31,13 @@ test("describeResellerPermission — known labels", () => {
 test("hasResellerPermission — admin always allowed", async () => {
   const ok = await hasResellerPermission({ id: "admin", role: PanelRole.ADMIN }, RESELLER_PERMS.LINES_DELETE);
   assert.equal(ok, true);
+});
+
+test("flagsFromGroupConfig — lines.edit implies delete on reseller manage lines", () => {
+  const flags = flagsFromGroupConfig({
+    ...DEFAULT_GROUP_CONFIG,
+    canDeleteUsers: false,
+    permissions: ["lines.view", "lines.edit"],
+  });
+  assert.equal(flags.canDeleteLines, true);
 });

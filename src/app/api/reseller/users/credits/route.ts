@@ -5,6 +5,7 @@ import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 export async function POST(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
   if (rateLimited) return rateLimited;
@@ -12,6 +13,8 @@ export async function POST(req: NextRequest) {
   try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const transferDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.CREDITS_TRANSFER);
+  if (transferDenied) return transferDenied;
 
   const parsed = await parseJsonBody(req);
 

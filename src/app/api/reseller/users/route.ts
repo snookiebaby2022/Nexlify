@@ -8,6 +8,7 @@ import { canManageSubUsers, directSubUserWhere } from "@/lib/reseller-sub-users"
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
+import { assertResellerAssignableGroupId } from "@/lib/reseller-assignable-group";
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.SUB_RESELLER) return "sub-reseller";
   return "reseller";
@@ -128,12 +129,14 @@ export async function POST(req: NextRequest) {
             try {
               const { ensureStandardUserGroups } = await import("@/lib/ensure-user-groups");
               const groups = await ensureStandardUserGroups(prisma);
-              return groups.get("Sub-resellers") ?? parent.groupId;
+              return groups.get("Sub-resellers") ?? null;
             } catch {
-              return parent.groupId;
+              return null;
             }
           })()
         );
+  const groupOk = await assertResellerAssignableGroupId(session, groupId);
+  if (!groupOk.ok) return NextResponse.json({ error: groupOk.error }, { status: 400 });
 
   const user = await prisma.$transaction(async (tx) => {
     if (credits > 0) {
@@ -248,13 +251,8 @@ export async function PATCH(req: NextRequest) {
   if (body.groupId !== undefined) {
     const groupId =
       body.groupId === null || body.groupId === "" ? null : String(body.groupId);
-    if (groupId) {
-      const group = await prisma.userGroup.findUnique({
-        where: { id: groupId },
-        select: { id: true },
-      });
-      if (!group) return NextResponse.json({ error: "Group not found" }, { status: 400 });
-    }
+    const groupOk = await assertResellerAssignableGroupId(session, groupId);
+    if (!groupOk.ok) return NextResponse.json({ error: groupOk.error }, { status: 400 });
     data.groupId = groupId;
   }
 

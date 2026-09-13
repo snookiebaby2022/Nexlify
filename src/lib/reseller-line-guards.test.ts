@@ -18,4 +18,12 @@ describe("pickResellerLineBouquetIds", () => {
   it("returns empty when no bouquets are allowed", () => {
     assert.deepEqual(pickResellerLineBouquetIds([], ["a"]), []);
   });
+
+  it("edit path: empty or unmatched request does not grant all allowed", () => {
+    assert.deepEqual(pickResellerLineBouquetIds(["a", "b"], [], { fallbackToAllowed: false }), []);
+    assert.deepEqual(
+      pickResellerLineBouquetIds(["a", "b"], ["x"], { fallbackToAllowed: false }),
+      []
+    );
+  });
 });

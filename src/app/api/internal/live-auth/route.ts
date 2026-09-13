@@ -7,6 +7,8 @@ import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { getAntiFreezeSettings, schedulePlaybackUpstreamWarm } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
+import { checkLineIpAccess } from "@/lib/line-ip-lock";
+import { checkLineDeviceLock, extractDeviceIdentity } from "@/lib/line-device-lock";
 import { isSessionKicked, trackConnection, isTestConnectionIp } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
@@ -182,6 +184,15 @@ export async function GET(req: NextRequest) {
   }
   if (!checkLineUserAgent(line, ua)) {
     return new NextResponse("User-Agent not allowed for this line", { status: 403 });
+  }
+  if (!checkLineIpAccess(line, ip)) {
+    return new NextResponse("IP not allowed for this line", { status: 403 });
+  }
+  if (
+    (line.lockMac || line.lockDeviceId) &&
+    !checkLineDeviceLock(line, extractDeviceIdentity(req.headers, req.nextUrl.searchParams))
+  ) {
+    return new NextResponse("Device not allowed for this line", { status: 403 });
   }
   const { rejectInvalidPlaybackMarks, playbackMarksFromRequest, playbackMarksFromUri } = await import(
     "@/lib/playback-marks"

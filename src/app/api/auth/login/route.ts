@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
     try {
       rate = await checkLoginRateLimit(ip);
     } catch (err) {
-      console.error("[auth/login] rate limit check failed (continuing):", err);
+      console.error("[auth/login] rate limit check failed (fail-closed):", err);
+      return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
     }
     if (!rate.ok) {
       return NextResponse.json({ error: rate.error }, { status: 429 });

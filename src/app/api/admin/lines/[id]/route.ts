@@ -9,13 +9,22 @@ import { resolveLineCredentialMinLength, resolveLinePasswordPolicy } from "@/lib
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { applyLineRenewDays, applyLineSetExpiry, applyLineUnlimited } from "@/lib/line-renew";
-import { assertRoleMaySetUnlimited } from "@/lib/reseller-line-guards";
+import { assertRoleMaySetUnlimited, resolveResellerLineBouquets } from "@/lib/reseller-line-guards";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
-import { adminOrOwnerWhere, logAdminCredentialChange } from "@/lib/admin-access";
+import { logAdminCredentialChange } from "@/lib/admin-access";
+import { adminOrLineOwnerWhere } from "@/lib/line-owner-filter";
 import { getClientIp } from "@/lib/client-ip";
+import { deleteManagedLine } from "@/lib/line-delete";
+import { sessionPaysLineCredits } from "@/lib/reseller-credit-charge";
+import {
+  assertRoleMaySetUnlimitedConnections,
+  chargeLineConnectionCredits,
+  extraConnectionSlots,
+  remainingLineDaysForCredits,
+} from "@/lib/line-connection-credits";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -33,13 +42,13 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   if (viewDenied) return viewDenied;
 
   const { id } = await ctx.params;
-  const where = adminOrOwnerWhere(session, id);
+  const where = await adminOrLineOwnerWhere(session, id);
 
   const line = await prisma.line.findFirst({
     where,
     include: {
       bouquets: { include: { bouquet: true } },
-      owner: { select: { id: true, username: true } },
+      owner: { select: { id: true, username: true, role: true } },
       forcedServer: { select: { id: true, name: true } },
       package: { select: { id: true, name: true, days: true, creditCost: true, maxLines: true, isActive: true } },
       magDevices: { select: { id: true, mac: true, model: true, isActive: true } },
@@ -71,7 +80,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  const where = adminOrOwnerWhere(session, id);
+  const where = await adminOrLineOwnerWhere(session, id);
 
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -155,8 +164,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           ? String(body.forcedServerId)
           : null
         : undefined,
-    maxConnections:
-      body.maxConnections != null ? Number(body.maxConnections) : undefined,
     isRestreamer: body.isRestreamer !== undefined ? Boolean(body.isRestreamer) : undefined,
     isTrial: body.isTrial !== undefined ? Boolean(body.isTrial) : undefined,
     notes: body.notes !== undefined ? String(body.notes) : undefined,
@@ -328,10 +335,62 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
   }
 
-  const line = await prisma.line.update({
-    where: { id: existing.id },
-    data,
-  });
+  let pendingConnSlots = 0;
+  if (body.maxConnections != null) {
+    const requested = Math.floor(Number(body.maxConnections));
+    if (!Number.isFinite(requested)) {
+      return NextResponse.json({ error: "Invalid max connections" }, { status: 400 });
+    }
+    if (sessionPaysLineCredits(session.role)) {
+      const connGuard = assertRoleMaySetUnlimitedConnections(session.role, requested);
+      if (!connGuard.ok) {
+        return NextResponse.json({ error: connGuard.error }, { status: 400 });
+      }
+      const nextMax = Math.max(1, requested);
+      pendingConnSlots = extraConnectionSlots(existing.maxConnections, nextMax);
+      data.maxConnections = nextMax;
+    } else {
+      data.maxConnections = Math.max(0, requested);
+    }
+  }
+
+  let line;
+  try {
+    const txOut = await prisma.$transaction(async (tx) => {
+      let charged = creditCharge;
+      if (pendingConnSlots > 0) {
+        const credit = await chargeLineConnectionCredits(tx, session, {
+          extraSlots: pendingConnSlots,
+          remainingDays: remainingLineDaysForCredits(
+            (data.expiresAt as Date | undefined) ?? existing.expiresAt
+          ),
+          packageId: existing.packageId,
+          lineUsername: existing.username,
+        });
+        charged = {
+          charged: (charged?.charged ?? 0) + credit.charged,
+          balanceAfter: credit.balanceAfter,
+        };
+      }
+      const updated = await tx.line.update({
+        where: { id: existing.id },
+        data,
+      });
+      return { updated, charged };
+    });
+    line = txOut.updated;
+    creditCharge = txOut.charged;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg === "Insufficient credits" ||
+      msg === "Forbidden" ||
+      msg.includes("before adding connections")
+    ) {
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
+    throw e;
+  }
 
   void invalidateLineAuth(existing.username);
   if (line.username !== existing.username) {
@@ -358,10 +417,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   if (body.bouquetIds && Array.isArray(body.bouquetIds)) {
-    await prisma.lineBouquet.deleteMany({ where: { lineId: line.id } });
-    await prisma.lineBouquet.createMany({
-      data: body.bouquetIds.map((bouquetId: string) => ({ lineId: line.id, bouquetId })),
+    const requested = body.bouquetIds.map(String).filter(Boolean);
+    const resolved = await resolveResellerLineBouquets(session.id, session.role, requested, {
+      fallbackToAllowed: false,
     });
+    if (!resolved.ok) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 });
+    }
+    await prisma.lineBouquet.deleteMany({ where: { lineId: line.id } });
+    if (resolved.bouquetIds.length) {
+      await prisma.lineBouquet.createMany({
+        data: resolved.bouquetIds.map((bouquetId) => ({ lineId: line.id, bouquetId })),
+      });
+    }
     await invalidateXtreamCategories();
   }
 
@@ -416,7 +484,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   if (deleteDenied) return deleteDenied;
 
   const { id } = await ctx.params;
-  const where = adminOrOwnerWhere(session, id);
+  const where = await adminOrLineOwnerWhere(session, id);
 
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -430,7 +498,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     meta: { username: existing.username },
   });
 
-  await prisma.line.delete({ where: { id: existing.id } });
+  await deleteManagedLine(existing.id);
 
   return NextResponse.json({ ok: true });
   } catch (e) {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
-type Entity = "streams" | "lines" | "users";
+type Entity = "streams" | "lines" | "users" | "bouquets";
 
 const PAGE_SIZES = [10, 25, 50, 100] as const;
 
@@ -46,6 +46,10 @@ export function MassDeletePanel({
         } else if (entity === "lines") {
           setRows(d.lines ?? []);
           setTotal(d.total ?? d.lines?.length ?? 0);
+        } else if (entity === "bouquets") {
+          const list = d.bouquets ?? d.items ?? [];
+          setRows(list);
+          setTotal(d.total ?? list.length);
         } else {
           const list = (d.resellers ?? []).filter((u: { role: string }) => u.role !== "ADMIN");
           setRows(list);
@@ -88,7 +92,12 @@ export function MassDeletePanel({
       const res = await fetch("/api/admin/tools/mass-delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entity, ids: batch }),
+        body: JSON.stringify({
+          entity,
+          ids: batch,
+          confirmEntity: entity,
+          confirmCount: batch.length,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -160,10 +169,20 @@ export function MassDeletePanel({
         </button>
       </div>
 
-      <button
-        type="button"
-        disabled={deleting || !selected.size}
-        onClick={remove}
+        <button
+          type="button"
+          className="rounded border px-3 py-2 text-sm cursor-pointer"
+          style={{ borderColor: "var(--border)" }}
+          onClick={togglePage}
+        >
+          {rows.length > 0 && rows.every((r) => selected.has(r.id))
+            ? "Clear page selection"
+            : "Select all on this page"}
+        </button>
+        <button
+          type="button"
+          disabled={deleting || !selected.size}
+          onClick={remove}
         className="rounded px-4 py-2 cursor-pointer disabled:opacity-60"
         style={{ background: "var(--danger)", color: "#fff" }}
       >

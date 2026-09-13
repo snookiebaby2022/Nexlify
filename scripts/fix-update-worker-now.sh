@@ -19,16 +19,17 @@ curl_vendor() {
   host="${PANEL_VENDOR_HOST:-nexlify.live}"
   if [ -z "$ip" ] && curl -fsSL -A "$ua" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
     # shellcheck disable=SC1091
-    source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
-    ip="${PANEL_VENDOR_IP:-}"
-    host="${PANEL_VENDOR_HOST:-nexlify.live}"
+    ip="$(grep -E '^PANEL_VENDOR_IP=' /tmp/nexlify-vendor-origin.env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r\n\"'"'"'[:space:]')"
+    host="$(grep -E '^PANEL_VENDOR_HOST=' /tmp/nexlify-vendor-origin.env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r\n\"'"'"'[:space:]')"
+    host="${host:-nexlify.live}"
   fi
   if [ -z "$ip" ]; then ip="${PANEL_VENDOR_IP:-85.17.162.54}"; fi
   if [[ "$url" == https://${host}* ]]; then path="${url#https://${host}}";
   elif [[ "$url" == https://nexlify.live* ]]; then path="${url#https://nexlify.live}"; fi
   if [ -n "$ip" ] && [ -n "$path" ]; then
-    echo "WARN: CDN blocked — fetch via http://${ip}${path} (Host: ${host})" >&2
-    curl -fsSL -A "$ua" "http://${ip}${path}" -H "Host: ${host}" -o "$dest"
+    echo "WARN: CDN blocked — retry origin https://${host}${path} (--resolve)" >&2
+    curl -fsSL -A "$ua" --proto '=https' --tlsv1.2 --resolve "${host}:443:${ip}" \
+      "https://${host}${path}" -o "$dest"
     return $?
   fi
   return 1

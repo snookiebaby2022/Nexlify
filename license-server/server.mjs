@@ -9,6 +9,7 @@
  */
 import http from "http";
 import { createHash } from "crypto";
+import { parseLicenseKey, activateStatusError } from "./license-key.mjs";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -55,19 +56,7 @@ function saveActivations(data) {
 let store = ensureAdminStatus(loadActivations());
 
 function parseKey(raw) {
-  const key = String(raw).trim();
-  if (!key.startsWith("NXLF1.")) return null;
-  const rest = key.slice(6);
-  const dot = rest.lastIndexOf(".");
-  if (dot <= 0) return null;
-  try {
-    const payload = JSON.parse(
-      Buffer.from(rest.slice(0, dot), "base64url").toString("utf8")
-    );
-    return { key, payload };
-  } catch {
-    return null;
-  }
+  return parseLicenseKey(raw);
 }
 
 function keyHash(key) {
@@ -188,14 +177,10 @@ const server = http.createServer(async (req, res) => {
       const hash = keyHash(key);
       const instanceId = String(data.instance_id ?? "").trim();
       const admin = store.adminStatus[payload.lid];
-      if (admin?.status === "REVOKED") {
+      const blocked = activateStatusError(admin);
+      if (blocked) {
         res.writeHead(403);
-        res.end(JSON.stringify({ ok: false, status: "REVOKED", error: "License revoked" }));
-        return;
-      }
-      if (admin?.status === "SUSPENDED") {
-        res.writeHead(403);
-        res.end(JSON.stringify({ ok: false, status: "SUSPENDED", error: "License suspended" }));
+        res.end(JSON.stringify({ ok: false, ...blocked }));
         return;
       }
       if (licenseExpired(payload, payload.lid)) {
@@ -352,6 +337,13 @@ const server = http.createServer(async (req, res) => {
       if (!parsed) {
         res.writeHead(400);
         res.end(JSON.stringify({ ok: false, error: "Invalid license key" }));
+        return;
+      }
+      const admin = store.adminStatus[parsed.payload.lid];
+      const blocked = activateStatusError(admin);
+      if (blocked) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ ok: false, ...blocked }));
         return;
       }
       if (licenseExpired(parsed.payload, parsed.payload.lid)) {

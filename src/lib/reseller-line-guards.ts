@@ -27,12 +27,23 @@ export function assertRoleMaySetUnlimited(
   return { ok: true };
 }
 
-/** Intersect requested bouquet IDs with reseller allowance; default to all allowed when none match. */
-export function pickResellerLineBouquetIds(allowed: string[], requested: string[]): string[] {
+export type ResellerBouquetPickOpts = {
+  /** Create/import: packages often list admin-only IDs. Edit: empty means clear. */
+  fallbackToAllowed?: boolean;
+};
+
+/** Intersect requested bouquet IDs with reseller allowance. */
+export function pickResellerLineBouquetIds(
+  allowed: string[],
+  requested: string[],
+  opts?: ResellerBouquetPickOpts
+): string[] {
   const allowedSet = new Set(allowed);
   const req = [...new Set(requested.map(String).filter(Boolean))];
   const matched = req.filter((id) => allowedSet.has(id));
-  return matched.length ? matched : [...allowed];
+  if (matched.length) return matched;
+  if (opts?.fallbackToAllowed === false) return [];
+  return [...allowed];
 }
 
 /**
@@ -42,7 +53,8 @@ export function pickResellerLineBouquetIds(allowed: string[], requested: string[
 export async function resolveResellerLineBouquets(
   userId: string,
   role: PanelRole,
-  bouquetIds: string[]
+  bouquetIds: string[],
+  opts?: ResellerBouquetPickOpts
 ): Promise<{ ok: true; bouquetIds: string[] } | { ok: false; error: string }> {
   if (role === PanelRole.ADMIN) {
     return { ok: true, bouquetIds: [...new Set(bouquetIds.filter(Boolean))] };
@@ -57,7 +69,7 @@ export async function resolveResellerLineBouquets(
     return { ok: false, error: RESELLER_BOUQUET_ACCESS_ERROR };
   }
 
-  return { ok: true, bouquetIds: pickResellerLineBouquetIds(allowed, bouquetIds) };
+  return { ok: true, bouquetIds: pickResellerLineBouquetIds(allowed, bouquetIds, opts) };
 }
 
 export async function assertResellerCanCreateLine(

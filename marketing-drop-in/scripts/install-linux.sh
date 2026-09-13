@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.89' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.92' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -37,7 +37,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.89' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.92' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -54,9 +54,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.89' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.89' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.89' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.92' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.92' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.92' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -501,8 +501,15 @@ panel_missing_files() {
 
 download_panel_archive() {
   [ -n "${PANEL_ARCHIVE_URL:-}" ] || die "PANEL_ARCHIVE_URL not set"
+  archive_host="${PANEL_ARCHIVE_URL#https://}"
+  archive_host="${archive_host%%/*}"
+  archive_host="${archive_host%%\?*}"
+  case "$PANEL_ARCHIVE_URL" in
+    https://nexlify.live/downloads/*|https://www.nexlify.live/downloads/*) ;;
+    *) die "PANEL_ARCHIVE_URL must be https://nexlify.live/downloads/… (got $archive_host)" ;;
+  esac
   tmp="$(mktemp)"
-  curl -fL "$PANEL_ARCHIVE_URL" -o "$tmp"
+  curl -fL --proto '=https' --tlsv1.2 "$PANEL_ARCHIVE_URL" -o "$tmp"
   archive_bytes="$(wc -c < "$tmp" | tr -d ' ')"
   if [ "$archive_bytes" -lt 2000000 ]; then
     rm -f "$tmp"
