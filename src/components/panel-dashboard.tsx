@@ -332,12 +332,17 @@ export function PanelDashboard({
     ? {
         onlineConnections: liveStats.onlineConnections,
         onlineUsers: liveStats.onlineUsers,
-        // Keep probe-based online count from stats (matches Online Stream card click filter)
         onlineStreams: liveStats.onlineStreams,
-        totalLiveStreams: d?.totalLiveStreams,
-        totalActiveLines: d?.totalActiveLines,
+        totalLiveStreams: isReseller ? 0 : d?.totalLiveStreams,
+        totalActiveLines: liveStats.totalActiveLines ?? d?.totalActiveLines,
       }
     : d ?? undefined;
+  const watchingNowValue = (() => {
+    const n = liveSummary?.onlineStreams ?? d?.onlineStreams ?? "—";
+    const denom = liveSummary?.totalLiveStreams ?? d?.totalLiveStreams;
+    if (isReseller || denom == null || denom === 0) return String(n);
+    return `${n} / ${denom}`;
+  })();
   const liveKpi =
     liveStats && liveConnected
       ? {
@@ -556,15 +561,13 @@ export function PanelDashboard({
 
             variant="green"
 
-            value={`${liveSummary?.onlineStreams ?? d?.onlineStreams ?? "—"} / ${liveSummary?.totalLiveStreams ?? d?.totalLiveStreams ?? "—"}`}
+            value={`${liveSummary?.onlineConnections ?? d?.onlineConnections ?? "—"} / ${connMax}`}
 
-            label="Watching now"
+            label="Online Connections"
 
-            icon={<Play size={28} fill="currentColor" strokeWidth={0} />}
+            icon={<Zap size={28} />}
 
-            href={`${streamsHref.split("?")[0]}?status=online`}
-
-            footerLabel="View streams"
+            href={connectionsHref}
 
           />
 
@@ -586,13 +589,15 @@ export function PanelDashboard({
 
             variant="orange"
 
-            value={`${liveSummary?.onlineConnections ?? d?.onlineConnections ?? "—"} / ${connMax}`}
+            value={watchingNowValue}
 
-            label="Online Connections"
+            label="Watching now"
 
-            icon={<Zap size={28} />}
+            icon={<Play size={28} fill="currentColor" strokeWidth={0} />}
 
-            href={connectionsHref}
+            href={`${streamsHref.split("?")[0]}?status=online`}
+
+            footerLabel="View streams"
 
           />
 

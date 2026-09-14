@@ -179,16 +179,20 @@ export function PanelMobileDashboard({
           href={linesHref}
         />
         <StatTile
-          label="Watching now"
-          value={String(d?.onlineStreams ?? "—")}
-          sub={d?.totalLiveStreams != null ? `of ${d.totalLiveStreams}` : undefined}
-          href={`${streamsHref.split("?")[0]}?status=online`}
-        />
-        <StatTile
           label="Live connections"
           value={String(d?.onlineConnections ?? "—")}
-          sub={d?.maxConnections ? `max ${d.maxConnections}` : "watching now"}
+          sub={d?.maxConnections ? `max ${d.maxConnections}` : undefined}
           href={connectionsHref}
+        />
+        <StatTile
+          label="Watching now"
+          value={String(d?.onlineStreams ?? "—")}
+          sub={
+            !isReseller && d?.totalLiveStreams != null && d.totalLiveStreams > 0
+              ? `of ${d.totalLiveStreams}`
+              : undefined
+          }
+          href={`${streamsHref.split("?")[0]}?status=online`}
         />
         <StatTile
           label={isReseller ? "Connections" : "Server Status"}

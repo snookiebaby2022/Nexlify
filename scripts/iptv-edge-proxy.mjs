@@ -10,7 +10,10 @@
  * Env:
  *   IPTV_EDGE_BACKEND=127.0.0.1:13000
  *   IPTV_EDGE_HTTP_PORTS=80,8080,25461
- *   IPTV_EDGE_HTTPS_PORTS=
+ *   IPTV_EDGE_HTTPS_PORTS=443
+ *   IPTV_EDGE_CERT=/etc/letsencrypt/live/darkcdn.site/fullchain.pem
+ *   IPTV_EDGE_KEY=/etc/letsencrypt/live/darkcdn.site/privkey.pem
+ *   IPTV_EDGE_ACME_ROOT=/var/www/letsencrypt
  *   IPTV_EDGE_TRUST_XFF=loopback
  *   # Or a comma-separated list of trusted reverse-proxy IPs.
  *   PANEL_INTERNAL_SECRET=...
@@ -536,28 +539,32 @@ function flushConnectionPulseBatch() {
   if (!INTERNAL_SECRET || pendingPulseBatch.size === 0) return;
   const sessions = [...pendingPulseBatch.values()];
   pendingPulseBatch.clear();
-  const body = JSON.stringify({ sessions });
-  const req = http.request(
-    {
-      hostname: backendHost,
-      port: backendPort,
-      path: "/api/internal/connection-pulse-batch",
-      method: "POST",
-      agent: false,
-      headers: {
-        "content-type": "application/json",
-        "content-length": Buffer.byteLength(body),
-        "x-panel-internal-secret": INTERNAL_SECRET,
-        "x-panel-api-key": INTERNAL_SECRET,
+  const CHUNK = 80;
+  for (let i = 0; i < sessions.length; i += CHUNK) {
+    const slice = sessions.slice(i, i + CHUNK);
+    const body = JSON.stringify({ sessions: slice });
+    const req = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: "/api/internal/connection-pulse-batch",
+        method: "POST",
+        agent: false,
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+          "x-panel-internal-secret": INTERNAL_SECRET,
+          "x-panel-api-key": INTERNAL_SECRET,
+        },
+        timeout: 8000,
       },
-      timeout: 5000,
-    },
-    (res) => res.resume()
-  );
-  req.on("error", () => undefined);
-  req.on("timeout", () => req.destroy());
-  req.write(body);
-  req.end();
+      (res) => res.resume()
+    );
+    req.on("error", () => undefined);
+    req.on("timeout", () => req.destroy());
+    req.write(body);
+    req.end();
+  }
 }
 
 function ensurePulseBatchTimer() {
@@ -4253,6 +4260,35 @@ async function onRequest(clientReq, clientRes, ctx) {
         offlineSplashClients: offlineSplashSessions.get(OFFLINE_SPLASH_KEY)?.clients.size || 0,
       })
     );
+    return;
+  }
+
+  if (pathOnly.startsWith("/.well-known/acme-challenge/")) {
+    const token = pathOnly.slice("/.well-known/acme-challenge/".length);
+    if (!token || token.includes("..") || token.includes("/") || token.includes("\\")) {
+      clientRes.writeHead(400, { "content-type": "text/plain" });
+      clientRes.end("bad token");
+      return;
+    }
+    const acmeRoot = process.env.IPTV_EDGE_ACME_ROOT || "/var/www/letsencrypt";
+    const candidates = [
+      path.join(acmeRoot, ".well-known/acme-challenge", token),
+      path.join(acmeRoot, token),
+      path.join("/var/www/html/.well-known/acme-challenge", token),
+    ];
+    for (const file of candidates) {
+      try {
+        if (fs.existsSync(file) && fs.statSync(file).isFile()) {
+          clientRes.writeHead(200, { "content-type": "text/plain" });
+          clientRes.end(fs.readFileSync(file));
+          return;
+        }
+      } catch {
+        /* next */
+      }
+    }
+    clientRes.writeHead(404, { "content-type": "text/plain" });
+    clientRes.end("not found");
     return;
   }
 

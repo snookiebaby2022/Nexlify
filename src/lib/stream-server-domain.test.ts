@@ -5,6 +5,7 @@ import {
   collectMainMediaHostPool,
   directMediaHostnameForServer,
   directMediaOriginForServerSync,
+  originWithBroadcastPort,
   parseStreamServerDomain,
   pickAdvertisedMediaHostnameSync,
 } from "./stream-server-domain";
@@ -41,6 +42,13 @@ describe("stream server domain validation", () => {
   it("rejects invalid hostnames", () => {
     const bad = parseStreamServerDomain("not a domain!!", "lb");
     assert.equal(bad.ok, false);
+  });
+});
+
+describe("originWithBroadcastPort", () => {
+  it("appends non-default HTTP port", () => {
+    assert.equal(originWithBroadcastPort("http://209.237.141.15", 8080), "http://209.237.141.15:8080");
+    assert.equal(originWithBroadcastPort("http://209.237.141.15", 80), "http://209.237.141.15");
   });
 });
 

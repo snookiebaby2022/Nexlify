@@ -111,7 +111,30 @@ export type DirectMediaServerFields = {
   domain?: string | null;
   protocol?: string | null;
   dnsRotator?: unknown;
+  /** HTTP broadcast port from Manage Servers (Xtream / live edge). */
+  port?: number | null;
+  httpsPort?: number | null;
 };
+
+function normalizeBroadcastPort(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1 || n > 65535) return fallback;
+  return Math.floor(n);
+}
+
+/** Append a non-default port to an origin (http://host or https://host). */
+export function originWithBroadcastPort(origin: string, port: number): string {
+  try {
+    const u = new URL(origin.includes("://") ? origin : `http://${origin}`);
+    const def = u.protocol === "https:" ? 443 : 80;
+    const p = normalizeBroadcastPort(port, def);
+    if (p === def) return u.origin;
+    u.port = String(p);
+    return u.origin;
+  } catch {
+    return origin;
+  }
+}
 
 export type MainMediaPoolServer = DirectMediaServerFields & {
   panelSettings?: unknown;
@@ -365,7 +388,10 @@ export async function directMediaOriginForServer(
       /* keep proto */
     }
   }
-  return `${proto}://${formatHostForOrigin(host)}`;
+  const base = `${proto}://${formatHostForOrigin(host)}`;
+  const httpPort = normalizeBroadcastPort(server.port, 80);
+  const tlsPort = normalizeBroadcastPort(server.httpsPort, 443);
+  return originWithBroadcastPort(base, proto === "https" ? tlsPort : httpPort);
 }
 
 /** Sync helper for unit tests (LB domain preferred; no DNS / main pool). */

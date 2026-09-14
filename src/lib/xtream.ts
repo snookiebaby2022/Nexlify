@@ -2,7 +2,11 @@ import type { LineWithBouquets } from "./lines";
 import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { exportPlaybackUrl } from "./export-playback-url";
-import { resolveLinePlaybackOrigin } from "./line-playback-origin";
+import {
+  resolveLinePlaybackOrigin,
+  resolveStickyStreamServerForLine,
+} from "./line-playback-origin";
+import { serverPortProfile } from "./panel-local-server";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { parseBitrates } from "./stream-variants";
@@ -159,6 +163,16 @@ async function loadXtreamAccountShell(
       streamHost = (mediaOrigin || panelOrigin).replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
     }
     const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
+    let loginHost = "";
+    try {
+      loginHost = new URL(
+        panelOrigin.includes("://") ? panelOrigin : `http://${panelOrigin}`
+      ).hostname.toLowerCase();
+    } catch {
+      loginHost = "";
+    }
+    const loginHostMatchesStream =
+      Boolean(loginHost) && loginHost === streamHost.toLowerCase();
     // Prefer configured media origin scheme even when sticky resolve returns http://host
     // (edge often forwards player_api over plain HTTP while TLS terminates on the domain).
     let useHttps = mediaOrigin
@@ -178,30 +192,58 @@ async function loadXtreamAccountShell(
         /* keep */
       }
     }
-    if (!useHttps && panelOrigin.startsWith("https") && !isIpHost(streamHost)) useHttps = true;
+    // Same-host XUI: HTTPS login may upgrade play. Split DNS (panel vs LB) must not
+    // force https://LB:443 — on 10gbs that port is P2P, not the splice edge.
+    if (
+      !useHttps &&
+      panelOrigin.startsWith("https") &&
+      loginHostMatchesStream &&
+      !isIpHost(streamHost)
+    ) {
+      useHttps = true;
+    }
     if (isIpHost(streamHost)) useHttps = false;
     const publicPort = portFromPanelBaseUrl(panelOrigin);
     const serverSettings = await getPanelServerSettings();
-    const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
+    const stickyServer = await resolveStickyStreamServerForLine(lineId);
+    const stickyPorts = stickyServer ? serverPortProfile(stickyServer) : null;
+    const broadcastHttpPort =
+      stickyPorts?.streamHttpPort ?? serverSettings.streamHttpPort ?? resolveStreamEdgeHttpPort();
+    const broadcastHttpsPort =
+      stickyPorts?.streamHttpsPort ?? serverSettings.streamHttpsPort ?? resolveStreamHttpsPort();
     // HTTP media edge = bare LB IP with no TLS. Only then advertise https_port=80.
     // Domain media hosts (e.g. darkcdn.site) often have :443; advertising https_port=80
     // makes IPTV apps dial https://domain:80 → TLS "wrong version number" → no play.
     const httpMediaEdge =
       Boolean(mediaOrigin) && !useHttps && isIpHost(streamHost);
-    const edgeHttpPort = String(resolveStreamEdgeHttpPort());
+    const mediaPortIsGeneric =
+      !mediaPort || mediaPort === "80" || mediaPort === "443";
+    const edgeHttpFromServer = String(broadcastHttpPort);
+    const advertisedEdgePort = httpMediaEdge
+      ? mediaPortIsGeneric
+        ? edgeHttpFromServer
+        : mediaPort
+      : "";
+    const loginAdvertisedHttp = String(
+      resolveAdvertisedStreamHttpPort(publicPort) || broadcastHttpPort
+    );
     const httpPort = httpMediaEdge
-      ? mediaPort || edgeHttpPort
-      : standardPorts
-      ? "80"
-      : useHttps
-        ? String(streamHttpsPort)
-        : String(resolveAdvertisedStreamHttpPort(publicPort));
+      ? advertisedEdgePort
+      : loginHostMatchesStream
+        ? loginAdvertisedHttp
+        : standardPorts
+          ? String(broadcastHttpPort)
+          : useHttps
+            ? String(broadcastHttpsPort)
+            : mediaPort || loginAdvertisedHttp;
     const httpsPort =
       mediaOrigin && useHttps
-        ? mediaPort || String(streamHttpsPort)
+        ? mediaPort || String(broadcastHttpsPort)
         : httpMediaEdge
-          ? mediaPort || edgeHttpPort
-          : String(streamHttpsPort);
+          ? advertisedEdgePort
+          : loginHostMatchesStream
+            ? mediaPort || String(broadcastHttpsPort)
+            : String(broadcastHttpsPort);
     const formats = preferLiveOutputFormats(
       xtreamOutputFormats("ts,m3u8,hls,rtmp"),
       resolveClientPlaybackProfile(userAgent)
@@ -583,13 +625,15 @@ export function buildM3uStream(
   baseUrl: string,
   type: string,
   output: "hls" | "ts" | "auto" = "auto",
-  opts?: { includeSeries?: boolean }
+  opts?: { includeSeries?: boolean; liveOnly?: boolean }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const isExtended = type === "m3u_plus";
-  const exportTypes: StreamType[] = opts?.includeSeries
-    ? [StreamType.LIVE, StreamType.MOVIE, StreamType.SERIES]
-    : [StreamType.LIVE, StreamType.MOVIE];
+  const exportTypes: StreamType[] = opts?.liveOnly
+    ? [StreamType.LIVE]
+    : opts?.includeSeries
+      ? [StreamType.LIVE, StreamType.MOVIE, StreamType.SERIES]
+      : [StreamType.LIVE, StreamType.MOVIE];
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {

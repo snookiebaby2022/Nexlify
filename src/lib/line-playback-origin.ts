@@ -8,6 +8,36 @@ import {
 
 const SESSION_KEY_PREFIX = "line-playback-origin:";
 
+const STICKY_LB_SELECT = {
+  id: true,
+  host: true,
+  domain: true,
+  protocol: true,
+  port: true,
+  httpsPort: true,
+  dnsRotator: true,
+  panelSettings: true,
+  geoLbCountries: true,
+  geoLbIsps: true,
+  sortOrder: true,
+  name: true,
+} as const;
+
+/** Sticky load-balancer row for a line (playback + advertised ports). */
+export async function resolveStickyStreamServerForLine(lineId: string) {
+  const sessionKey = `${SESSION_KEY_PREFIX}${lineId}`;
+  const prior = await prisma.loadBalancerSession.findUnique({
+    where: { sessionKey },
+    select: { serverId: true },
+  });
+  const serverId = await resolveStickyLineLoadBalancerId(prior?.serverId);
+  if (!serverId) return null;
+  return prisma.streamServer.findUnique({
+    where: { id: serverId },
+    select: STICKY_LB_SELECT,
+  });
+}
+
 export type ResolveLinePlaybackOriginOpts = {
   /**
    * Origin the IPTV client used for player_api / get.php / portal login.
@@ -36,30 +66,13 @@ export async function resolveLinePlaybackOrigin(
   opts?: ResolveLinePlaybackOriginOpts
 ): Promise<string> {
   const sessionKey = `${SESSION_KEY_PREFIX}${lineId}`;
-  const prior = await prisma.loadBalancerSession.findUnique({
-    where: { sessionKey },
-    select: { serverId: true },
-  });
-  const serverId = await resolveStickyLineLoadBalancerId(prior?.serverId);
-  if (!serverId) return fallbackOrigin;
+  const lb = await resolveStickyStreamServerForLine(lineId);
+  if (!lb) return fallbackOrigin;
 
   const servers = await prisma.streamServer.findMany({
-    select: {
-      id: true,
-      host: true,
-      domain: true,
-      protocol: true,
-      dnsRotator: true,
-      panelSettings: true,
-      geoLbCountries: true,
-      geoLbIsps: true,
-      sortOrder: true,
-      name: true,
-    },
+    select: STICKY_LB_SELECT,
   });
   const roleCtx = buildServerRoleContext(servers);
-  const lb = servers.find((s) => s.id === serverId);
-  if (!lb) return fallbackOrigin;
 
   const main = servers.find((s) => resolveServerRole(s, roleCtx) === "main") ?? null;
   const mainPoolHosts = collectMainMediaHostPool(main);
@@ -76,13 +89,16 @@ export async function resolveLinePlaybackOrigin(
   if (!origin) {
     const proto =
       String(lb.protocol || "http").toLowerCase() === "https" ? "https" : "http";
-    return `${proto}://${lb.host}`;
+    const port = proto === "https" ? lb.httpsPort ?? 443 : lb.port ?? 8080;
+    const def = proto === "https" ? 443 : 80;
+    const portSuffix = port && port !== def ? `:${port}` : "";
+    return `${proto}://${lb.host}${portSuffix}`;
   }
 
   await prisma.loadBalancerSession.upsert({
     where: { sessionKey },
-    create: { sessionKey, lineId, serverId, isActive: true },
-    update: { serverId, isActive: true, lastSeenAt: new Date() },
+    create: { sessionKey, lineId, serverId: lb.id, isActive: true },
+    update: { serverId: lb.id, isActive: true, lastSeenAt: new Date() },
   });
   return origin;
 }

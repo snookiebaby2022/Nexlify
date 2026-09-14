@@ -10,23 +10,27 @@ export type PulseBatchEntry = {
   onDemand?: boolean;
 };
 
-const MAX_BATCH = 512;
+const CHUNK = 32;
 
 /** Apply edge batched heartbeats without one HTTP request per viewer. */
 export async function pulseLiveConnectionBatch(entries: PulseBatchEntry[]): Promise<number> {
-  const slice = entries.slice(0, MAX_BATCH);
-  await Promise.all(
-    slice.map((entry) =>
-      pulseLiveConnection({
-        lineId: entry.lineId,
-        streamId: entry.streamId,
-        ip: entry.ip,
-        bytes: entry.bytes,
-        idleMs: entry.idleMs,
-        onDemand: entry.onDemand,
-      })
-    )
-  );
-  if (slice.length) notifyLiveConnectionsChanged();
-  return slice.length;
+  let applied = 0;
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const slice = entries.slice(i, i + CHUNK);
+    const results = await Promise.allSettled(
+      slice.map((entry) =>
+        pulseLiveConnection({
+          lineId: entry.lineId,
+          streamId: entry.streamId,
+          ip: entry.ip,
+          bytes: entry.bytes,
+          idleMs: entry.idleMs,
+          onDemand: entry.onDemand,
+        })
+      )
+    );
+    applied += results.filter((r) => r.status === "fulfilled").length;
+  }
+  if (applied) notifyLiveConnectionsChanged();
+  return applied;
 }

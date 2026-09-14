@@ -56,15 +56,30 @@ export async function pulseLiveConnection(opts: {
     });
     notifyLiveConnectionsChanged();
     return;
-  } catch {
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    // Parallel pulses / live-auth zap already inserted this triple — just refresh.
+    if (code === "P2002") {
+      await prisma.liveConnection
+        .updateMany({
+          where: { lineId, streamId, ip: clientIp },
+          data: { lastSeenAt: now },
+        })
+        .catch(() => undefined);
+      notifyLiveConnectionsChanged();
+      return;
+    }
     /* Unique index may not be migrated yet — legacy path. */
   }
 
   const updated = await prisma.liveConnection.updateMany({
     where: { lineId, streamId, OR: [{ ip: clientIp }, ...(clientIp ? [] : [{ ip: "" }])] },
-    data: { lastSeenAt: now, ip: clientIp },
+    data: { lastSeenAt: now },
   });
-  if (updated.count > 0) return;
+  if (updated.count > 0) {
+    notifyLiveConnectionsChanged();
+    return;
+  }
 
   await prisma.liveConnection
     .create({
