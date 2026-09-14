@@ -83,15 +83,13 @@ export function parseStreamServerDomain(
 }
 
 /**
- * First/single LB hostname from a domain field.
- * Tolerates a comma-separated DB value (legacy / UI mistakes) by taking the first
- * valid hostname so advertise can still publish stream DNS instead of falling to LB IP.
+ * Single LB Domain Name only. Comma/space lists are invalid on LB and return ""
+ * so callers fall back to the LB IP instead of advertising a login/CDN hostname
+ * that may point at the panel (~1G hairpin).
  */
 export function mediaHostnameFromServerDomain(domain: string | null | undefined): string {
   const parsed = parseStreamServerDomain(domain ?? "", "lb");
-  if (parsed.ok && parsed.domain) return parsed.domain;
-  const hosts = listDomainFieldHostnames(domain);
-  return hosts[0] || "";
+  return parsed.ok && parsed.domain ? parsed.domain : "";
 }
 
 /** All hostnames listed in a main (or LB) domain field. */
