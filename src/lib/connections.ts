@@ -581,6 +581,58 @@ export async function pruneViewerStreamsToCap(
   invalidateConnectionCaches({ lineId });
 }
 
+/** Upsert (lineId, streamId, ip) without renaming unique keys (avoids P2002 races). */
+async function upsertLiveConnectionTouch(opts: {
+  lineId: string;
+  streamId: string;
+  ip: string;
+  startedAt?: Date;
+  userAgent?: string;
+}): Promise<string | null> {
+  const now = new Date();
+  try {
+    const row = await prisma.liveConnection.upsert({
+      where: {
+        lineId_streamId_ip: {
+          lineId: opts.lineId,
+          streamId: opts.streamId,
+          ip: opts.ip,
+        },
+      },
+      create: {
+        lineId: opts.lineId,
+        streamId: opts.streamId,
+        ip: opts.ip,
+        ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+        ...(opts.startedAt ? { startedAt: opts.startedAt } : {}),
+      },
+      update: {
+        lastSeenAt: now,
+        ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+        ...(opts.startedAt ? { startedAt: opts.startedAt } : {}),
+      },
+    });
+    return row.id;
+  } catch (err) {
+    if ((err as { code?: string })?.code !== "P2002") throw err;
+    const raced = await prisma.liveConnection.findFirst({
+      where: { lineId: opts.lineId, streamId: opts.streamId, ip: opts.ip },
+      select: { id: true },
+    });
+    if (!raced) return null;
+    await prisma.liveConnection
+      .updateMany({
+        where: { id: raced.id },
+        data: {
+          lastSeenAt: now,
+          ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+        },
+      })
+      .catch(() => undefined);
+    return raced.id;
+  }
+}
+
 /** Remove other active streams for the same viewer (channel zap / failover cleanup). */
 export async function pruneOtherViewerStreams(
   lineId: string,
@@ -601,6 +653,26 @@ export async function trackConnection(opts: {
   /** Bytes observed this heartbeat (HLS segment size, TS chunk, etc.) for quality scoring. */
   mediaBytes?: number;
   /** When true, drop other streams for this viewer (channel zap). Default false — heartbeats must not prune. */
+  pruneOthers?: boolean;
+}): Promise<string | null> {
+  try {
+    return await trackConnectionInner(opts);
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    // void trackConnection(...) callers must never see unique/FK races as unhandledRejection.
+    if (code === "P2002" || code === "P2003" || code === "P2025") return null;
+    console.error("[trackConnection]", code || (err instanceof Error ? err.message : err));
+    return null;
+  }
+}
+
+async function trackConnectionInner(opts: {
+  lineId: string;
+  streamId?: string;
+  ip?: string;
+  userAgent?: string;
+  playbackPath?: string;
+  mediaBytes?: number;
   pruneOthers?: boolean;
 }): Promise<string | null> {
   const clientIp = normalizeConnectionIp(opts.ip) || "";
@@ -644,56 +716,38 @@ export async function trackConnection(opts: {
       });
       if (byIp) {
         const switchedStream = Boolean(byIp.streamId && byIp.streamId !== streamId);
-        // updateMany avoids Prisma P2025 noise when the row was deleted between find+update
-        let touchedCount = 0;
-        try {
+        // Never UPDATE streamId in place — concurrent pulse upsert already owns
+        // (lineId, newStreamId, ip) and in-place rename throws P2002 (unhandled via void callers).
+        let keepId: string | null = null;
+        if (!switchedStream) {
           const touched = await prisma.liveConnection.updateMany({
             where: { id: byIp.id },
             data: {
-              streamId,
-              ...(switchedStream ? { startedAt: new Date() } : {}),
               lastSeenAt: new Date(),
               ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
             },
           });
-          touchedCount = touched.count;
-        } catch (err) {
-          // Pulse already created (lineId, newStreamId, ip) — use that row.
-          if ((err as { code?: string })?.code === "P2002") {
-            const raced = await prisma.liveConnection.findFirst({
-              where: { lineId: opts.lineId, streamId, ip: clientIp },
-              select: { id: true },
-            });
-            if (raced) {
-              await prisma.liveConnection.deleteMany({
-                where: { lineId: opts.lineId, ip: clientIp, id: { not: raced.id } },
-              });
-              invalidateConnectionCaches({ lineId: opts.lineId });
-              void touchLiveSession(opts.lineId, streamId, clientIp);
-              void setViewerActiveStream(opts.lineId, streamId, clientIp);
-              return raced.id;
-            }
-          } else {
-            throw err;
-          }
+          if (touched.count > 0) keepId = byIp.id;
+        } else {
+          keepId = await upsertLiveConnectionTouch({
+            lineId: opts.lineId,
+            streamId,
+            ip: clientIp,
+            startedAt: new Date(),
+            userAgent: opts.userAgent,
+          });
         }
-        if (touchedCount > 0) {
-          if (byIp.streamId && byIp.streamId !== streamId) {
-            await prisma.liveConnection.deleteMany({
-              where: {
-                lineId: opts.lineId,
-                ip: clientIp,
-                id: { not: byIp.id },
-              },
-            });
-            notifyLiveConnectionsChanged();
-          }
+        if (keepId) {
+          await prisma.liveConnection.deleteMany({
+            where: { lineId: opts.lineId, ip: clientIp, id: { not: keepId } },
+          });
+          notifyLiveConnectionsChanged();
           invalidateConnectionCaches({ lineId: opts.lineId });
           void touchLiveSession(opts.lineId, streamId, clientIp);
           void setViewerActiveStream(opts.lineId, streamId, clientIp);
-          return byIp.id;
+          return keepId;
         }
-        /* touched.count === 0: row raced away — fall through to create path */
+        /* keepId null: row raced away — fall through to create path */
       }
     }
   }
@@ -778,13 +832,24 @@ export async function trackConnection(opts: {
       orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
     });
     if (loose) {
-      try {
-        await prisma.liveConnection.updateMany({
-          where: { id: loose.id },
-          data: { lastSeenAt: new Date(), ip: clientIp },
-        });
-      } catch (err) {
-        if ((err as { code?: string })?.code !== "P2002") throw err;
+      // Prefer upsert on the real client IP — rewriting loose.ip collides when pulse
+      // already inserted (lineId, streamId, clientIp).
+      const keepId =
+        (await upsertLiveConnectionTouch({
+          lineId: opts.lineId,
+          streamId,
+          ip: clientIp,
+          userAgent: opts.userAgent,
+        })) || loose.id;
+      if (keepId !== loose.id) {
+        await prisma.liveConnection.deleteMany({ where: { id: loose.id } });
+      } else {
+        await prisma.liveConnection
+          .updateMany({
+            where: { id: loose.id },
+            data: { lastSeenAt: new Date(), ip: clientIp },
+          })
+          .catch(() => undefined);
       }
       invalidateConnectionCaches();
       notifyLiveConnectionsChanged();
@@ -806,7 +871,7 @@ export async function trackConnection(opts: {
         ip: opts.ip,
       });
       await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp);
-      return loose.id;
+      return keepId;
     }
   }
 
@@ -821,14 +886,13 @@ export async function trackConnection(opts: {
     }
     await cacheSet(debounceKey, true, 12);
 
-    try {
-      await prisma.liveConnection.updateMany({
+    // Touch heartbeat only — never rewrite `ip` here (unique race with pulse).
+    await prisma.liveConnection
+      .updateMany({
         where: { id: existing.id },
-        data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
-      });
-    } catch (err) {
-      if ((err as { code?: string })?.code !== "P2002") throw err;
-    }
+        data: { lastSeenAt: new Date() },
+      })
+      .catch(() => undefined);
     invalidateConnectionCaches();
     if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
     touchQuality();
@@ -925,7 +989,7 @@ export async function trackConnection(opts: {
     throw err;
   } finally {
     if (streamId) {
-      await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp);
+      await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp).catch(() => undefined);
     }
   }
 }

@@ -18,6 +18,26 @@ export async function pulseLiveConnection(opts: {
   userAgent?: string;
   playbackPath?: string;
 }): Promise<void> {
+  try {
+    await pulseLiveConnectionInner(opts);
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    // Heartbeats must never reject into batch Promise.allSettled noise / unhandledRejection.
+    if (code === "P2002" || code === "P2003" || code === "P2025") return;
+    console.error("[pulseLiveConnection]", code || (err instanceof Error ? err.message : err));
+  }
+}
+
+async function pulseLiveConnectionInner(opts: {
+  lineId: string;
+  streamId: string;
+  ip?: string | null;
+  bytes?: number;
+  idleMs?: number;
+  onDemand?: boolean;
+  userAgent?: string;
+  playbackPath?: string;
+}): Promise<void> {
   const lineId = opts.lineId?.trim();
   const streamId = opts.streamId?.trim();
   if (!lineId || !streamId) return;
