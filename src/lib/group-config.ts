@@ -30,6 +30,7 @@ export type GroupWhiteLabelConfig = {
   sidebarColor?: string;
   customCss?: string;
   faviconUrl?: string;
+  headerColor?: string;
 };
 
 export type GroupRole = "admin" | "reseller" | "sub_reseller";

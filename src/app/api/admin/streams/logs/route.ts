@@ -8,52 +8,65 @@ export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const take = parseLogLimit(req.nextUrl.searchParams.get("limit"));
+  const take = parseLogLimit(req.nextUrl.searchParams.get("limit") ?? "25");
+  const bucket = (req.nextUrl.searchParams.get("bucket") ?? "all").trim();
   const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const want = (name: string) => bucket === "all" || bucket === name;
 
+  const empty = Promise.resolve([]);
   const [processes, activity, liveViews, relayErrorsRaw, playbackEventsRaw] = await Promise.all([
-    prisma.streamProcess.findMany({
-      where: { lastSeenAt: { gte: staleBefore } },
-      include: {
-        stream: { select: { id: true, name: true } },
-        server: { select: { id: true, name: true } },
-      },
-      orderBy: { lastSeenAt: "desc" },
-      take,
-    }),
-    prisma.activityLog.findMany({
-      where: {
-        createdAt: { gte: staleBefore },
-        OR: [{ entity: "stream" }, { action: { contains: "stream" } }],
-      },
-      orderBy: { createdAt: "desc" },
-      take,
-    }),
-    prisma.liveConnection.findMany({
-      where: { lastSeenAt: { gte: staleBefore }, streamId: { not: null } },
-      include: {
-        stream: { select: { id: true, name: true } },
-        line: { select: { username: true } },
-      },
-      orderBy: { lastSeenAt: "desc" },
-      take,
-    }),
-    prisma.activityLog.findMany({
-      where: {
-        createdAt: { gte: staleBefore },
-        action: "stream_hls_relay_error",
-      },
-      orderBy: { createdAt: "desc" },
-      take,
-    }),
-    prisma.activityLog.findMany({
-      where: {
-        createdAt: { gte: staleBefore },
-        action: { startsWith: "playback_" },
-      },
-      orderBy: { createdAt: "desc" },
-      take,
-    }),
+    want("processes")
+      ? prisma.streamProcess.findMany({
+          where: { lastSeenAt: { gte: staleBefore } },
+          include: {
+            stream: { select: { id: true, name: true } },
+            server: { select: { id: true, name: true } },
+          },
+          orderBy: { lastSeenAt: "desc" },
+          take,
+        })
+      : empty,
+    want("activity")
+      ? prisma.activityLog.findMany({
+          where: {
+            createdAt: { gte: staleBefore },
+            OR: [{ entity: "stream" }, { action: { contains: "stream" } }],
+          },
+          orderBy: { createdAt: "desc" },
+          take,
+        })
+      : empty,
+    want("live")
+      ? prisma.liveConnection.findMany({
+          where: { lastSeenAt: { gte: staleBefore }, streamId: { not: null } },
+          include: {
+            stream: { select: { id: true, name: true } },
+            line: { select: { username: true } },
+          },
+          orderBy: { lastSeenAt: "desc" },
+          take,
+        })
+      : empty,
+    want("relay")
+      ? prisma.activityLog.findMany({
+          where: {
+            createdAt: { gte: staleBefore },
+            action: "stream_hls_relay_error",
+          },
+          orderBy: { createdAt: "desc" },
+          take,
+        })
+      : empty,
+    want("playback")
+      ? prisma.activityLog.findMany({
+          where: {
+            createdAt: { gte: staleBefore },
+            action: { startsWith: "playback_" },
+          },
+          orderBy: { createdAt: "desc" },
+          take,
+        })
+      : empty,
   ]);
 
   const relayStreamIds = [

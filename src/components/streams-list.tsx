@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
+  Activity,
   ChevronDown,
   Filter,
   Play,
@@ -109,6 +110,7 @@ const STREAM_COLUMN_DEFAULTS: Record<string, boolean> = {
   uptime: true,
   actions: true,
   player: true,
+  probe: true,
   epg: true,
   streamInfo: true,
 };
@@ -211,15 +213,48 @@ function StreamInfoCell({
   if (!probing && isLiveOriginOrSpliceFailed(stream) && failErr) {
     lines.push("Probe: " + failErr);
   }
-  if (lines.length <= 1 && !st && !probing) {
-    return <span className="xui-stream-info-empty">Waiting for this channel's probe / process stats</span>;
+  const chips: { label: string; tone?: "ok" | "warn" | "bad" }[] = [];
+  if (st?.videoCodec) chips.push({ label: st.videoCodec });
+  if (st?.audioCodec) chips.push({ label: st.audioCodec });
+  if (kbps) chips.push({ label: `${Number(kbps).toLocaleString()} kbps` });
+  chips.push({
+    label: stream.epgChannelId ? (stream.epgWorking ? "EPG live" : "EPG mapped") : "No EPG",
+    tone: stream.epgChannelId ? (stream.epgWorking ? "ok" : "warn") : undefined,
+  });
+  if (probing) chips.push({ label: "Probing…", tone: "warn" });
+  else if (isLiveOriginOrSpliceFailed(stream)) chips.push({ label: "Source down", tone: "bad" });
+  else if (stream.lastProbeOk === true) chips.push({ label: "Source OK", tone: "ok" });
+  if (chips.length === 0) {
+    return <span className="xui-stream-info-empty">No probe yet</span>;
   }
   return (
-    <div className="xui-stream-info text-xs leading-snug" style={{ color: "var(--text)" }}>
-      {lines.map((line) => (
-        <div key={line} className="xui-stream-info-line">
-          {line}
-        </div>
+    <div className="flex flex-wrap gap-1">
+      {chips.map((chip) => (
+        <span
+          key={chip.label}
+          className="px-1.5 py-0.5 rounded text-[10px] font-medium"
+          style={{
+            background:
+              chip.tone === "ok"
+                ? "rgba(34,197,94,0.16)"
+                : chip.tone === "warn"
+                  ? "rgba(251,191,36,0.16)"
+                  : chip.tone === "bad"
+                    ? "rgba(239,68,68,0.16)"
+                    : "rgba(148,163,184,0.14)",
+            color:
+              chip.tone === "ok"
+                ? "#4ade80"
+                : chip.tone === "warn"
+                  ? "#fbbf24"
+                  : chip.tone === "bad"
+                    ? "#f87171"
+                    : "var(--text)",
+          }}
+          title={lines.join(" · ")}
+        >
+          {chip.label}
+        </span>
       ))}
     </div>
   );
@@ -322,6 +357,7 @@ export function StreamsList({
     { id: "uptime", label: "Uptime" },
     { id: "actions", label: "Actions", locked: true },
     { id: "player", label: "Player" },
+    { id: "probe", label: "Probe" },
     { id: "epg", label: "EPG" },
     { id: "streamInfo", label: "Stream Info" },
   ];
@@ -621,6 +657,24 @@ export function StreamsList({
     },
     [type, categoryId, serverId, search, page, pageSize, statusFilter, sourceIssueFilter, modeFilter, runPageProbe]
   );
+
+  async function probeOne(stream: Stream) {
+    setProbingIds((prev) => new Set(prev).add(stream.id));
+    try {
+      await fetch("/api/admin/streams/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamId: stream.id, url: stream.streamUrl, fast: true }),
+      });
+      load();
+    } finally {
+      setProbingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(stream.id);
+        return next;
+      });
+    }
+  }
 
   useEffect(() => {
     if (initialBootstrap?.categories?.length) return;
@@ -1121,11 +1175,19 @@ export function StreamsList({
               <div className="panel-mobile-card-actions flex items-center gap-2">
                 <button
                   type="button"
-                  className={streamPlayBtnClass(s, probingIds.has(s.id))}
-                  title="Preview and probe"
+                  className={streamPlayBtnClass(s, false)}
+                  title="Preview in browser"
                   onClick={() => setPreviewModal(s)}
                 >
                   <Play size={14} fill="currentColor" />
+                </button>
+                <button
+                  type="button"
+                  className={streamPlayBtnClass(s, probingIds.has(s.id))}
+                  title="Probe source"
+                  onClick={() => void probeOne(s)}
+                >
+                  <Activity size={14} />
                 </button>
                 <StreamRowActionsMenu
                   streamId={s.id}
@@ -1173,6 +1235,7 @@ export function StreamsList({
               {streamCols.show("uptime") ? <th title="How playback is served right now">Uptime</th> : null}
               {streamCols.show("actions") ? <th>Actions</th> : null}
               {streamCols.show("player") ? <th>Player</th> : null}
+              {streamCols.show("probe") ? <th>Probe</th> : null}
               {streamCols.show("epg") ? <th>EPG</th> : null}
               {streamCols.show("streamInfo") ? <th>Stream Info</th> : null}
             </tr>
@@ -1291,17 +1354,29 @@ export function StreamsList({
                     <td>
                       <button
                         type="button"
+                        className={streamPlayBtnClass(s, false)}
+                        title="Preview in browser"
+                        onClick={() => setPreviewModal(s)}
+                      >
+                        <Play size={14} fill="currentColor" />
+                      </button>
+                    </td>
+                  ) : null}
+                  {streamCols.show("probe") ? (
+                    <td>
+                      <button
+                        type="button"
                         className={streamPlayBtnClass(s, probingIds.has(s.id))}
                         title={
                           isLiveOriginOrSpliceFailed(s) && liveOriginOrSpliceError(s)
                             ? liveOriginOrSpliceError(s)!
                             : probingIds.has(s.id)
                               ? "Probing source…"
-                              : "Preview and probe source"
+                              : "Probe source"
                         }
-                        onClick={() => setPreviewModal(s)}
+                        onClick={() => void probeOne(s)}
                       >
-                        <Play size={14} fill="currentColor" />
+                        <Activity size={14} />
                       </button>
                     </td>
                   ) : null}

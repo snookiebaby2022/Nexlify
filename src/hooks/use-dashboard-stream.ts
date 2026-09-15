@@ -30,6 +30,7 @@ export function useDashboardStream(enabled = true) {
   useEffect(() => {
     if (!enabled || typeof document === "undefined") {
       setConnected(false);
+      setData(null);
       return;
     }
 
@@ -62,6 +63,7 @@ export function useDashboardStream(enabled = true) {
       es = null;
       eventSourceRef.current = null;
       setConnected(false);
+      setData(null);
     };
 
     const onVisibility = () => {

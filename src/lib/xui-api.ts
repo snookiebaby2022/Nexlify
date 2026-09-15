@@ -22,6 +22,14 @@ import {
 import { assertResellerCanCreateLine, assertRoleMaySetUnlimited } from "./reseller-line-guards";
 import { debitResellerCredits, sessionPaysLineCredits } from "./reseller-credit-charge";
 import { resolveLineCreateFromPackage } from "./package-line";
+import {
+  applyResellerCreateConnections,
+  assertRoleMaySetUnlimitedConnections,
+  chargeLineConnectionCredits,
+  extraConnectionSlots,
+  remainingLineDaysForCredits,
+} from "./line-connection-credits";
+import { deleteManagedLine } from "./line-delete";
 import { getResellerBouquetIds } from "./reseller-bouquet-scope";
 
 export {
@@ -195,6 +203,7 @@ export async function handleXuiAction(
       const password = params.get("password") ?? generatePassword();
       const maxConnRaw = params.get("max_connections");
       let maxConnections = parseBoundedInt(maxConnRaw, 1, 0, 100000);
+      const requestedMaxConnections = maxConnRaw != null ? maxConnections : null;
       let days = parseBoundedInt(params.get("days"), 30, 1, 3650);
       let bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
@@ -250,6 +259,19 @@ export async function handleXuiAction(
       const guard = await assertResellerCanCreateLine(caller, bouquetIds);
       if (!guard.ok) return { status: "error", message: guard.error };
       bouquetIds = guard.bouquetIds;
+
+      if (sessionPaysLineCredits(caller.role)) {
+        const conns = applyResellerCreateConnections({
+          role: caller.role,
+          includedConnections: maxConnections,
+          requested: requestedMaxConnections,
+        });
+        if (!conns.ok) return { status: "error", message: conns.error };
+        if (conns.extraSlots > 0) {
+          creditCost += conns.extraSlots * Math.max(0, creditCost);
+        }
+        maxConnections = conns.maxConnections;
+      }
 
       if (!caller.isAdmin && !bouquetIds.length) {
         return { status: "error", message: "Select at least one bouquet for this line" };
@@ -321,8 +343,37 @@ export async function handleXuiAction(
         if (passErr) return { status: "error", message: passErr };
         data.password = nextPass;
       }
-      if (params.get("max_connections"))
-        data.maxConnections = parseBoundedInt(params.get("max_connections"), 1, 0, 100000);
+      if (params.get("max_connections")) {
+        const requested = parseBoundedInt(params.get("max_connections"), 1, 0, 100000);
+        if (sessionPaysLineCredits(caller.role)) {
+          const connGuard = assertRoleMaySetUnlimitedConnections(caller.role, requested);
+          if (!connGuard.ok) return { status: "error", message: connGuard.error };
+          const existing = await prisma.line.findUnique({
+            where: { id },
+            select: { maxConnections: true, expiresAt: true, packageId: true, username: true },
+          });
+          if (!existing) return { status: "error", message: "not found" };
+          const nextMax = Math.max(1, requested);
+          const extra = extraConnectionSlots(existing.maxConnections, nextMax);
+          if (extra > 0) {
+            try {
+              await prisma.$transaction((tx) =>
+                chargeLineConnectionCredits(tx, caller, {
+                  extraSlots: extra,
+                  remainingDays: remainingLineDaysForCredits(existing.expiresAt),
+                  packageId: existing.packageId,
+                  lineUsername: existing.username,
+                })
+              );
+            } catch (e) {
+              return { status: "error", message: e instanceof Error ? e.message : String(e) };
+            }
+          }
+          data.maxConnections = nextMax;
+        } else {
+          data.maxConnections = requested;
+        }
+      }
       if (params.get("days")) {
         const nextDays = parseBoundedInt(params.get("days"), 30, 1, 3650);
         const unlimitedGuard = assertRoleMaySetUnlimited(caller.role, { days: nextDays });
@@ -357,7 +408,7 @@ export async function handleXuiAction(
       if (!id) return { status: "error", message: "id required" };
       const scope = await assertLineInScope(id, caller);
       if (!scope.ok) return { status: "error", message: scope.message };
-      await prisma.line.delete({ where: { id } });
+      await deleteManagedLine(id);
       await logActivity("api_delete_line", { userId: actorId, entityId: id });
       void dispatchOutboundWebhook("line.deleted", { lineId: id });
       return { status: "success" };

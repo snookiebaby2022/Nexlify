@@ -12,6 +12,7 @@ import {
   xtreamUserInfo,
   xtreamLiveCategoriesForLine,
   xtreamLiveStreams,
+  xtreamVodStreams,
   xtreamVodCategoriesForLine,
   xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
@@ -37,9 +38,11 @@ import { iptvJson } from "@/lib/iptv-json";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
 import { mergeXtreamRequestParams } from "@/lib/xtream-request-params";
 import {
+  ensureCatalogKind,
   serveXtreamCatalogJson,
   warmXtreamLiveCatalogNow,
 } from "@/lib/xtream-catalog-blob";
+import { excludeDisabledFromExport } from "@/lib/export-policy";
 import { warmLineXmltv } from "@/lib/xmltv-export";
 import { prisma } from "@/lib/prisma";
 import { resolvePlaybackUrlForLine } from "@/lib/line-playback";
@@ -248,51 +251,98 @@ async function handlePlayerApiInner(
           })
         );
       }
-      return serveXtreamCatalogJson("live", line, req, categoryId, (ids) => {
-        if (!profile.zapPrefetchOnPlaylist) return;
-        void getAntiFreezeSettings().then((antiFreeze) => {
-          schedulePlaylistZapWarm(
-            line.id,
-            ids,
-            { clientIp: ip, userAgent: userAgent ?? undefined },
-            antiFreeze,
-          );
-        });
-      });
+      return serveXtreamCatalogJson(
+        "live",
+        line,
+        req,
+        categoryId,
+        (ids) => {
+          if (!profile.zapPrefetchOnPlaylist) return;
+          void getAntiFreezeSettings().then((antiFreeze) => {
+            schedulePlaylistZapWarm(
+              line.id,
+              ids,
+              { clientIp: ip, userAgent: userAgent ?? undefined },
+              antiFreeze,
+            );
+          });
+        },
+        false,
+        profile.numericCategoryId ? "numeric" : "string",
+      );
     }
     case "get_vod_streams": {
       const vodCategoryId = params.get("category_id");
-      return serveXtreamCatalogJson("vod", line, req, vodCategoryId);
+      const profile = resolveClientPlaybackProfile(userAgent);
+      return serveXtreamCatalogJson(
+        "vod",
+        line,
+        req,
+        vodCategoryId,
+        undefined,
+        false,
+        profile.numericCategoryId ? "numeric" : "string",
+      );
     }
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
+      const profile = resolveClientPlaybackProfile(userAgent);
+      void excludeDisabledFromExport()
+        .then((excludeDisabled) =>
+          ensureCatalogKind(
+            "vod",
+            line,
+            bouquetToken,
+            excludeDisabled,
+            profile.numericCategoryId ? "numeric" : "string",
+          ),
+        )
+        .catch(() => undefined);
+      const catKey = profile.numericCategoryId
+        ? `xtream:vod_categories:v30n:${bouquetToken}`
+        : `xtream:vod_categories:v30s:${bouquetToken}`;
       const payload = await cacheGetOrSet(
-        `xtream:vod_categories:v6:${bouquetToken}`,
+        catKey,
         ttl.categories,
-        () => xtreamVodCategoriesForLine(line),
+        () => xtreamVodCategoriesForLine(line, profile.numericCategoryId),
+        { shouldCache: (rows) => Array.isArray(rows) && rows.length > 0 },
       );
       return j(payload);
     }
     case "get_series_categories": {
       const ttl = await getCacheTtls();
+      const profile = resolveClientPlaybackProfile(userAgent);
       const payload = await cacheGetOrSet(
-        `xtream:series_categories:v5:${bouquetToken}`,
+        profile.numericCategoryId
+          ? `xtream:series_categories:v30n:${bouquetToken}`
+          : `xtream:series_categories:v30s:${bouquetToken}`,
         ttl.categories,
-        () => xtreamSeriesCategoriesForLine(line),
+        () => xtreamSeriesCategoriesForLine(line, profile.numericCategoryId),
+        { shouldCache: (rows) => Array.isArray(rows) && rows.length > 0 },
       );
       return j(payload);
     }
     case "get_series": {
       const seriesCategoryId = params.get("category_id");
-      return serveXtreamCatalogJson("series", line, req, seriesCategoryId);
+      const profile = resolveClientPlaybackProfile(userAgent);
+      return serveXtreamCatalogJson(
+        "series",
+        line,
+        req,
+        seriesCategoryId,
+        undefined,
+        false,
+        profile.numericCategoryId ? "numeric" : "string",
+      );
     }
     case "get_vod_info": {
       const vodId = params.get("vod_id") || params.get("stream_id") || "";
       if (!vodId) return j({});
+      const profile = resolveClientPlaybackProfile(userAgent);
       const info = await cacheGetOrSet(
-        `xtream:vod_info:${line.id}:${vodId}`,
+        `xtream:vod_info:${line.id}:${vodId}:${profile.numericCategoryId ? "n" : "s"}`,
         60,
-        () => xtreamVodInfo(line, baseUrl, vodId),
+        () => xtreamVodInfo(line, baseUrl, vodId, profile.numericCategoryId),
       );
       if (info) warmVodPlayback(line.id, vodId, ip, userAgent);
       return j(info ?? {});
@@ -300,11 +350,12 @@ async function handlePlayerApiInner(
     case "get_series_info": {
       const seriesId = params.get("series_id") || params.get("stream_id") || "";
       if (!seriesId) return j(emptyXtreamSeriesInfo());
+      const profile = resolveClientPlaybackProfile(userAgent);
       const info = await cacheGetOrSet(
-        `xtream:series_info:${line.id}:${seriesId}`,
+        `xtream:series_info:${line.id}:${seriesId}:${profile.numericCategoryId ? "n" : "s"}`,
         60,
         async () => {
-          const row = await xtreamSeriesInfo(line, baseUrl, seriesId);
+          const row = await xtreamSeriesInfo(line, baseUrl, seriesId, profile.numericCategoryId);
           return row ?? emptyXtreamSeriesInfo();
         },
       );

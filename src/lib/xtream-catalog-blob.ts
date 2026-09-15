@@ -46,6 +46,7 @@ async function serveXtreamCatalogInline(
   req: Request,
   categoryId?: string | null,
   envelope = false,
+  categoryIdMode: CategoryIdMode = "string",
 ): Promise<NextResponse> {
   if (kind === "live") {
     const data = await xtreamLiveStreams(line, "", categoryId);
@@ -55,13 +56,17 @@ async function serveXtreamCatalogInline(
     });
   }
   if (kind === "vod") {
-    const data = await xtreamVodStreams(line, "", categoryId);
+    const data = await xtreamVodStreams(line, "", categoryId, {
+      numericCategoryId: categoryIdMode === "numeric",
+    });
     return iptvJson(envelope ? { success: true, data } : data, {
       headers: { "Cache-Control": "private, max-age=60" },
       compressFor: req,
     });
   }
-  const data = await xtreamSeriesForLine(line, categoryId);
+  const data = await xtreamSeriesForLine(line, categoryId, {
+    numericCategoryId: categoryIdMode === "numeric",
+  });
   return iptvJson(envelope ? { success: true, data } : data, {
     headers: { "Cache-Control": "private, max-age=60" },
     compressFor: req,
@@ -71,6 +76,8 @@ async function serveXtreamCatalogInline(
 export type XtreamCatalogKind = "live" | "vod" | "series";
 
 type CategoryFilter = string[] | "uncategorized" | "all" | "missing" | "recent";
+type CategoryIdMode = "string" | "numeric";
+const XTREAM_LEAN_ICON_PLACEHOLDER = "https://darkcdn.site/favicon.ico";
 
 async function resolveCategoryFilter(
   kind: XtreamCatalogKind,
@@ -98,10 +105,12 @@ export function xtreamCatalogBlobName(
   bouquetToken: string,
   filter: CategoryFilter,
   excludeDisabled: boolean,
+  categoryIdMode: CategoryIdMode = "string",
 ): string {
   const key = hashCatalogKey([
     CATALOG_BLOB_VERSION,
     kind,
+    categoryIdMode,
     bouquetToken,
     filterCachePart(filter),
     excludeDisabled ? "1" : "0",
@@ -116,6 +125,7 @@ async function buildCatalogGzip(
   filter: CategoryFilter,
   excludeDisabled: boolean,
   onFirstLiveIds?: (ids: string[]) => void,
+  categoryIdMode: CategoryIdMode = "string",
 ): Promise<void> {
   if (filter === "missing") {
     await writeGzipJsonArrayFile(destPath, async () => undefined);
@@ -145,7 +155,11 @@ async function buildCatalogGzip(
         },
         async (batch) => {
           for (const seed of batch) {
-            await writeItem(mapXtreamSeriesItem(seed, index, canonical));
+            await writeItem(
+              mapXtreamSeriesItem(seed, index, canonical, {
+                numericCategoryId: categoryIdMode === "numeric",
+              }),
+            );
             index += 1;
           }
         },
@@ -154,61 +168,61 @@ async function buildCatalogGzip(
     return;
   }
 
-  const canonical = await buildCanonicalCategoryMaps(
-    kind === "vod" ? StreamType.MOVIE : StreamType.LIVE,
-  );
-  const recentCategoryId =
-    kind === "vod"
-      ? canonical.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId
-      : undefined;
-  const forceRecentCategoryId =
-    kind === "vod" && filter === "recent" ? recentCategoryId : undefined;
-  // XCIPTV/SMETV NEW filters the full get_vod_streams blob by category_id locally.
-  // Duplicate the newest titles under Recently Added so NEW fills without moving
-  // them out of Comedy/Horror/etc. in the database.
-  const dualTagRecentInFullVod =
-    kind === "vod" &&
-    Boolean(recentCategoryId) &&
-    filter !== "recent" &&
-    filter !== "uncategorized" &&
-    !Array.isArray(filter);
-  let index = 0;
-  const firstLiveIds: string[] = [];
-  await writeGzipJsonArrayFile(destPath, async (writeItem) => {
-    await forEachLeanListingBatch(line, listingOpts, async (batch) => {
-      for (const stream of batch) {
-        if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
-        if (kind === "vod") {
+  if (kind === "vod") {
+    const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
+    const recentCategoryId =
+      canonical.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId;
+    const forceRecentCategoryId =
+      filter === "recent" ? recentCategoryId : undefined;
+    let index = 0;
+    const seenVodStreamIds = new Set<number>();
+    await writeGzipJsonArrayFile(destPath, async (writeItem) => {
+      await forEachLeanListingBatch(line, listingOpts, async (batch) => {
+        for (const stream of batch) {
+          if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
           const genreItem = mapXtreamVodItem(
             stream,
             index,
             canonical,
             forceRecentCategoryId
-              ? { forceCategoryNumericId: forceRecentCategoryId }
-              : dualTagRecentInFullVod && index < VIRTUAL_RECENT_VOD_LIMIT && recentCategoryId
-                ? { alsoCategoryNumericIds: [recentCategoryId] }
-                : undefined
+              ? {
+                  forceCategoryNumericId: forceRecentCategoryId,
+                  ...(categoryIdMode === "numeric"
+                    ? { numericCategoryId: true }
+                    : {}),
+                }
+              : {
+                  ...(categoryIdMode === "numeric"
+                    ? { numericCategoryId: true }
+                    : {}),
+                }
           );
-          await writeItem(genreItem);
-          if (
-            dualTagRecentInFullVod &&
-            recentCategoryId &&
-            index < VIRTUAL_RECENT_VOD_LIMIT &&
-            String(genreItem.category_id) !== String(recentCategoryId)
-          ) {
-            await writeItem(
-              mapXtreamVodItem(stream, index, canonical, {
-                forceCategoryNumericId: recentCategoryId,
-              })
-            );
+          if (!seenVodStreamIds.has(genreItem.stream_id)) {
+            await writeItem(genreItem);
+            seenVodStreamIds.add(genreItem.stream_id);
+            index += 1;
           }
-        } else {
-          await writeItem(mapXtreamLiveItem(stream, index, canonical));
-          if (firstLiveIds.length < 5) firstLiveIds.push(stream.id);
         }
+        if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
+      });
+    });
+    return;
+  }
+
+  const canonical = await buildCanonicalCategoryMaps(StreamType.LIVE);
+  let index = 0;
+  const firstLiveIds: string[] = [];
+  await writeGzipJsonArrayFile(destPath, async (writeItem) => {
+    await forEachLeanListingBatch(line, listingOpts, async (batch) => {
+      for (const stream of batch) {
+        await writeItem(
+          mapXtreamLiveItem(stream, index, canonical, {
+            numericCategoryId: categoryIdMode === "numeric",
+          })
+        );
+        if (firstLiveIds.length < 5) firstLiveIds.push(stream.id);
         index += 1;
       }
-      if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
     });
   });
   if (kind === "live" && firstLiveIds.length) onFirstLiveIds?.(firstLiveIds);
@@ -227,8 +241,18 @@ export async function serveXtreamCatalogJson(
   categoryId?: string | null,
   onFirstLiveIds?: (ids: string[]) => void,
   envelope = false,
+  categoryIdMode: CategoryIdMode = "string",
 ): Promise<NextResponse> {
-  if (envelope) return serveXtreamCatalogInline(kind, line, req, categoryId, true);
+  if (envelope) {
+    return serveXtreamCatalogInline(
+      kind,
+      line,
+      req,
+      categoryId,
+      true,
+      categoryIdMode,
+    );
+  }
   const excludeDisabled = await excludeDisabledFromExport();
   const filter = await resolveCategoryFilter(kind, categoryId);
 
@@ -237,6 +261,7 @@ export async function serveXtreamCatalogJson(
     lineBouquetCacheToken(line, excludeDisabled),
     filter,
     excludeDisabled,
+    categoryIdMode,
   );
   const destPath = catalogBlobPath(name);
   const age = await catalogFileAgeMs(destPath);
@@ -250,6 +275,7 @@ export async function serveXtreamCatalogJson(
         filter,
         excludeDisabled,
         onFirstLiveIds,
+        categoryIdMode,
       );
       return "built" as const;
     });
@@ -257,24 +283,16 @@ export async function serveXtreamCatalogJson(
   };
 
   if (catalogFileIsUsable(age)) {
+    // Always serve the existing blob first. Awaiting a VOD/series rebuild here
+    // made SMETV/XCIPTV time out (~45s) once CATALOG_TTL_MS elapsed — Movies
+    // categories appeared to "disappear" until the next open succeeded.
     if (!catalogFileIsFresh(age)) {
-      if (kind === "vod" || kind === "series") {
-        try {
-          await rebuild();
-        } catch (err) {
-          console.error(
-            "[xtream-catalog] vod/series rebuild failed:",
-            err instanceof Error ? err.message : err,
-          );
-        }
-      } else {
-        void rebuild().catch((err) => {
-          console.error(
-            "[xtream-catalog] background rebuild failed:",
-            err instanceof Error ? err.message : err,
-          );
-        });
-      }
+      void rebuild().catch((err) => {
+        console.error(
+          "[xtream-catalog] background rebuild failed:",
+          err instanceof Error ? err.message : err,
+        );
+      });
     }
     return iptvGzipFileResponse(
       destPath,
@@ -310,7 +328,14 @@ export async function serveXtreamCatalogJson(
   }
 
   // Preserve compatibility if disk storage itself is unavailable.
-  return serveXtreamCatalogInline(kind, line, req, categoryId);
+  return serveXtreamCatalogInline(
+    kind,
+    line,
+    req,
+    categoryId,
+    false,
+    categoryIdMode,
+  );
 }
 
 /**
@@ -322,16 +347,25 @@ export async function ensureCatalogKind(
   line: LineWithBouquets,
   token: string,
   excludeDisabled: boolean,
+  categoryIdMode: CategoryIdMode = "string",
 ): Promise<void> {
   const destPath = catalogBlobPath(
-    xtreamCatalogBlobName(kind, token, "all", excludeDisabled),
+    xtreamCatalogBlobName(kind, token, "all", excludeDisabled, categoryIdMode),
   );
   const age = await catalogFileAgeMs(destPath);
   if (catalogFileIsFresh(age)) return;
   await withCatalogBuildLock(destPath, async () => {
     const again = await catalogFileAgeMs(destPath);
     if (catalogFileIsFresh(again)) return "existing" as const;
-    await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
+    await buildCatalogGzip(
+      destPath,
+      kind,
+      line,
+      "all",
+      excludeDisabled,
+      undefined,
+      categoryIdMode,
+    );
     return "built" as const;
   });
 }

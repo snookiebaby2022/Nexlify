@@ -285,6 +285,7 @@ export async function cacheGetOrSet<T>(
   key: string,
   ttlSec: number,
   fn: () => Promise<T>,
+  opts?: { shouldCache?: (value: T) => boolean },
 ): Promise<T> {
   const hit = await cacheGet<T>(key);
   if (hit !== null) return hit;
@@ -297,7 +298,10 @@ export async function cacheGetOrSet<T>(
   inFlight.set(key, promise);
 
   const fresh = await promise;
-  await cacheSet(key, fresh, ttlSec);
+  // Avoid sticky-caching empty Xtream category lists — SMETV treats [] as "no Movies".
+  if (!opts?.shouldCache || opts.shouldCache(fresh)) {
+    await cacheSet(key, fresh, ttlSec);
+  }
   return fresh;
 }
 

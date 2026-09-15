@@ -1030,6 +1030,12 @@ async function jobPlexVodMetaBackfill() {
 async function jobWarmXtreamCatalogs() {
   const start = Date.now();
   try {
+    const { purgeStaleCatalogTmpFiles } = await import("./catalog-disk-cache");
+    const purged = await purgeStaleCatalogTmpFiles().catch(() => 0);
+    if (purged > 0) {
+      await logCron("xtream_catalog_warm", "ok", `purged ${purged} stale .tmp`, Date.now() - start);
+    }
+
     const load = await getCronLoadSnapshot();
     if (load.deferHeavy) {
       await logCron(

@@ -22,6 +22,11 @@ describe("client playback profiles", () => {
 
   it("detects XCIPTV and Smarters from User-Agent", () => {
     assert.equal(detectClientProfile("XCIPTV/5.0.0"), "xciptv");
+    assert.equal(
+      detectClientProfile("Dalvik/2.1.0 (Linux; U; Android 9; AFTMM Build/PS7233)"),
+      "xciptv"
+    );
+    assert.equal(resolveClientPlaybackProfile("XCIPTV/5.0.0").numericCategoryId, true);
     assert.equal(detectClientProfile("IPTVSmartersPlayer"), "smarters");
     assert.equal(detectClientProfile("okhttp/4.12.0 IPTV Smarters Pro"), "smarters");
     assert.equal(detectClientProfile("okhttp/4.12.0"), "smarters");

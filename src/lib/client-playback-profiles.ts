@@ -40,7 +40,8 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     vodDirectPlay: false,
     // Prefetch during get_live_streams stalls "Update Content" and can occupy the only slot.
     zapPrefetchOnPlaylist: false,
-    numericCategoryId: false,
+    // Android XCIPTV parses category_id as int — JSON strings leave folder grids empty.
+    numericCategoryId: true,
   },
   tivimate: {
     id: "tivimate",
@@ -79,7 +80,19 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
 
 export function detectClientProfile(userAgent?: string | null): ClientProfileId {
   const ua = (userAgent ?? "").toLowerCase();
-  if (ua.includes("xciptv")) return "xciptv";
+  if (ua.includes("xciptv") || ua.includes("smetv")) return "xciptv";
+  // Firestick / Android TV XCIPTV builds often send bare Dalvik, not "XCIPTV/…".
+  if (
+    ua.includes("dalvik") &&
+    (ua.includes("aft") ||
+      ua.includes("firetv") ||
+      ua.includes("android tv") ||
+      ua.includes("beyondtv") ||
+      ua.includes("shield"))
+  ) {
+    return "xciptv";
+  }
+  if (ua.includes("dalvik")) return "xciptv";
   if (ua.includes("nexus") || ua.includes("nexustv")) return "nexus";
   // LG/Samsung native players cannot play unbounded MPEG-TS. Keep m3u8 first.
   if (

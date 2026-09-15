@@ -16,6 +16,7 @@ type MpegTsPlayer = {
 };
 
 function isMpegTsUrl(url: string): boolean {
+  if (/[?&]mpegts=1(?:&|$)/i.test(url)) return true;
   const path = url.split("?")[0] ?? url;
   return /\.ts$/i.test(path) && !/\.m3u8$/i.test(path);
 }

@@ -5,9 +5,24 @@ import path from "node:path";
 import { createGzip, type Gzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
-export const CATALOG_BLOB_VERSION = "v19";
-export const CATALOG_TTL_MS = 60 * 1000;
-export const CATALOG_STALE_MS = 20 * 60 * 1000;
+export const CATALOG_BLOB_VERSION = "v31";
+
+function parseCatalogTtlMs(raw: string | undefined, fallbackMs: number): number {
+  const n = raw != null ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n < 15_000) return fallbackMs;
+  return Math.floor(n);
+}
+
+/** How long a blob is “fresh” before a background rebuild is allowed. */
+export const CATALOG_TTL_MS = parseCatalogTtlMs(
+  process.env.NEXLIFY_CATALOG_TTL_MS,
+  // 10 min — 60s caused continuous VOD rebuild pressure under SMETV/XCIPTV load.
+  10 * 60 * 1000
+);
+export const CATALOG_STALE_MS = parseCatalogTtlMs(
+  process.env.NEXLIFY_CATALOG_STALE_MS,
+  20 * 60 * 1000
+);
 /** Dead builders must not pin XCIPTV Update Content for minutes. */
 const LOCK_STALE_MS = 45_000;
 const LOCK_WAIT_MS = 150;
@@ -21,9 +36,44 @@ export function catalogCacheDir(): string {
   return "/var/lib/nexlify/catalog-cache";
 }
 
+let lastTmpPurgeAt = 0;
+
+/** Abandoned gzip builders leave *.tmp — thousands of them slow directory scans. */
+export async function purgeStaleCatalogTmpFiles(maxAgeMs = 3600_000): Promise<number> {
+  const dir = catalogCacheDir();
+  let deleted = 0;
+  let entries: string[] = [];
+  try {
+    entries = await fs.readdir(dir);
+  } catch {
+    return 0;
+  }
+  const cutoff = Date.now() - maxAgeMs;
+  await Promise.all(
+    entries.map(async (name) => {
+      if (!name.includes(".tmp")) return;
+      const full = path.join(dir, name);
+      try {
+        const st = await fs.stat(full);
+        if (st.mtimeMs >= cutoff) return;
+        await fs.unlink(full);
+        deleted += 1;
+      } catch {
+        /* ignore */
+      }
+    })
+  );
+  return deleted;
+}
+
 export function ensureCatalogCacheDir(): string {
   const dir = catalogCacheDir();
   mkdirSync(dir, { recursive: true });
+  const now = Date.now();
+  if (now - lastTmpPurgeAt > 300_000) {
+    lastTmpPurgeAt = now;
+    void purgeStaleCatalogTmpFiles().catch(() => undefined);
+  }
   return dir;
 }
 
@@ -223,7 +273,7 @@ export async function purgeCatalogDiskCache(filter?: (name: string) => boolean):
   }
   await Promise.all(
     entries.map(async (name) => {
-      if (name.endsWith(".tmp")) return;
+      if (name.includes(".tmp")) return;
       if (!name.endsWith(".json.gz") && !name.endsWith(".xml.gz") && !name.endsWith(".lock")) {
         return;
       }
