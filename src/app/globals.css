@@ -110,8 +110,11 @@
 }
 
 [data-theme="light"] .panel-top-header {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(241, 245, 249, 0.96) 100%) !important;
-  border-bottom-color: rgba(8, 145, 178, 0.25) !important;
+  background: var(
+    --panel-header-bg,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(241, 245, 249, 0.96) 100%)
+  ) !important;
+  border-bottom-color: var(--panel-header-border, rgba(8, 145, 178, 0.25)) !important;
   color: #0f172a !important;
 }
 
@@ -985,10 +988,13 @@ button {
 }
 
 .login-top-header {
-  background: linear-gradient(
-    135deg,
-    rgba(18, 28, 48, 0.92) 0%,
-    rgba(12, 18, 32, 0.96) 100%
+  background: var(
+    --panel-header-bg,
+    linear-gradient(
+      135deg,
+      rgba(18, 28, 48, 0.92) 0%,
+      rgba(12, 18, 32, 0.96) 100%
+    )
   );
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -1008,15 +1014,18 @@ button {
   min-height: 3.85rem;
   font-size: 0.9375rem;
   color: #e8f4f8;
-  background: linear-gradient(
-    135deg,
-    rgba(18, 28, 48, 0.92) 0%,
-    rgba(12, 18, 32, 0.96) 50%,
-    rgba(15, 23, 42, 0.94) 100%
+  background: var(
+    --panel-header-bg,
+    linear-gradient(
+      135deg,
+      rgba(18, 28, 48, 0.92) 0%,
+      rgba(12, 18, 32, 0.96) 50%,
+      rgba(15, 23, 42, 0.94) 100%
+    )
   );
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(34, 211, 238, 0.18);
+  border-bottom: 1px solid var(--panel-header-border, rgba(34, 211, 238, 0.18));
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
@@ -1140,6 +1149,17 @@ button {
 
 .panel-mobile-card {
   background: var(--bg-card);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+}
+
+.panel-mobile-activity-card {
+  border-radius: 1rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.panel-mobile-bottom-nav {
+  backdrop-filter: blur(14px);
 }
 
 .panel-form-mobile-tight .grid {
@@ -1169,6 +1189,24 @@ button {
     padding-right: 0.75rem !important;
     padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0)) !important;
     overflow-x: hidden !important;
+  }
+
+  .panel-main-content h1 {
+    font-size: 1.35rem;
+    letter-spacing: -0.02em;
+  }
+
+  .xui-lines-header,
+  .xui-streams-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .panel-mobile-toolbar-trigger,
+  .xui-lines-header-btn,
+  .xui-streams-btn {
+    min-height: 44px;
   }
 
   .panel-main-content table {

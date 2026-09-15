@@ -5,7 +5,11 @@ import { Check, Copy, Eye, EyeOff, Lock, Shield, User } from "lucide-react";
 import { Login3dLogo } from "@/components/login-3d-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LogoAccentToggle } from "@/components/logo-accent-toggle";
+import { HeaderColorPicker } from "@/components/header-color-picker";
+import { PanelLanguageSwitcher } from "@/components/panel-language-switcher";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { sanitizeHttpUrl } from "@/lib/safe-http-url";
 
 const DEMO_ACCOUNTS = [
   { label: "Admin", username: "admin", password: "admin123" },
@@ -15,6 +19,7 @@ const DEMO_ACCOUNTS = [
 const REMEMBER_KEY = "nexlify_remember_username";
 
 export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean }) {
+  const { t } = usePanelI18n();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
@@ -45,7 +50,7 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
         .then((d) => {
           if (d?.whiteLabel?.logoUrl || d?.whiteLabel?.accentColor) {
             setWhiteLabel({
-              logoUrl: d.whiteLabel.logoUrl,
+              logoUrl: sanitizeHttpUrl(d.whiteLabel.logoUrl) ?? "",
               accentColor: d.whiteLabel.accentColor,
             });
           } else {
@@ -63,9 +68,9 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
       .then((d) => {
         if (!d) return;
         setCommunity({
-          telegramUrl: String(d.telegramUrl ?? ""),
-          discordUrl: String(d.discordUrl ?? ""),
-          signalUrl: String(d.signalUrl ?? ""),
+          telegramUrl: sanitizeHttpUrl(d.telegramUrl) ?? "",
+          discordUrl: sanitizeHttpUrl(d.discordUrl) ?? "",
+          signalUrl: sanitizeHttpUrl(d.signalUrl) ?? "",
         });
       })
       .catch(() => {});
@@ -141,7 +146,10 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
           <div className="panel-header-toggle-bar flex items-center gap-2 rounded-lg px-2.5 py-1">
             <LogoAccentToggle />
             <span className="w-px h-5 bg-white/10" aria-hidden />
+            <HeaderColorPicker />
+            <span className="w-px h-5 bg-white/10" aria-hidden />
             <ThemeToggle />
+            <PanelLanguageSwitcher />
           </div>
         </div>
       </header>
@@ -194,12 +202,12 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
               <Login3dLogo size="sm" />
             </div>
             <div className="space-y-1 text-center lg:text-left">
-              <h2 className="text-xl font-semibold text-white">Sign in</h2>
-              <p className="text-sm text-slate-400">Enter your panel credentials</p>
+              <h2 className="text-xl font-semibold text-white">{t("signIn")}</h2>
+              <p className="text-sm text-slate-400">{t("enterCredentials")}</p>
             </div>
 
             <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-slate-300">Username</span>
+              <span className="text-sm font-medium text-slate-300">{t("username")}</span>
               <div
                 className="flex items-center gap-2 rounded-xl border px-3 py-0.5 transition-colors focus-within:ring-2 focus-within:ring-sky-500/40"
                 style={{ borderColor: "var(--border)", background: "rgba(6, 11, 20, 0.5)" }}
@@ -218,7 +226,7 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
             </label>
 
             <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-slate-300">Password</span>
+              <span className="text-sm font-medium text-slate-300">{t("password")}</span>
               <div
                 className="flex items-center gap-2 rounded-xl border px-3 py-0.5 transition-colors focus-within:ring-2 focus-within:ring-sky-500/40"
                 style={{ borderColor: "var(--border)", background: "rgba(6, 11, 20, 0.5)" }}
@@ -282,7 +290,7 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
                 onChange={(e) => setRememberMe(e.target.checked)}
                 className="rounded cursor-pointer w-4 h-4 accent-sky-500"
               />
-              <span className="text-slate-400">Remember me on this device</span>
+              <span className="text-slate-400">{t("rememberMeDevice")}</span>
             </label>
 
             {error && (
@@ -305,7 +313,7 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
                 boxShadow: "0 8px 24px rgba(249, 115, 22, 0.35)",
               }}
             >
-              {loading ? "Signing in…" : "Sign in to panel"}
+              {loading ? t("signingIn") : t("signInToPanel")}
             </button>
 
             {showDemoLogins && (

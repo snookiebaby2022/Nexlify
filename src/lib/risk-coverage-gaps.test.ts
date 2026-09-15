@@ -38,6 +38,11 @@ import { startupValidationOk, startupLicenseValidation } from "./license/server-
 import { isFreePeriod, daysUntilFreePeriodEnds, FREE_PERIOD_END } from "./free-period";
 import { hashPassword } from "./password-hash";
 
+function setNodeEnv(value: string | undefined) {
+  if (value === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+  else Reflect.set(process.env, "NODE_ENV", value);
+}
+
 // --- 1–2 Credits / pricing (revenue) ---
 
 test("package-credits: paid tiers never under-charge stale package rows", () => {
@@ -136,7 +141,7 @@ test("isAuthorizedInternalRequest: PANEL_INTERNAL_SECRET must match", () => {
   } finally {
     if (prev === undefined) delete process.env.PANEL_INTERNAL_SECRET;
     else process.env.PANEL_INTERNAL_SECRET = prev;
-    process.env.NODE_ENV = prevNode;
+    setNodeEnv(prevNode);
   }
 });
 
@@ -148,12 +153,12 @@ test("isAuthorizedInternalRequest: production without secret denies", () => {
   delete process.env.PANEL_INTERNAL_SECRET;
   delete process.env.PANEL_API_SECRET;
   delete process.env.NEXLIFY_PANEL_API_SECRET;
-  process.env.NODE_ENV = "production";
+  setNodeEnv("production");
   try {
     const req = new NextRequest("http://127.0.0.1/api/internal/live-auth");
     assert.equal(isAuthorizedInternalRequest(req), false);
   } finally {
-    process.env.NODE_ENV = prevNode;
+    setNodeEnv(prevNode);
     if (prevSecret !== undefined) process.env.PANEL_INTERNAL_SECRET = prevSecret;
     if (prevApi !== undefined) process.env.PANEL_API_SECRET = prevApi;
     if (prevNex !== undefined) process.env.NEXLIFY_PANEL_API_SECRET = prevNex;
@@ -204,11 +209,11 @@ test("jwtSecretBytes returns null when unset in production", () => {
   const prev = process.env.JWT_SECRET;
   const prevNode = process.env.NODE_ENV;
   delete process.env.JWT_SECRET;
-  process.env.NODE_ENV = "production";
+    setNodeEnv("production");
   try {
     assert.equal(jwtSecretBytes(), null);
   } finally {
-    process.env.NODE_ENV = prevNode;
+    setNodeEnv(prevNode);
     if (prev === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = prev;
   }
@@ -380,12 +385,12 @@ test("portal session module refuses unsigned JWT when secret missing", async () 
   const prev = process.env.JWT_SECRET;
   const prevNode = process.env.NODE_ENV;
   delete process.env.JWT_SECRET;
-  process.env.NODE_ENV = "production";
+    setNodeEnv("production");
   try {
     const { createPortalSession } = await import("./portal-session");
     await assert.rejects(() => createPortalSession({ id: "l1", username: "u" }), /JWT_SECRET/);
   } finally {
-    process.env.NODE_ENV = prevNode;
+    setNodeEnv(prevNode);
     if (prev === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = prev;
   }

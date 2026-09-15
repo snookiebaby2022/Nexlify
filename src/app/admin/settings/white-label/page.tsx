@@ -15,6 +15,13 @@ export default function WhiteLabelSettingsPage() {
             { key: "whiteLabelFaviconUrl", label: "Favicon URL", placeholder: "https://yoursite.com/favicon.ico", hint: "Browser tab icon." },
             { key: "whiteLabelPrimaryColor", label: "Primary color", placeholder: "#00c0ef", hint: "Hex color for buttons, links, and accents." },
             { key: "whiteLabelAccentColor", label: "Accent color", placeholder: "#5eb8e8", hint: "Secondary color for highlights and gradients." },
+            {
+              key: "whiteLabelHeaderColor",
+              label: "Header colour",
+              type: "color",
+              placeholder: "#0f172a",
+              hint: "Top bar colour for admin and reseller panels. Leave empty for the default navy gradient. Operators can also pick a colour from the header itself.",
+            },
           ],
         },
         {

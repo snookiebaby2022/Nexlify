@@ -577,6 +577,10 @@ export async function categoryIdsForLine(
       else categoryIds.push(r.categoryId);
     }
     return { categoryIds, hasUncategorized };
+  }, {
+    // Empty MOVIE/SERIES category id lists must not stick in Redis — SMETV then
+    // shows no Movies folders until TTL expires.
+    shouldCache: (v) => v.categoryIds.length > 0 || v.hasUncategorized,
   });
 }
 

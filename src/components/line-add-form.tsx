@@ -11,6 +11,7 @@ import {
   type AccessOutputId,
 } from "@/lib/line-access-output";
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
+import { LineOwnerOptions } from "@/components/line-owner-filter-select";
 import { PasswordInput } from "@/components/password-input";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { MaxConnectionsField } from "@/components/max-connections-field";
@@ -85,7 +86,7 @@ export function LineAddForm({
   const router = useRouter();
   const [tab, setTab] = useState<"details" | "restrictions" | "bouquets">("details");
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
-  const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
+  const [owners, setOwners] = useState<{ id: string; username: string; role: string }[]>([]);
   const [packages, setPackages] = useState<
     { id: string; name: string; creditCost: number; days: number; maxLines: number; bouquetIds: string[] }[]
   >([]);
@@ -129,8 +130,12 @@ export function LineAddForm({
   const lineCreditCost = useMemo(() => {
     if (mode !== "reseller" || form.unlimited) return 0;
     if (form.isTrial || form.days <= 7) return 0;
-    return effectiveCreditCost(form.days, selectedPackage?.creditCost, form.isTrial);
-  }, [mode, form.unlimited, form.isTrial, form.days, selectedPackage]);
+    const base = effectiveCreditCost(form.days, selectedPackage?.creditCost, form.isTrial);
+    const included = Math.max(1, selectedPackage?.maxLines ?? 1);
+    const requested = coerceLineMaxConnections(form.maxConnections);
+    const extra = requested > 0 ? Math.max(0, requested - included) : 0;
+    return base + extra * base;
+  }, [mode, form.unlimited, form.isTrial, form.days, form.maxConnections, selectedPackage]);
   const creditBalanceAfter =
     creditBalance != null && lineCreditCost > 0
       ? Math.max(0, creditBalance - lineCreditCost)
@@ -324,6 +329,10 @@ export function LineAddForm({
       if (!confirm("No bouquets selected. Create the line with an empty bouquet list?")) return;
     }
 
+    if (mode === "reseller" && coerceLineMaxConnections(form.maxConnections) === 0) {
+      alert("Resellers cannot set unlimited connections. Extra connections use your credits.");
+      return;
+    }
     if (mode === "reseller" && creditBalance != null && lineCreditCost > creditBalance) {
       alert(`Insufficient credits (need ${lineCreditCost}, have ${creditBalance}).`);
       return;
@@ -594,11 +603,7 @@ export function LineAddForm({
                   onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
                 >
                   <option value="">Select user for line owner</option>
-                  {owners.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.username}
-                    </option>
-                  ))}
+                  <LineOwnerOptions owners={owners} />
                 </select>
               </FormField>
             )}
@@ -652,6 +657,8 @@ export function LineAddForm({
             <MaxConnectionsField
               value={form.maxConnections}
               onChange={(maxConnections) => setForm({ ...form, maxConnections })}
+              allowUnlimited={mode === "admin"}
+              min={1}
             />
             <FormField label="Expiry date — updates when you pick a package">
               <div className="relative">

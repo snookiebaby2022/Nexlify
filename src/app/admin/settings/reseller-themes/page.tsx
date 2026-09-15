@@ -14,6 +14,7 @@ export default function ResellerThemesPage() {
     backgroundColor: "#0f172a",
     sidebarColor: "#1e293b",
     faviconUrl: "",
+    headerColor: "",
     customCss: "",
   });
   const [msg, setMsg] = useState("");
@@ -34,6 +35,7 @@ export default function ResellerThemesPage() {
       backgroundColor: String(wl.backgroundColor ?? "#0f172a"),
       sidebarColor: String(wl.sidebarColor ?? "#1e293b"),
       faviconUrl: String(wl.faviconUrl ?? ""),
+      headerColor: String(wl.headerColor ?? ""),
       customCss: String(wl.customCss ?? ""),
     });
   }, [selected, groups]);
@@ -94,6 +96,7 @@ export default function ResellerThemesPage() {
               ["themeMode", "Theme (dark/light/auto)"],
               ["backgroundColor", "Background"],
               ["sidebarColor", "Sidebar"],
+              ["headerColor", "Header colour"],
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="block space-y-1">

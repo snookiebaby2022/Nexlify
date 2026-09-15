@@ -10,7 +10,6 @@ import {
   LogOut,
   Play,
   Menu,
-  Search,
   Settings,
   User,
   Sparkles,
@@ -28,10 +27,13 @@ import { randomAvatarConfig } from "@/lib/avatar-catalog";
 import { coloredIcon } from "@/lib/nav-item-icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LogoAccentToggle } from "@/components/logo-accent-toggle";
+import { HeaderColorPicker } from "@/components/header-color-picker";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelNotificationBell } from "@/components/panel-notification-bell";
 import { PanelLanguageSwitcher } from "@/components/panel-language-switcher";
+import { PanelHeaderSearch } from "@/components/panel-header-search";
 import { getMobilePageTitle } from "@/lib/panel-mobile-nav";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 
 export type TopNavItem = { href: string; label: string; section?: string; icon?: React.ReactNode };
 export type TopNavMenu = {
@@ -73,6 +75,7 @@ export function PanelTopNav({
   brand,
   brandHref,
   brandLogoUrl,
+  headerColor,
   role,
   links,
   menus,
@@ -84,6 +87,7 @@ export function PanelTopNav({
   brand: string;
   brandHref?: string;
   brandLogoUrl?: string;
+  headerColor?: string;
   role: "ADMIN" | "RESELLER";
   links: { href: string; label: string; icon: React.ReactNode }[];
   menus: TopNavMenu[];
@@ -102,12 +106,11 @@ export function PanelTopNav({
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [stats, setStats] = useState<HeaderStats | null>(null);
   const [resellerCredits, setResellerCredits] = useState<number | null>(null);
-  const [search, setSearch] = useState("");
+  const { t } = usePanelI18n();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
   const { data: liveMetrics, connected: liveMetricsConnected } = useDashboardLiveMetrics();
 
@@ -196,7 +199,6 @@ export function PanelTopNav({
   useEffect(() => {
     setOpenMenu(null);
     setProfileOpen(false);
-    setMobileSearchOpen(false);
   }, [pathname]);
 
   async function randomizeAvatar() {
@@ -255,7 +257,7 @@ export function PanelTopNav({
           </button>
         )}
         <div className="md:hidden flex-1 min-w-0 px-1">
-          <h1 className="panel-mobile-page-title truncate">{mobilePageTitle}</h1>
+          <h1 className="panel-mobile-page-title truncate">{t(mobilePageTitle)}</h1>
         </div>
 
         {role === "RESELLER" && resellerCredits != null && (
@@ -264,15 +266,15 @@ export function PanelTopNav({
             <span className="font-bold tabular-nums text-white text-base leading-none">
               {resellerCredits}
             </span>
-            <span className="text-xs text-amber-200/90">credits</span>
+            <span className="text-xs text-amber-200/90">{t("credits")}</span>
           </div>
         )}
 
         {role === "ADMIN" && (
           <div className="hidden md:flex items-center gap-2 flex-1 flex-wrap">
-            <StatPill icon={coloredIcon(Zap, "#fbbf24", 14)} value="0" title="Alerts" />
-            <StatPill icon={coloredIcon(Users, "#22d3ee", 14)} value={String(connections)} title="Live connections" />
-            <StatPill icon={coloredIcon(Play, "#4ade80", 14)} value={`${streamCount} ↑ 0 ↓`} title="Streams" />
+            <StatPill icon={coloredIcon(Zap, "#fbbf24", 14)} value="0" title={t("alerts")} />
+            <StatPill icon={coloredIcon(Users, "#22d3ee", 14)} value={String(connections)} title={t("liveConnections")} />
+            <StatPill icon={coloredIcon(Play, "#4ade80", 14)} value={`${streamCount} ↑ 0 ↓`} title={t("streams")} />
             <StatPill
               icon={coloredIcon(Activity, "#fb923c", 14)}
               value={`${outMbps} Mbps ↑ ${inMbps} Mbps ↓`}
@@ -292,29 +294,12 @@ export function PanelTopNav({
           >
             <LogoAccentToggle />
             <span className="hidden sm:block w-px h-5 bg-white/10" aria-hidden />
+            <HeaderColorPicker fallback={headerColor} />
+            <span className="hidden sm:block w-px h-5 bg-white/10" aria-hidden />
             <ThemeToggle />
-            <div className="hidden md:block">
-              <PanelLanguageSwitcher />
-            </div>
+            <PanelLanguageSwitcher />
           </div>
-          <button
-            type="button"
-            className="hidden sm:inline-flex p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
-            onClick={() => setMobileSearchOpen((o) => !o)}
-            aria-label={mobileSearchOpen ? "Close search" : "Open search"}
-            aria-expanded={mobileSearchOpen}
-          >
-            {coloredIcon(Search, "#22d3ee", 18)}
-          </button>
-          <div className="panel-header-search hidden sm:flex">
-            {coloredIcon(Search, "#22d3ee", 18)}
-            <input
-              type="search"
-              placeholder="Search panel…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <PanelHeaderSearch role={role} />
           <PanelNotificationBell role={role} />
           <div className="relative">
             <button
@@ -346,7 +331,7 @@ export function PanelTopNav({
                   onClick={() => setProfileOpen(false)}
                 >
                   {coloredIcon(User, "#60a5fa", 14)}
-                  Profile & avatar
+                  {t("profile")}
                 </Link>
                 {role === "ADMIN" ? (
                   <Link
@@ -355,7 +340,7 @@ export function PanelTopNav({
                     onClick={() => setProfileOpen(false)}
                   >
                     {coloredIcon(Settings, "#94a3b8", 14)}
-                    Settings
+                    {t("settings")}
                   </Link>
                 ) : null}
                 <button
@@ -365,7 +350,7 @@ export function PanelTopNav({
                   className="w-full text-left px-3 py-2 flex items-center gap-2 hover:bg-black/5 cursor-pointer disabled:opacity-50"
                 >
                   {coloredIcon(Sparkles, "#e879f9", 14)}
-                  Randomize avatar
+                  {t("randomizeAvatar")}
                 </button>
                 <button
                   type="button"
@@ -374,7 +359,7 @@ export function PanelTopNav({
                   style={{ borderColor: "var(--border)" }}
                 >
                   {coloredIcon(LogOut, "#f87171", 14)}
-                  Logout
+                  {t("logout")}
                 </button>
               </div>
             )}
@@ -382,21 +367,6 @@ export function PanelTopNav({
         </div>
         </div>
       </div>
-
-      {mobileSearchOpen && (
-        <div className="panel-header-mobile-search sm:hidden">
-          <div className="panel-header-search w-full">
-            {coloredIcon(Search, "#22d3ee", 18)}
-            <input
-              type="search"
-              placeholder="Search panel…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
-          </div>
-        </div>
-      )}
 
       {showMenuBar && (links.length > 0 || menus.length > 0) && (
       <nav
@@ -420,7 +390,7 @@ export function PanelTopNav({
               }}
             >
               <span className="shrink-0">{link.icon}</span>
-              <span className="truncate">{link.label}</span>
+              <span className="truncate">{t(link.label)}</span>
             </Link>
           );
         })}
@@ -443,7 +413,7 @@ export function PanelTopNav({
                 }}
               >
                 <span className="shrink-0">{menu.icon}</span>
-                <span className="truncate">{menu.label}</span>
+                <span className="truncate">{t(menu.label)}</span>
                 <ChevronDown
                   size={14}
                   className={`shrink-0 opacity-80 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -475,7 +445,7 @@ export function PanelTopNav({
                             className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider"
                             style={{ color: "#5eb8e8" }}
                           >
-                            {group.section}
+                            {t(group.section)}
                           </div>
                         )}
                         {group.items.map((item) => {
@@ -491,7 +461,7 @@ export function PanelTopNav({
                               }}
                             >
                               {item.icon && <span className="shrink-0">{item.icon}</span>}
-                              <span>{item.label}</span>
+                              <span>{t(item.label)}</span>
                             </Link>
                           );
                         })}

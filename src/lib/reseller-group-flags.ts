@@ -26,7 +26,7 @@ export function flagsFromGroupConfig(cfg: GroupConfig): ResellerGroupFlags {
   const hideAllUrls = Boolean(cfg.hideAllUrls);
   const perms = cfg.permissions.length ? cfg.permissions : [];
   const canDeleteLines =
-    cfg.canDeleteUsers || perms.includes("lines.delete");
+    cfg.canDeleteUsers || perms.includes("lines.delete") || perms.includes("lines.edit");
   return {
     hideAllUrls,
     showStreamingApi: cfg.showStreamingApi !== false && !hideAllUrls,

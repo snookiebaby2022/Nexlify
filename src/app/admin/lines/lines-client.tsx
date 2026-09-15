@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ManageLinesTable, type ManageLineRow } from "@/components/manage-lines-table";
+import { ManageLinesTable, type LineSortKey, type ManageLineRow, type StatusFilter, type TrialFilter } from "@/components/manage-lines-table";
 import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
 import type { ManageLinesPageResult } from "@/lib/manage-lines-list";
-
-type LineSortKey = "username" | "expiresAt" | "owner" | "createdAt";
-type StatusFilter = "all" | "ACTIVE" | "DISABLED" | "BANNED";
-type TrialFilter = "all" | "yes" | "no";
 
 export function AdminLinesClient({
   initial = null,
@@ -28,6 +24,8 @@ export function AdminLinesClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [bouquetFilter, setBouquetFilter] = useState("");
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(!initial);
 
@@ -45,6 +43,8 @@ export function AdminLinesClient({
       if (search.trim()) params.set("search", search.trim());
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (trialFilter !== "all") params.set("trial", trialFilter);
+      if (ownerFilter) params.set("ownerId", ownerFilter);
+      if (bouquetFilter) params.set("bouquetId", bouquetFilter);
       fetch(`/api/admin/lines?${params}`)
         .then(async (r) => {
           const d = await r.json().catch(() => ({}));
@@ -55,7 +55,7 @@ export function AdminLinesClient({
         .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load lines"))
         .finally(() => setLoading(false));
     },
-    [page, pageSize, search, sort, sortDir, statusFilter, trialFilter]
+    [page, pageSize, search, sort, sortDir, statusFilter, trialFilter, ownerFilter, bouquetFilter]
   );
 
   useEffect(() => {
@@ -67,7 +67,9 @@ export function AdminLinesClient({
       sort === "createdAt" &&
       sortDir === "desc" &&
       statusFilter === "all" &&
-      trialFilter === "all"
+      trialFilter === "all" &&
+      !ownerFilter &&
+      !bouquetFilter
     ) {
       return;
     }
@@ -81,6 +83,8 @@ export function AdminLinesClient({
     sortDir,
     statusFilter,
     trialFilter,
+    ownerFilter,
+    bouquetFilter,
     initial,
   ]);
 
@@ -113,6 +117,8 @@ export function AdminLinesClient({
         serverSortDir={sortDir}
         serverStatusFilter={statusFilter}
         serverTrialFilter={trialFilter}
+        serverOwnerFilter={ownerFilter}
+        serverBouquetFilter={bouquetFilter}
         onServerPageChange={setPage}
         onServerPageSizeChange={(n) => {
           setPageSize(n);
@@ -133,6 +139,14 @@ export function AdminLinesClient({
         }}
         onServerTrialFilterChange={(value) => {
           setTrialFilter(value);
+          setPage(1);
+        }}
+        onServerOwnerFilterChange={(value) => {
+          setOwnerFilter(value);
+          setPage(1);
+        }}
+        onServerBouquetFilterChange={(value) => {
+          setBouquetFilter(value);
           setPage(1);
         }}
       />

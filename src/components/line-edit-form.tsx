@@ -11,6 +11,7 @@ import {
   type AccessOutputId,
 } from "@/lib/line-access-output";
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
+import { LineOwnerOptions } from "@/components/line-owner-filter-select";
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
@@ -21,6 +22,11 @@ import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
 import { lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits";
+import {
+  extraConnectionCreditCost,
+  extraConnectionSlots,
+  remainingLineDaysForCredits,
+} from "@/lib/line-connection-pricing";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
 import { mergeLineNotesForSave, splitLineNotes } from "@/lib/line-notes";
@@ -124,7 +130,7 @@ export function LineEditForm({
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
-  const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
+  const [owners, setOwners] = useState<{ id: string; username: string; role: string }[]>([]);
   const [allowTrials, setAllowTrials] = useState(true);
   const [credentialMinLength, setCredentialMinLength] = useState(MIN_LINE_CREDENTIAL_FLOOR);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
@@ -167,6 +173,18 @@ export function LineEditForm({
     if (panel !== "reseller" || form.extendDays <= 0) return 0;
     return effectiveCreditCost(form.extendDays, selectedPackage?.creditCost, form.isTrial);
   }, [panel, form.extendDays, form.isTrial, selectedPackage]);
+  const connectionCreditCost = useMemo(() => {
+    if (panel !== "reseller" || !line) return 0;
+    const requested = coerceLineMaxConnections(form.maxConnections);
+    if (requested === 0) return 0;
+    const extra = extraConnectionSlots(line.maxConnections, requested);
+    return extraConnectionCreditCost({
+      extraSlots: extra,
+      remainingDays: remainingLineDaysForCredits(new Date(line.expiresAt)),
+      packageCreditCost: selectedPackage?.creditCost ?? line.package?.creditCost,
+      isTrial: form.isTrial,
+    });
+  }, [panel, line, form.maxConnections, form.isTrial, selectedPackage]);
 
   useEffect(() => {
     setLoading(true);
@@ -295,7 +313,7 @@ export function LineEditForm({
             []
           )
             .filter((u) => u.role === "RESELLER" || u.role === "SUB_RESELLER")
-            .map((u) => ({ id: u.id, username: u.username })))
+            .map((u) => ({ id: u.id, username: u.username, role: u.role })))
         );
       })
       .catch(() => setLoadError("Could not load line"))
@@ -344,6 +362,22 @@ export function LineEditForm({
       alert(`Insufficient credits (need ${extendCreditCost}, have ${creditBalance}).`);
       return;
     }
+    const nextMax = coerceLineMaxConnections(form.maxConnections);
+    if (panel === "reseller" && nextMax === 0 && line.maxConnections !== 0) {
+      alert("Resellers cannot set unlimited connections. Extra connections use your credits.");
+      return;
+    }
+    if (
+      panel === "reseller" &&
+      connectionCreditCost > 0 &&
+      creditBalance != null &&
+      extendCreditCost + connectionCreditCost > creditBalance
+    ) {
+      alert(
+        `Insufficient credits (need ${extendCreditCost + connectionCreditCost}, have ${creditBalance}).`
+      );
+      return;
+    }
 
     setSaving(true);
     const targetStatus = form.isEnabled ? "ACTIVE" : "DISABLED";
@@ -361,7 +395,8 @@ export function LineEditForm({
             ? sanitizeCredentialInput(form.username)
             : undefined,
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
-        maxConnections: coerceLineMaxConnections(form.maxConnections),
+        maxConnections:
+          panel === "reseller" && nextMax === line.maxConnections ? undefined : nextMax,
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
         unlimited: unlimited ? true : undefined,
         expiresAt,
@@ -429,7 +464,12 @@ export function LineEditForm({
 
   async function deleteLine() {
     if (!confirm(`Delete line ${line?.username}? This cannot be undone.`)) return;
-    await fetch(`${linesApiRoot(panel)}/${lineId}`, { method: "DELETE" });
+    const res = await fetch(`${linesApiRoot(panel)}/${lineId}`, { method: "DELETE" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(typeof body.error === "string" ? body.error : "Could not delete line");
+      return;
+    }
     onSaved();
   }
 
@@ -650,17 +690,24 @@ export function LineEditForm({
                     onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
                   >
                     <option value="">Admin (unassigned)</option>
-                    {owners.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.username}
-                      </option>
-                    ))}
+                    <LineOwnerOptions owners={owners} />
                   </select>
                 </FormField>
               )}
               <MaxConnectionsField
                 value={form.maxConnections}
                 onChange={(maxConnections) => setForm({ ...form, maxConnections })}
+                allowUnlimited={panel === "admin"}
+                min={1}
+                hint={
+                  panel === "reseller"
+                    ? connectionCreditCost > 0
+                      ? `+${extraConnectionSlots(line.maxConnections, coerceLineMaxConnections(form.maxConnections))} extra connection(s) = ${connectionCreditCost} credit${connectionCreditCost === 1 ? "" : "s"}${creditBalance != null ? ` · balance ${creditBalance}` : ""}. Decreasing connections does not refund credits.`
+                      : line.maxConnections === 0
+                        ? "This line currently has unlimited connections (set by admin). Setting a number caps it without a refund."
+                        : "Package includes the current connections. Extra connections are billed from your credits."
+                    : undefined
+                }
               />
               <FormField label="Current expiry (UTC)">
                 <input
@@ -729,7 +776,8 @@ export function LineEditForm({
                         packageId: e.target.value,
                         extendDays: pkg ? pkg.days : f.extendDays,
                         unlimited: false,
-                        maxConnections: pkg ? pkg.maxLines : f.maxConnections,
+                        maxConnections:
+                          panel === "admin" && pkg ? pkg.maxLines : f.maxConnections,
                       }));
                     }}
                   >

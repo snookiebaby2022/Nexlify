@@ -10,17 +10,8 @@ import { Copy, Check } from "lucide-react";
 
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
-import {
-
-  LOCALE_STORAGE_KEY,
-
-  normalizeLocale,
-
-  t,
-
-  type PanelLocale,
-
-} from "@/lib/i18n/panel-i18n";
+import { PanelLanguageSwitcher } from "@/components/panel-language-switcher";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 
 
 
@@ -124,17 +115,7 @@ export default function PortalDashboardPage() {
 
   const [error, setError] = useState("");
 
-  const [locale, setLocale] = useState<PanelLocale>("en");
-
-
-
-  useEffect(() => {
-
-    const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-
-    setLocale(normalizeLocale(stored));
-
-  }, []);
+  const { t } = usePanelI18n();
 
 
 
@@ -210,7 +191,7 @@ export default function PortalDashboardPage() {
 
       <div className="min-h-screen p-8 text-white" style={{ background: "#0a1628" }}>
 
-        {t(locale, "loading")}
+        {t("loading")}
 
       </div>
 
@@ -238,7 +219,7 @@ export default function PortalDashboardPage() {
 
         <div>
 
-          <h1 className="text-xl font-semibold">{t(locale, "mySubscription")}</h1>
+          <h1 className="text-xl font-semibold">{t("mySubscription")}</h1>
 
           <p className="text-sm" style={{ color: "#94a3b8" }}>
 
@@ -248,7 +229,8 @@ export default function PortalDashboardPage() {
 
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <PanelLanguageSwitcher />
 
           <Link
 
@@ -274,7 +256,7 @@ export default function PortalDashboardPage() {
 
           >
 
-            {t(locale, "playerSetup")}
+            {t("playerSetup")}
 
           </Link>
 
@@ -290,7 +272,7 @@ export default function PortalDashboardPage() {
 
           >
 
-            {t(locale, "logout")}
+            {t("logout")}
 
           </button>
 
@@ -314,7 +296,7 @@ export default function PortalDashboardPage() {
 
             <div className="text-xs uppercase tracking-wide" style={{ color: "#64748b" }}>
 
-              {t(locale, "status")}
+              {t("status")}
 
             </div>
 
@@ -326,7 +308,7 @@ export default function PortalDashboardPage() {
 
             <div className="text-xs uppercase tracking-wide" style={{ color: "#64748b" }}>
 
-              {t(locale, "expires")}
+              {t("expires")}
 
             </div>
 
@@ -338,7 +320,7 @@ export default function PortalDashboardPage() {
 
             <div className="text-xs uppercase tracking-wide" style={{ color: "#64748b" }}>
 
-              {t(locale, "maxDevices")}
+              {t("maxDevices")}
 
             </div>
 
@@ -350,7 +332,7 @@ export default function PortalDashboardPage() {
 
             <div className="text-xs uppercase tracking-wide" style={{ color: "#64748b" }}>
 
-              {t(locale, "bouquets")}
+              {t("bouquets")}
 
             </div>
 
@@ -388,7 +370,7 @@ export default function PortalDashboardPage() {
 
               >
 
-                {t(locale, "renew")}
+                {t("renew")}
 
               </a>
 
@@ -410,7 +392,7 @@ export default function PortalDashboardPage() {
 
               >
 
-                {t(locale, "topUp")}
+                {t("topUp")}
 
               </a>
 
@@ -424,7 +406,7 @@ export default function PortalDashboardPage() {
 
         <section className="rounded-xl border p-5 space-y-4" style={{ borderColor: "#1e3a5f", background: "#111b2e" }}>
 
-          <h2 className="font-semibold">{t(locale, "playlistUrls")}</h2>
+          <h2 className="font-semibold">{t("playlistUrls")}</h2>
 
           <CopyField label="M3U playlist" value={info.endpoints.m3u} />
           <CopyField label="Xtream player API" value={info.endpoints.xtream} />
@@ -453,7 +435,7 @@ export default function PortalDashboardPage() {
 
             >
 
-              {t(locale, "downloadM3u")}
+              {t("downloadM3u")}
 
             </a>
 
@@ -471,7 +453,7 @@ export default function PortalDashboardPage() {
 
             >
 
-              {t(locale, "epgGuide")}
+              {t("epgGuide")}
 
             </a>
 
@@ -487,7 +469,7 @@ export default function PortalDashboardPage() {
 
         <section className="rounded-xl border p-5" style={{ borderColor: "#1e3a5f", background: "#111b2e" }}>
 
-          <h2 className="font-semibold mb-2">{t(locale, "support")}</h2>
+          <h2 className="font-semibold mb-2">{t("support")}</h2>
 
           <p className="text-sm mb-3" style={{ color: "#94a3b8" }}>
 
@@ -497,13 +479,13 @@ export default function PortalDashboardPage() {
 
           <Link href={info.support.createTicketUrl} className="underline mr-4" style={{ color: "#22d3ee" }}>
 
-            {t(locale, "createTicket")}
+            {t("createTicket")}
 
           </Link>
 
           <Link href={info.support.ticketUrl} className="underline" style={{ color: "#22d3ee" }}>
 
-            {t(locale, "support")}
+            {t("support")}
 
           </Link>
 

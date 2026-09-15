@@ -11,6 +11,7 @@ export type ResellerWhiteLabel = {
   sidebarColor?: string;
   customCss?: string;
   faviconUrl?: string;
+  headerColor?: string;
 };
 
 export async function getWhiteLabelForUserId(userId: string): Promise<ResellerWhiteLabel | null> {
@@ -44,6 +45,7 @@ function whiteLabelFromGroup(groupName: string, config: unknown): ResellerWhiteL
     sidebarColor: wl.sidebarColor,
     customCss: wl.customCss,
     faviconUrl: wl.faviconUrl,
+    headerColor: wl.headerColor,
     brandTitle: wl.logoUrl ? groupName : process.env.NEXT_PUBLIC_PANEL_NAME ?? "Nexlify",
   };
 }

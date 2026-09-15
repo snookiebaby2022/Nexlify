@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 
 import { MessageCircle } from "lucide-react";
+import { sanitizeHttpUrl } from "@/lib/safe-http-url";
 
 
 
@@ -24,11 +25,11 @@ export function SettingsCommunityLinks() {
 
         setLinks({
 
-          telegramUrl: String(d.settings?.telegramUrl ?? ""),
+          telegramUrl: sanitizeHttpUrl(d.settings?.telegramUrl) ?? "",
 
-          discordUrl: String(d.settings?.discordUrl ?? ""),
+          discordUrl: sanitizeHttpUrl(d.settings?.discordUrl) ?? "",
 
-          signalUrl: String(d.settings?.signalUrl ?? ""),
+          signalUrl: sanitizeHttpUrl(d.settings?.signalUrl) ?? "",
 
         });
 

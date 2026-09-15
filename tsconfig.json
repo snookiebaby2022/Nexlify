@@ -41,6 +41,7 @@
     "marketing-drop-in",
     "tests",
     "tmp",
-    "reports"
+    "reports",
+    "scripts/_tmp-*.ts"
   ]
 }

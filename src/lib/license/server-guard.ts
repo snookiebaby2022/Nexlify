@@ -41,7 +41,7 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
     }
   }
 
-  const { getStoredLicense, revalidateStoredLicense } = await import("@/lib/license");
+  const { getStoredLicense, revalidateStoredLicense } = await import("@/lib/license/state");
   let stored;
   try {
     stored = await getStoredLicense();
@@ -59,7 +59,7 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
     return { ok: false, reason: "expired" };
   }
 
-  const { getOrCreateInstanceId, isEmailBoundLicense, licenseEmailMatches } = await import("@/lib/license");
+  const { getOrCreateInstanceId, isEmailBoundLicense, licenseEmailMatches } = await import("@/lib/license/state");
   if (isEmailBoundLicense()) {
     if (!licenseEmailMatches(stored)) {
       return { ok: false, reason: "email_mismatch" };

@@ -18,8 +18,9 @@ export async function GET() {
     where:
       session.role === PanelRole.ADMIN ? undefined : { createdById: session.id },
     include: {
-      createdBy: { select: { username: true } },
+      createdBy: { select: { username: true, role: true } },
       assignedTo: { select: { username: true } },
+      _count: { select: { messages: true } },
     },
     orderBy: { updatedAt: "desc" },
   }).catch(() => []);

@@ -16,6 +16,9 @@ export type MassEditPatch = {
   lockToIp?: TriState;
   /** Admin only. Empty string = unassign (admin-owned). Reseller/sub-reseller user id otherwise. */
   ownerId?: TextFieldState;
+  /** replace = set exactly these; add/remove merge against current line bouquets. */
+  bouquetMode?: "replace" | "add" | "remove";
+  bouquetIds?: string[];
 };
 
 export { mergeLineNotesForSave, mergeResellerNotes, splitLineNotes } from "@/lib/line-notes";
