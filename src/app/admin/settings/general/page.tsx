@@ -1,6 +1,7 @@
 import { SettingsPanelForm } from "@/components/settings-panel-form";
 import { LiveSportsSettingsSection } from "@/components/settings-live-sports-section";
 import { getTimezoneOptions } from "@/lib/timezones";
+import { PANEL_LOCALES } from "@/lib/i18n/panel-i18n";
 
 const TIMEZONE_OPTIONS = getTimezoneOptions();
 
@@ -33,7 +34,13 @@ export default function GeneralSettingsPage() {
               ],
               hint: "EPG times in player_api, xmltv.php, and the built-in web player.",
             },
-            { key: "defaultLanguage", label: "Default language" },
+            {
+              key: "defaultLanguage",
+              label: "Default language",
+              type: "select",
+              options: PANEL_LOCALES.map((l) => ({ value: l.code, label: l.label })),
+              hint: "Used when a browser has no saved language. Each user can still change language from the header.",
+            },
           ],
         },
         {

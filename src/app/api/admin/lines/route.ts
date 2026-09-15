@@ -27,7 +27,7 @@ import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 import { getClientIp } from "@/lib/client-ip";
 const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 5000;
+const MAX_PAGE_SIZE = 200;
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
       ownerFilter: url.searchParams.get("ownerId")?.trim() ?? "",
       statusFilter: url.searchParams.get("status")?.trim() ?? "",
       trialFilter: url.searchParams.get("trial")?.trim() ?? "",
+      bouquetId: url.searchParams.get("bouquetId")?.trim() ?? "",
       sort: url.searchParams.get("sort") ?? "createdAt",
       sortDir: url.searchParams.get("sortDir") === "asc" ? "asc" : "desc",
     });
@@ -227,6 +228,24 @@ export async function POST(req: NextRequest) {
   if (paysCredits) {
     const { effectiveCreditCost } = await import("@/lib/package-credits");
     totalCost = effectiveCreditCost(days, totalCost, Boolean(body.isTrial));
+    const { applyResellerCreateConnections } = await import("@/lib/line-connection-credits");
+    const requestedRaw =
+      body.maxConnections != null && body.maxConnections !== ""
+        ? Math.floor(Number(body.maxConnections))
+        : null;
+    const conns = applyResellerCreateConnections({
+      role: session.role,
+      includedConnections: maxConnections,
+      requested: Number.isFinite(requestedRaw as number) ? requestedRaw : null,
+    });
+    if (!conns.ok) {
+      return NextResponse.json({ error: conns.error }, { status: 400 });
+    }
+    if (conns.extraSlots > 0) {
+      const slot = Math.max(0, totalCost);
+      totalCost += conns.extraSlots * slot;
+    }
+    maxConnections = conns.maxConnections;
   }
 
   if (!bouquetIds.length && session.role !== PanelRole.ADMIN) {

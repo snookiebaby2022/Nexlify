@@ -87,6 +87,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/lines/add", label: "Add Line", section: "Lines" },
           { href: "/admin/lines", label: "Manage Lines", section: "Lines" },
+          { href: "/admin/codes", label: "Access Codes", section: "Lines", keywords: "xui codes packages trial" },
           { href: "/admin/lines/mass-edit", label: "Mass Edit", section: "Lines" },
           { href: "/admin/line_activity", label: "Line Activity", section: "Lines" },
         ],
@@ -146,6 +147,8 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/streams/capture", label: "Capture / CCTV", section: "Streams", keywords: "hdmi v4l2 dshow ingest xui" },
           { href: "/admin/content/streams", label: "Manage Streams", section: "Streams" },
           { href: "/admin/whats-on", label: "What’s on now", section: "Streams", keywords: "watch party fixtures epg now playing" },
+          { href: "/admin/streams/pulse", label: "Channel Pulse", section: "Streams", keywords: "health viewers epg probe unique" },
+          { href: "/admin/integrations/youtube", label: "YouTube", section: "Streams", keywords: "data api playlist search invidious" },
           ...LIVE_NAV_FOLDERS.filter((f) => f.slug !== "streams").map((f) => ({
             href: `/admin/content/${f.slug}`,
             label: f.title,
@@ -298,6 +301,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         label: "Logs",
         icon: coloredGroupIcon("logs"),
         items: [
+          { href: "/admin/logs", label: "Logs hub", keywords: "clear login stream errors expired" },
           { href: "/admin/management/logs", label: "Panel Logs" },
           { href: "/admin/client_logs", label: "Client Logs" },
           { href: "/admin/login_logs", label: "Login Logs" },
@@ -320,6 +324,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/management/mass-edit/users", label: "Mass Edit Users", section: "Mass edit" },
           { href: "/admin/management/tools/mass-delete", label: "Mass Delete", section: "Mass delete" },
           { href: "/admin/management/tools/remove-duplicates", label: "Remove Duplicates", section: "Cleanup" },
+          { href: "/admin/management/tools/title-sync", label: "Title Sync", section: "Cleanup", keywords: "uk alias fhd hd sd epg logo xui" },
           { href: "/admin/management/tools/channel-order", label: "Channel Order", section: "Cleanup" },
           { href: "/admin/import/migrate", label: "Panel Migration", section: "Import" },
           { href: "/admin/import/transfer", label: "Panel Transfer", section: "Import" },

@@ -24,6 +24,7 @@ import {
 } from "@/lib/reseller-group-flags";
 import { ResellerGroupFlagsProvider } from "@/components/reseller-group-flags-context";
 import { usePanelLayout } from "@/lib/use-panel-layout";
+import { ImpersonationBanner } from "@/components/impersonation-banner";
 
 export function PanelShell({
   title,
@@ -50,7 +51,7 @@ export function PanelShell({
     pathname.startsWith("/admin/connections") ||
     pathname.startsWith("/reseller/dashboard") ||
     pathname.startsWith("/reseller/live_connections");
-  const liveMetricsEnabled = role === "ADMIN" && isMdUp && liveMetricsRoutes;
+  const liveMetricsEnabled = isMdUp && liveMetricsRoutes;
   useEffect(() => {
     if (!mobileNav) return;
     const prev = document.body.style.overflow;
@@ -65,6 +66,7 @@ export function PanelShell({
   const dashboardHref = role === "ADMIN" ? "/admin/dashboard" : "/reseller/dashboard";
   const accent = whiteLabel?.accentColor;
   const brandLogo = whiteLabel?.logoUrl;
+  const headerColor = whiteLabel?.headerColor;
 
   return (
     <ResellerGroupFlagsProvider flags={role === "RESELLER" ? resellerFlags : DEFAULT_RESELLER_GROUP_FLAGS}>
@@ -74,6 +76,7 @@ export function PanelShell({
       className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}${isTablet ? " panel-shell--tablet" : ""}${isCompact ? " panel-shell--compact" : ""}`}
       style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}
     >
+      <ImpersonationBanner />
       {mobileNav && (
         <>
           <button
@@ -142,6 +145,7 @@ export function PanelShell({
             brand={title}
             brandHref={dashboardHref}
             brandLogoUrl={brandLogo || undefined}
+            headerColor={headerColor}
             role={role}
             links={[]}
             menus={[]}

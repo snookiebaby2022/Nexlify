@@ -1,13 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ManageLinesTable, type ManageLineRow } from "@/components/manage-lines-table";
+import { ManageLinesTable, type LineSortKey, type ManageLineRow, type StatusFilter, type TrialFilter } from "@/components/manage-lines-table";
 import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
 import type { ManageLinesPageResult } from "@/lib/manage-lines-list";
-
-type LineSortKey = "username" | "expiresAt" | "owner" | "createdAt";
-type StatusFilter = "all" | "ACTIVE" | "DISABLED" | "BANNED";
-type TrialFilter = "all" | "yes" | "no";
 
 export function ResellerLinesClient({
   initial = null,
@@ -29,6 +25,8 @@ export function ResellerLinesClient({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [bouquetFilter, setBouquetFilter] = useState("");
   const [loading, setLoading] = useState(!initial);
   const loadGen = useRef(0);
 
@@ -47,6 +45,8 @@ export function ResellerLinesClient({
       if (search.trim()) params.set("search", search.trim());
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (trialFilter !== "all") params.set("trial", trialFilter);
+      if (ownerFilter) params.set("ownerId", ownerFilter);
+      if (bouquetFilter) params.set("bouquetId", bouquetFilter);
 
       fetch(`/api/reseller/lines?${params}`)
         .then(async (r) => {
@@ -64,7 +64,7 @@ export function ResellerLinesClient({
           if (gen === loadGen.current) setLoading(false);
         });
     },
-    [page, pageSize, search, sort, sortDir, statusFilter, trialFilter]
+    [page, pageSize, search, sort, sortDir, statusFilter, trialFilter, ownerFilter, bouquetFilter]
   );
 
   useEffect(() => {
@@ -76,7 +76,9 @@ export function ResellerLinesClient({
       sort === "createdAt" &&
       sortDir === "desc" &&
       statusFilter === "all" &&
-      trialFilter === "all"
+      trialFilter === "all" &&
+      !ownerFilter &&
+      !bouquetFilter
     ) {
       return;
     }
@@ -90,6 +92,8 @@ export function ResellerLinesClient({
     sortDir,
     statusFilter,
     trialFilter,
+    ownerFilter,
+    bouquetFilter,
     initial,
   ]);
 
@@ -123,6 +127,8 @@ export function ResellerLinesClient({
         serverSortDir={sortDir}
         serverStatusFilter={statusFilter}
         serverTrialFilter={trialFilter}
+        serverOwnerFilter={ownerFilter}
+        serverBouquetFilter={bouquetFilter}
         onServerPageChange={setPage}
         onServerPageSizeChange={(n) => {
           setPageSize(n);
@@ -143,6 +149,14 @@ export function ResellerLinesClient({
         }}
         onServerTrialFilterChange={(value) => {
           setTrialFilter(value);
+          setPage(1);
+        }}
+        onServerOwnerFilterChange={(value) => {
+          setOwnerFilter(value);
+          setPage(1);
+        }}
+        onServerBouquetFilterChange={(value) => {
+          setBouquetFilter(value);
           setPage(1);
         }}
       />

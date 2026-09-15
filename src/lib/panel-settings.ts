@@ -538,6 +538,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
   integrations: {
     plexDefaultPort: 32400,
     youtubeImportAsLive: true,
+    youtubeDataApiKey: "",
   },
   player: {
     builtInCdm: true,
@@ -579,6 +580,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     whiteLabelFaviconUrl: "",
     whiteLabelPrimaryColor: "#00c0ef",
     whiteLabelAccentColor: "#5eb8e8",
+    whiteLabelHeaderColor: "",
     whiteLabelCustomCss: "",
     whiteLabelDomain: "",
   },

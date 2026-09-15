@@ -21,7 +21,7 @@ import {
   revalidateStoredLicense,
   isEmailBoundLicense,
   licenseEmailMatches,
-} from "@/lib/license";
+} from "@/lib/license/state";
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 import { jwtSecretBytes, jwtSecretStrengthError } from "@/lib/jwt-secret";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";

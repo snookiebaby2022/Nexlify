@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getMobileBottomNav } from "@/lib/panel-mobile-nav";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 
 export function PanelMobileBottomNav({
   role,
@@ -14,6 +15,7 @@ export function PanelMobileBottomNav({
   hidden?: boolean;
 }) {
   const pathname = usePathname();
+  const { t } = usePanelI18n();
   const items = getMobileBottomNav(role);
 
   if (hidden) return null;
@@ -34,7 +36,7 @@ export function PanelMobileBottomNav({
               aria-label="Open full menu"
             >
               <Icon size={22} strokeWidth={1.75} />
-              <span>{item.label}</span>
+              <span>{t(item.label)}</span>
             </button>
           );
         }
@@ -47,7 +49,7 @@ export function PanelMobileBottomNav({
             className={`panel-mobile-bottom-nav-item${active ? " panel-mobile-bottom-nav-item--active" : ""}`}
           >
             <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />
-            <span>{item.label}</span>
+            <span>{t(item.label)}</span>
           </Link>
         );
       })}

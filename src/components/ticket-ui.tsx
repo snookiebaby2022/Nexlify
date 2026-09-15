@@ -62,7 +62,7 @@ export type TicketRow = {
   priority: string;
   createdAt: string;
   updatedAt?: string;
-  createdBy?: { username: string };
+  createdBy?: { username: string; role?: string };
   assignedTo?: { id: string; username: string } | null;
   assignedToId?: string | null;
   category?: string;
@@ -130,7 +130,12 @@ export function TicketsList({
               {t.subject}
             </Link>
             <p className="text-xs mt-2 flex flex-wrap gap-2" style={{ color: "var(--muted)" }}>
-              {t.createdBy && <span>By @{t.createdBy.username}</span>}
+              {t.createdBy && (
+                <span>
+                  By @{t.createdBy.username}
+                  {t.createdBy.role && t.createdBy.role !== "ADMIN" ? " · reseller" : ""}
+                </span>
+              )}
               {t.assignedTo && <span>→ {t.assignedTo.username}</span>}
               <span>{formatDateTime(t.updatedAt ?? t.createdAt)}</span>
             </p>

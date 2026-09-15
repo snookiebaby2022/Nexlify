@@ -206,6 +206,12 @@ function ConnectionCard({
           <p className="panel-mobile-card-label">Output</p>
           <p className="text-sm">{c.output}</p>
         </div>
+        <div className="col-span-2">
+          <p className="panel-mobile-card-label">User-Agent</p>
+          <p className="text-xs break-all" title={c.userAgent ?? undefined}>
+            {c.userAgent || "—"}
+          </p>
+        </div>
       </div>
       <div className="panel-mobile-card-actions">
         <button
@@ -367,7 +373,8 @@ export function AdminConnectionsClient({
       return (
         lineLabel(c).toLowerCase().includes(q) ||
         (c.ip ?? "").includes(q) ||
-        (c.stream?.name ?? "").toLowerCase().includes(q)
+        (c.stream?.name ?? "").toLowerCase().includes(q) ||
+        (c.userAgent ?? "").toLowerCase().includes(q)
       );
     })
     .sort(
@@ -478,6 +485,7 @@ export function AdminConnectionsClient({
               <th>IP</th>
               <th title="Uptime of the stream being watched. Viewer watch time is in the tooltip.">Duration</th>
               <th>Output</th>
+              <th>User-Agent</th>
               <th>Restreamer</th>
               <th>Actions</th>
             </tr>
@@ -505,6 +513,9 @@ export function AdminConnectionsClient({
                   </span>
                 </td>
                 <td>{c.output}</td>
+                <td className="max-w-[220px] truncate text-xs" title={c.userAgent ?? undefined}>
+                  {c.userAgent || "—"}
+                </td>
                 <td>
                   <span
                     className={`xui-restreamer-dot ${c.line.isRestreamer ? "xui-restreamer-dot--yes" : ""}`}

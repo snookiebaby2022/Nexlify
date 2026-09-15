@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sanitizeHttpUrl } from "@/lib/safe-http-url";
 
 export function PanelCommunityBar() {
   const [links, setLinks] = useState({ telegramUrl: "", discordUrl: "", signalUrl: "" });
@@ -11,9 +12,9 @@ export function PanelCommunityBar() {
       .then((d) => {
         if (!d) return;
         setLinks({
-          telegramUrl: String(d.telegramUrl ?? ""),
-          discordUrl: String(d.discordUrl ?? ""),
-          signalUrl: String(d.signalUrl ?? ""),
+          telegramUrl: sanitizeHttpUrl(d.telegramUrl) ?? "",
+          discordUrl: sanitizeHttpUrl(d.discordUrl) ?? "",
+          signalUrl: sanitizeHttpUrl(d.signalUrl) ?? "",
         });
       })
       .catch(() => {});

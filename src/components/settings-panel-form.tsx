@@ -7,7 +7,7 @@ import { SettingsPanel, SettingsSaveBar } from "@/components/settings-panel";
 export type SettingsField = {
   key: string;
   label: string;
-  type?: "text" | "number" | "password" | "textarea" | "select" | "yesno";
+  type?: "text" | "number" | "password" | "textarea" | "select" | "yesno" | "color";
   options?: { value: string; label: string }[];
   placeholder?: string;
   hint?: string;
@@ -79,6 +79,36 @@ function FieldInput({
             </option>
           ))}
         </select>
+      </label>
+    );
+  }
+  if (field.type === "color") {
+    const hex = String(value ?? "").trim() || String(field.placeholder ?? "#0f172a");
+    return (
+      <label className="block text-sm">
+        <span style={{ color: "var(--muted)" }}>{field.label}</span>
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            type="color"
+            className="h-10 w-12 cursor-pointer rounded border bg-transparent p-0.5"
+            style={{ borderColor: "var(--border)" }}
+            value={/^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#0f172a"}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <input
+            type="text"
+            className="flex-1 rounded border px-3 py-2 bg-transparent text-sm"
+            style={{ borderColor: "var(--border)" }}
+            placeholder={field.placeholder ?? "#0f172a"}
+            value={String(value ?? "")}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </div>
+        {field.hint ? (
+          <span className="block text-xs mt-1" style={{ color: "var(--muted)" }}>
+            {field.hint}
+          </span>
+        ) : null}
       </label>
     );
   }

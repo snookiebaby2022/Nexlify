@@ -451,6 +451,23 @@ export function GroupEditForm({
                     }
                   />
                 </FormField>
+                <FormField label="Header colour">
+                  <input
+                    type="color"
+                    className="h-10 w-full rounded border cursor-pointer"
+                    style={{ borderColor: "var(--border)" }}
+                    value={form.config.whiteLabel.headerColor || "#0f172a"}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        config: {
+                          ...form.config,
+                          whiteLabel: { ...form.config.whiteLabel, headerColor: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </FormField>
                 <FormField label="Support email">
                   <input
                     className={formInputClass}

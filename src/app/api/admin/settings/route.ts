@@ -48,6 +48,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid group" }, { status: 400 });
   }
   let toSave = body.settings ?? {};
+  if (group === "community" && toSave && typeof toSave === "object") {
+    const { sanitizeHttpUrl } = await import("@/lib/safe-http-url");
+    const patch = { ...toSave } as Record<string, unknown>;
+    for (const key of ["telegramUrl", "discordUrl", "signalUrl"] as const) {
+      if (typeof patch[key] === "string") {
+        patch[key] = sanitizeHttpUrl(patch[key]) ?? "";
+      }
+    }
+    toSave = patch;
+  }
   if (group === "server" && toSave && typeof toSave === "object") {
     const { ensureMagPortalUrl } = await import("@/lib/mag");
     const patch = { ...toSave } as Record<string, unknown>;

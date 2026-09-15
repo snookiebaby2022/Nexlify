@@ -147,6 +147,43 @@ export function LineRowActionsMenu({
     },
     { label: "Renew (extend)", icon: <Calendar size={15} />, onClick: () => void renew() },
     {
+      label: "Open as line",
+      icon: <Eye size={15} />,
+      onClick: () => {
+        void (async () => {
+          try {
+            const body = await apiCall(`${linesApi}/${line.id}/webplayer`, { method: "POST" });
+            if (body.url) window.open(String(body.url), "_blank", "noopener,noreferrer");
+          } catch (e) {
+            alert(e instanceof Error ? e.message : "Could not open web player");
+          }
+          onClose();
+        })();
+      },
+    },
+    ...(panel === "admin"
+      ? [
+          {
+            label: "Rotate domain",
+            icon: <RotateCw size={15} />,
+            onClick: () => {
+              void (async () => {
+                try {
+                  const body = await apiCall(`/api/admin/lines/${line.id}/rotate-domain`, {
+                    method: "POST",
+                  });
+                  alert(`Now advertising ${body.host ?? "next LB"} (${body.serverName ?? ""})`);
+                  onUpdated();
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : "Could not rotate domain");
+                }
+                onClose();
+              })();
+            },
+          },
+        ]
+      : []),
+    {
       label: "Generate code",
       icon: <RefreshCw size={15} />,
       onClick: () => {

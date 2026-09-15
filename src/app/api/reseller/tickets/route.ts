@@ -14,3 +14,11 @@ export async function POST(req: NextRequest) {
   const { POST: adminPOST } = await import("../../admin/tickets/route");
   return adminPOST(req);
 }
+
+export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
+  const { DELETE: adminDELETE } = await import("../../admin/tickets/route");
+  return adminDELETE(req);
+}

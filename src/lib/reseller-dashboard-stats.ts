@@ -1,14 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { getResellerDashboardSummary } from "@/lib/dashboard-server-metrics";
+import { ownerLineOwnerIds } from "@/lib/owner-scope";
 import { formatAuditAction } from "@/lib/audit-log";
 import type { SessionUser } from "@/lib/auth";
 import { cacheGetOrSet } from "@/lib/cache";
 
+async function resellerSummaryCacheKey(session: SessionUser) {
+  const ids = await ownerLineOwnerIds(session);
+  return `stats:reseller-summary:${(ids ?? [session.id]).slice().sort().join(",")}`;
+}
+
 export async function loadResellerHeaderStats(session: SessionUser) {
+  const summaryKey = await resellerSummaryCacheKey(session);
   const [dashboard, credits] = await Promise.all([
-    cacheGetOrSet(`stats:reseller-summary:${session.id}`, 30, () =>
-      getResellerDashboardSummary(session.id),
+    cacheGetOrSet(summaryKey, 30, async () =>
+      getResellerDashboardSummary((await ownerLineOwnerIds(session)) ?? [session.id]),
     ),
     prisma.panelUser.findUnique({
       where: { id: session.id },
@@ -27,14 +34,21 @@ export async function loadResellerDashboardStats(session: SessionUser) {
     include: { resellerBouquets: { include: { bouquet: true } } },
   });
 
+  const ownerIds = (await ownerLineOwnerIds(session)) ?? [session.id];
+  const lineOwnerFilter =
+    ownerIds.length === 1 ? { ownerId: ownerIds[0] } : { ownerId: { in: ownerIds } };
+  const summaryKey = await resellerSummaryCacheKey(session);
+
   const [lines, activeLines, dashboard, logs] = await Promise.all([
-    prisma.line.count({ where: { ownerId: session.id } }),
+    prisma.line.count({ where: lineOwnerFilter }),
     prisma.line.count({
-      where: { ownerId: session.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
+      where: {
+        ...lineOwnerFilter,
+        status: "ACTIVE",
+        expiresAt: { gt: new Date() },
+      },
     }),
-    cacheGetOrSet(`stats:reseller-summary:${session.id}`, 30, () =>
-      getResellerDashboardSummary(session.id),
-    ),
+    cacheGetOrSet(summaryKey, 30, () => getResellerDashboardSummary(ownerIds)),
     prisma.activityLog.findMany({
       where: {
         userId: session.id,

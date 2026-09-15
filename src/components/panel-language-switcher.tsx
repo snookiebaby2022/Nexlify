@@ -1,38 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  LOCALE_STORAGE_KEY,
-  normalizeLocale,
-  PANEL_LOCALES,
-  type PanelLocale,
-} from "@/lib/i18n/panel-i18n";
+import { PANEL_LOCALES, setPanelLocale } from "@/lib/i18n/panel-i18n";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 
 export function PanelLanguageSwitcher() {
-  const [locale, setLocale] = useState<PanelLocale>("en");
-
-  useEffect(() => {
-    const stored = normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
-    setLocale(stored);
-    document.documentElement.lang = stored;
-    document.documentElement.dir = stored === "ar" ? "rtl" : "ltr";
-  }, []);
-
-  function change(code: PanelLocale) {
-    setLocale(code);
-    localStorage.setItem(LOCALE_STORAGE_KEY, code);
-    document.documentElement.lang = code;
-    document.documentElement.dir = code === "ar" ? "rtl" : "ltr";
-    window.dispatchEvent(new CustomEvent("nexlify-locale-change", { detail: code }));
-  }
+  const { locale, t } = usePanelI18n();
 
   return (
     <select
-      aria-label="Language"
+      aria-label={t("language")}
       className="rounded border px-2.5 py-1.5 text-sm bg-transparent cursor-pointer"
-      style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+      style={{ borderColor: "var(--border)", color: "inherit" }}
       value={locale}
-      onChange={(e) => change(normalizeLocale(e.target.value))}
+      onChange={(e) => setPanelLocale(e.target.value as typeof locale)}
     >
       {PANEL_LOCALES.map((l) => (
         <option key={l.code} value={l.code}>

@@ -14,6 +14,7 @@ import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
 import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { searchOperatorFeatures } from "@/lib/operator-feature-index";
+import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelSidebarVersion } from "@/components/panel-sidebar-version";
 import { PanelSidebarReport } from "@/components/panel-sidebar-report";
@@ -268,6 +269,7 @@ function SidebarGroup({
   onNavigate,
   onPrefetch,
   onPending,
+  t,
 }: {
   group: SidebarNavGroup;
   pathname: string;
@@ -281,6 +283,7 @@ function SidebarGroup({
   onNavigate: () => void;
   onPrefetch: () => void;
   onPending: (href: string) => void;
+  t: (key: string) => string;
 }) {
   const active = routeActive;
   const sections = groupItemsBySection(group.items);
@@ -295,7 +298,7 @@ function SidebarGroup({
           className={`panel-nav-section ${sectionActive ? "panel-nav-section--active" : ""}`}
         >
           {section.section && (
-            <div className="panel-nav-section-label">{section.section}</div>
+            <div className="panel-nav-section-label">{t(section.section)}</div>
           )}
           <div className="panel-nav-section-items">
             {section.items.map((item) => {
@@ -310,14 +313,14 @@ function SidebarGroup({
                     onPending(item.href);
                     onNavigate();
                   }}
-                  title={item.label}
+                  title={t(item.label)}
                   aria-current={itemActive ? "page" : undefined}
                   className={`panel-nav-sub-link ${itemActive ? "panel-nav-sub-link--active" : ""} ${
                     pending ? "panel-nav-sub-link--pending" : ""
                   }`}
                 >
                   {item.icon && <span className="panel-nav-sub-icon shrink-0">{item.icon}</span>}
-                  <span className="panel-nav-sub-text truncate">{item.label}</span>
+                  <span className="panel-nav-sub-text truncate">{t(item.label)}</span>
                 </Link>
               );
             })}
@@ -339,7 +342,7 @@ function SidebarGroup({
         onClick={onToggle}
         onMouseEnter={onPrefetch}
         onFocus={onPrefetch}
-        title={group.label}
+        title={t(group.label)}
         aria-expanded={open}
         aria-current={active ? "true" : undefined}
         className={`panel-nav-group-btn ${active ? "panel-nav-group-btn--active" : ""} ${
@@ -347,7 +350,7 @@ function SidebarGroup({
         }`}
       >
         <span className="panel-nav-group-icon shrink-0">{group.icon}</span>
-        {!collapsed && <span className="panel-nav-group-label flex-1 text-left truncate">{group.label}</span>}
+        {!collapsed && <span className="panel-nav-group-label flex-1 text-left truncate">{t(group.label)}</span>}
         {!collapsed && (
           <ChevronDown
             size={16}
@@ -360,7 +363,7 @@ function SidebarGroup({
 
       {open && collapsed && (
         <div className="panel-sidebar-flyout" role="menu">
-          <p className="panel-sidebar-flyout-title">{group.label}</p>
+          <p className="panel-sidebar-flyout-title">{t(group.label)}</p>
           {submenu}
         </div>
       )}
@@ -390,6 +393,7 @@ export function PanelSidebar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = usePanelI18n();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
   const navRef = useRef<HTMLElement | null>(null);
@@ -534,7 +538,7 @@ export function PanelSidebar({
           <input
             type="search"
             className="panel-sidebar-search"
-            placeholder="Find a feature…"
+            placeholder={t("findFeature")}
             value={navFilter}
             onChange={(e) => setNavFilter(e.target.value)}
             aria-label="Search navigation"
@@ -555,15 +559,19 @@ export function PanelSidebar({
                 rel={entry.link.openInNewTab ? "noopener noreferrer" : undefined}
                 onClick={() => {
                   if (!entry.link.openInNewTab) setPendingHref(entry.link.href);
+                  if (/\/dashboard\/?$/.test(entry.link.href)) {
+                    setOpenIds(new Set());
+                    persistOpenIds(new Set());
+                  }
                   onChildNavigate();
                 }}
-                title={entry.link.label}
+                title={t(entry.link.label)}
                 className={`panel-nav-link ${active ? "panel-nav-link--active" : ""} ${
                   pending ? "panel-nav-link--pending" : ""
                 }`}
               >
                 <span className="panel-nav-link-icon shrink-0">{entry.link.icon}</span>
-                {!effectiveCollapsed && <span className="panel-nav-link-label truncate">{entry.link.label}</span>}
+                {!effectiveCollapsed && <span className="panel-nav-link-label truncate">{t(entry.link.label)}</span>}
               </Link>
             );
           }
@@ -584,12 +592,13 @@ export function PanelSidebar({
                 for (const item of entry.group.items) prefetchHref(router, item.href);
               }}
               onPending={setPendingHref}
+              t={t}
             />
           );
         })}
         {showReport && !effectiveCollapsed && !isFiltering && (
           <div className="panel-sidebar-support mt-2 pt-2">
-            <p className="panel-sidebar-support-label">Support</p>
+            <p className="panel-sidebar-support-label">{t("support")}</p>
             {username && <PanelLiveChat username={username} variant="sidebar" />}
             <ChatAssistant variant="sidebar" />
             <PanelSidebarSuggestions />

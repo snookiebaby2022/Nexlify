@@ -668,6 +668,29 @@ export function ManageUsersTable({
                   Edit user
                 </Link>
               )}
+              {panel === "admin" && openRow.role !== "ADMIN" ? (
+                <button
+                  type="button"
+                  className="xui-lines-action-menu-item"
+                  onClick={() => {
+                    void (async () => {
+                      const res = await fetch("/api/admin/impersonate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ userId: openRow.id }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        alert(typeof data.error === "string" ? data.error : "Login as user failed");
+                        return;
+                      }
+                      window.location.href = String(data.redirect || "/reseller/dashboard");
+                    })();
+                  }}
+                >
+                  Login as user
+                </button>
+              ) : null}
               <Link
                 href={`${linesHref}?owner=${encodeURIComponent(openRow.id)}`}
                 className="xui-lines-action-menu-item"
