@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
+import {
+  assertCanSetPlaybackEdgeInactive,
+  isCanonicalPlaybackEdgeServer,
+} from "@/lib/canonical-playback-edge";
 import { bumpConfigRevision, enqueueAgentCommand } from "@/lib/stream-agent";
 import { PanelRole } from "@prisma/client";
 
@@ -36,15 +40,53 @@ export async function POST(req: NextRequest) {
     if (!Object.keys(data).length) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
+
+    if (body.isActive === false) {
+      const targets = await prisma.streamServer.findMany({
+        where: { id: { in: serverIds } },
+        select: { id: true, name: true, host: true },
+      });
+      for (const t of targets) {
+        const guard = assertCanSetPlaybackEdgeInactive(t, false);
+        if (!guard.ok) {
+          return NextResponse.json({ error: guard.error, serverId: t.id, name: t.name }, { status: 400 });
+        }
+      }
+    }
+
     const result = await prisma.streamServer.updateMany({
       where: { id: { in: serverIds } },
       data,
     });
+    const canonicalTouched =
+      body.isActive !== undefined || body.healthStatus !== undefined
+        ? (
+            await prisma.streamServer.findMany({
+              where: { id: { in: serverIds } },
+              select: { id: true, name: true, host: true },
+            })
+          ).filter((s) => isCanonicalPlaybackEdgeServer(s))
+        : [];
     await logActivity("servers_mass_edit", {
       userId: session.id,
       entity: "server",
-      meta: { count: result.count, fields: Object.keys(data) },
+      meta: {
+        count: result.count,
+        fields: Object.keys(data),
+        serverIds,
+        canonicalPlaybackEdge: canonicalTouched.map((s) => s.id),
+      },
     });
+    if (body.isActive !== undefined) {
+      for (const sid of serverIds) {
+        await logActivity("server_update", {
+          userId: session.id,
+          entity: "server",
+          entityId: sid,
+          meta: { bulk: true, fields: Object.keys(data), isActive: data.isActive },
+        });
+      }
+    }
     return NextResponse.json({ ok: true, affected: result.count });
   }
 

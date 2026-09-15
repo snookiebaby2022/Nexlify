@@ -1,4 +1,6 @@
 import net from "net";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +11,21 @@ import { sshExec, withSshClient } from "@/lib/ssh-exec";
 const execFileAsync = promisify(execFile);
 
 const lastRecoverAt = new Map<string, number>();
-const RECOVER_COOLDOWN_MS = 5 * 60 * 1000;
+/** Avoid hammering SSH; cron runs every minute so 90s is enough spacing. */
+const RECOVER_COOLDOWN_MS = 90 * 1000;
+
+function remoteLbRecoverScript(): string {
+  try {
+    return readFileSync(join(process.cwd(), "scripts/lb-edge-remote-recover.sh"), "utf8");
+  } catch {
+    return REMOTE_RECOVER_FALLBACK;
+  }
+}
+
+function playbackProbePort(server: { name: string; port: number }): number {
+  if (/10gbs/i.test(server.name)) return 8080;
+  return server.port > 0 ? server.port : 8080;
+}
 
 export function probeTcpPort(host: string, port: number, timeoutMs = 4000): Promise<boolean> {
   return new Promise((resolve) => {
@@ -28,21 +44,18 @@ export function probeTcpPort(host: string, port: number, timeoutMs = 4000): Prom
   });
 }
 
-const REMOTE_RECOVER = `
+/** Legacy inline recover if lb-edge-remote-recover.sh is missing on disk. */
+const REMOTE_RECOVER_FALLBACK = `
 set +e
 systemctl enable nginx >/dev/null 2>&1
 systemctl start nginx >/dev/null 2>&1
 systemctl enable nexlify-agent >/dev/null 2>&1
 systemctl start nexlify-agent >/dev/null 2>&1
 systemctl enable pm2-root >/dev/null 2>&1
-# Stale PIDFile makes Type=forking pm2-root stay inactive after reboot.
 rm -f /root/.pm2/pm2.pid
 systemctl start pm2-root >/dev/null 2>&1
-if command -v pm2 >/dev/null 2>&1 && [ -f /opt/nexlify-panel/scripts/iptv-edge-proxy.mjs ]; then
-  pm2 resurrect >/dev/null 2>&1
-  cd /opt/nexlify-panel
-  pm2 start ecosystem.config.cjs --only nexlify-iptv-edge --update-env >/dev/null 2>&1
-  pm2 save >/dev/null 2>&1
+if [ -x /opt/nexlify-panel/scripts/ensure-iptv-edge-pm2.sh ]; then
+  bash /opt/nexlify-panel/scripts/ensure-iptv-edge-pm2.sh
 fi
 `.trim();
 
@@ -63,7 +76,13 @@ export async function recoverLoadBalancersAfterReboot(): Promise<{
   stillDown: number;
 }> {
   const servers = await prisma.streamServer.findMany({
-    where: { isActive: true },
+    where: {
+      OR: [
+        { isActive: true },
+        { name: { equals: "10gbs", mode: "insensitive" } },
+        { host: "209.237.141.15" },
+      ],
+    },
     select: {
       id: true,
       name: true,
@@ -82,18 +101,28 @@ export async function recoverLoadBalancersAfterReboot(): Promise<{
   let stillDown = 0;
 
   for (const s of servers) {
-    const port = s.port > 0 ? s.port : 8080;
+    const port = playbackProbePort(s);
     const up = await probeTcpPort(s.host, port);
     if (up) {
+      const patch: {
+        healthStatus: string;
+        healthMessage: string;
+        lastHealthAt: Date;
+        isActive?: boolean;
+        port?: number;
+      } = {
+        healthStatus: "online",
+        healthMessage: `Stream port ${port} open`,
+        lastHealthAt: new Date(),
+      };
+      if (/10gbs/i.test(s.name)) {
+        patch.isActive = true;
+        if (s.port !== 8080) patch.port = 8080;
+      }
       if (s.healthStatus !== "online" && s.healthStatus !== "healthy") {
-        await prisma.streamServer.update({
-          where: { id: s.id },
-          data: {
-            healthStatus: "online",
-            healthMessage: `Stream port ${port} open`,
-            lastHealthAt: new Date(),
-          },
-        });
+        await prisma.streamServer.update({ where: { id: s.id }, data: patch });
+      } else if (/10gbs/i.test(s.name) && (patch.isActive || patch.port)) {
+        await prisma.streamServer.update({ where: { id: s.id }, data: patch });
       }
       continue;
     }
@@ -119,10 +148,10 @@ export async function recoverLoadBalancersAfterReboot(): Promise<{
             username: s.agentSshUser || "root",
             password,
           },
-          (client) => sshExec(client, REMOTE_RECOVER, { timeoutMs: 45_000 })
+          (client) => sshExec(client, remoteLbRecoverScript(), { timeoutMs: 90_000 })
         );
-      } catch {
-        /* SSH recover is best-effort */
+      } catch (e) {
+        console.warn("[lb-boot-recover] SSH recover failed:", s.name, e);
       }
     }
 
@@ -136,6 +165,7 @@ export async function recoverLoadBalancersAfterReboot(): Promise<{
           healthStatus: "online",
           healthMessage: "Recovered stream port after reboot",
           lastHealthAt: new Date(),
+          ...( /10gbs/i.test(s.name) ? { isActive: true, port: 8080 } : {} ),
         },
       });
       continue;

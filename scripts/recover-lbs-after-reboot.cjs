@@ -9,8 +9,11 @@ const net = require("net");
 process.chdir(path.join(__dirname, ".."));
 require("./load-env.cjs").loadEnv();
 
+const fs = require("fs");
 const { decryptAtRest, withSshClient, sshExec } = require("./ssh-10gbs-lib.cjs");
 const { PrismaClient } = require("@prisma/client");
+
+const REMOTE_RECOVER = fs.readFileSync(path.join(__dirname, "lb-edge-remote-recover.sh"), "utf8");
 
 const PANEL_HOST = process.env.SERVER_IP || "45.88.138.18";
 
@@ -64,34 +67,12 @@ function recoverCmd(isPanelHost) {
     "systemctl start nexlify-agent 2>/dev/null",
   ];
   if (!isPanelHost) {
-    parts.push(
-      "systemctl enable pm2-root 2>/dev/null || systemctl enable pm2-ubuntu 2>/dev/null",
-      "rm -f /root/.pm2/pm2.pid",
-      "systemctl start pm2-root 2>/dev/null || true",
-      "if command -v pm2 >/dev/null && [ -f /opt/nexlify-panel/scripts/iptv-edge-proxy.mjs ]; then",
-      "  cd /opt/nexlify-panel",
-      "  pm2 start ecosystem.config.cjs --only nexlify-iptv-edge --update-env >/dev/null 2>&1",
-      "  pm2 restart nexlify-iptv-edge --update-env >/dev/null 2>&1",
-      "  pm2 save >/dev/null 2>&1",
-      "  pm2 startup systemd -u root --hp /root >/dev/null 2>&1",
-      "fi",
-      "command -v ufw >/dev/null && ufw allow 8080/tcp >/dev/null 2>&1",
-      "command -v ufw >/dev/null && ufw allow 25461/tcp >/dev/null 2>&1"
-    );
+    return REMOTE_RECOVER;
   }
   parts.push(
     "sleep 2",
     "echo AFTER_LISTEN=$(ss -lntp | awk '/:80 |:443 |:8080 |:25461 /{print $4}' | tr '\\n' ' ')",
-    "echo AFTER_AGENT=$(systemctl is-active nexlify-agent 2>/dev/null)",
-    "echo AFTER_EDGE=$(pm2 jlist 2>/dev/null | python3 -c 'import json,sys\ntry:\n d=json.load(sys.stdin)\nexcept Exception:\n print(\"none\"); raise SystemExit\nprint(\",\".join(p.get(\"name\")+\":\"+p.get(\"pm2_env\",{}).get(\"status\",\"\") for p in d))' 2>/dev/null)"
-  );
-  return parts.join("\n");
-}
-  parts.push(
-    "sleep 2",
-    "echo AFTER_LISTEN=$(ss -lntp | awk '/:80 |:443 |:8080 |:25461 /{print $4}' | tr '\\n' ' ')",
-    "echo AFTER_AGENT=$(systemctl is-active nexlify-agent 2>/dev/null)",
-    "echo AFTER_EDGE=$(pm2 jlist 2>/dev/null | python3 -c 'import json,sys\ntry:\n d=json.load(sys.stdin)\nexcept Exception:\n print(\"none\"); raise SystemExit\nprint(\",\".join(p.get(\"name\")+\":\"+p.get(\"pm2_env\",{}).get(\"status\",\"\") for p in d))' 2>/dev/null)"
+    "echo AFTER_AGENT=$(systemctl is-active nexlify-agent 2>/dev/null)"
   );
   return parts.join("\n");
 }
@@ -99,17 +80,29 @@ function recoverCmd(isPanelHost) {
 async function main() {
   const prisma = new PrismaClient();
   const servers = await prisma.streamServer.findMany({
-    where: { isActive: true },
+    where: {
+      OR: [
+        { isActive: true },
+        { name: { equals: "10gbs", mode: "insensitive" } },
+        { host: "209.237.141.15" },
+      ],
+    },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+
+  function playbackProbePort(s) {
+    if (/10gbs/i.test(s.name)) return 8080;
+    return s.port > 0 ? s.port : 8080;
+  }
   const results = [];
   for (const s of servers) {
     const isPanel = s.host === PANEL_HOST || s.host === "127.0.0.1";
     const row = { name: s.name, host: s.host, port: s.port, isPanel, health: s.healthStatus };
     console.log(`\n======== ${s.name} ${s.host}:${s.port} (${s.healthStatus}) panel=${isPanel} ========`);
-    const probe = await tcpProbe(s.host, s.port || 8080, 4000);
+    const probePort = playbackProbePort(s);
+    const probe = await tcpProbe(s.host, probePort, 4000);
     const ssh22 = await tcpProbe(s.host, s.agentSshPort || 22, 4000);
-    console.log(`stream_port ${s.port} ${probe.ok ? "OPEN" : "FAIL " + probe.extra}`);
+    console.log(`stream_port ${probePort} ${probe.ok ? "OPEN" : "FAIL " + probe.extra}`);
     console.log(`ssh22 ${ssh22.ok ? "OPEN" : "FAIL " + ssh22.extra}`);
     row.streamPortOpen = probe.ok;
     row.sshOpen = ssh22.ok;
@@ -119,8 +112,9 @@ async function main() {
           where: { id: s.id },
           data: {
             healthStatus: "online",
-            healthMessage: `Stream port ${s.port} open`,
+            healthMessage: `Stream port ${probePort} open`,
             lastHealthAt: new Date(),
+            ...( /10gbs/i.test(s.name) ? { isActive: true, port: 8080 } : {} ),
           },
         });
         row.markedOnline = true;
@@ -139,7 +133,7 @@ async function main() {
         row.sshError = e instanceof Error ? e.message : String(e);
         console.log("LOCAL RECOVER FAIL:", row.sshError);
       }
-      const probeLocal = await tcpProbe(s.host, s.port || 8080, 5000);
+      const probeLocal = await tcpProbe(s.host, probePort, 5000);
       row.streamPortOpenAfter = probeLocal.ok;
       console.log(`stream_port after ${s.port} ${probeLocal.ok ? "OPEN" : "FAIL " + probeLocal.extra}`);
       if (probeLocal.ok && s.healthStatus !== "online") {
@@ -180,7 +174,7 @@ async function main() {
       row.sshError = e instanceof Error ? e.message : String(e);
       console.log("SSH FAIL:", row.sshError);
     }
-    const probe2 = await tcpProbe(s.host, s.port || 8080, 5000);
+    const probe2 = await tcpProbe(s.host, probePort, 5000);
     row.streamPortOpenAfter = probe2.ok;
     console.log(`stream_port after ${s.port} ${probe2.ok ? "OPEN" : "FAIL " + probe2.extra}`);
     if (probe2.ok && s.healthStatus !== "online") {
@@ -190,6 +184,7 @@ async function main() {
           healthStatus: "online",
           healthMessage: "Recovered after reboot (stream port open)",
           lastHealthAt: new Date(),
+          ...( /10gbs/i.test(s.name) ? { isActive: true, port: 8080 } : {} ),
         },
       });
       console.log("marked online in DB");

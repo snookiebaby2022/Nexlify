@@ -226,12 +226,16 @@ if [ "$HTTP_CODE" != "200" ] && [ "$APP_OK" != "1" ]; then
   fi
 fi
 
-# --- Check 3: Standalone build ---
-if [ ! -f "$PANEL_DIR/.next/standalone/server.js" ]; then
-  log "ERROR: standalone build missing — recover (not a blind PORT=80 cluster start)"
-  if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
-    bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || \
-      bash "$PANEL_DIR/scripts/panel-update-recover.sh" >>"$LOG" 2>&1 || true
+# --- Check 3: production build (cluster uses .next/BUILD_ID; standalone is optional) ---
+if [ -x "$PANEL_DIR/scripts/has-valid-next-build.sh" ] && \
+   ! bash "$PANEL_DIR/scripts/has-valid-next-build.sh" 2>/dev/null; then
+  if [ "$HTTP_CODE" = "200" ] || [ "$APP_OK" = "1" ]; then
+    log "WARN: .next looks incomplete but upstream is healthy — not recovering"
+  else
+    log "ERROR: no valid production build and panel unhealthy — recover --quick only"
+    if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
+      bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+    fi
   fi
 fi
 
@@ -250,6 +254,10 @@ DISK_PCT="$(df / | awk 'NR==2 {print $5}' | tr -d '%' || echo 0)"
 if [ "${DISK_PCT:-0}" -gt 90 ] 2>/dev/null; then
   log "WARN: Disk usage at ${DISK_PCT}% — cleaning old PM2 logs"
   find /root/.pm2/logs -name "*.log" -mtime +3 -delete 2>/dev/null || true
+fi
+
+if [ -x "$PANEL_DIR/scripts/lb-edge-watchdog-from-panel.sh" ]; then
+  bash "$PANEL_DIR/scripts/lb-edge-watchdog-from-panel.sh" "$LOG" >>"$LOG" 2>&1 || true
 fi
 
 log "OK: Watchdog check complete (upstream=$HEALTH_URL HTTP=${HTTP_CODE:-?} disk=${DISK_PCT:-?}%)"

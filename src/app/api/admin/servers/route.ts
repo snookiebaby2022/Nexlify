@@ -17,6 +17,12 @@ import { publicStreamServer } from "@/lib/server-public";
 import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
 import { parseStreamServerDomain, type StreamServerDomainRole } from "@/lib/stream-server-domain";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
+import {
+  allowDeactivatePlaybackEdge,
+  assertCanSetPlaybackEdgeInactive,
+  isCanonicalPlaybackEdgeServer,
+} from "@/lib/canonical-playback-edge";
+import { logActivity } from "@/lib/lines";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -185,6 +191,20 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
+  const existing = await prisma.streamServer.findUnique({
+    where: { id },
+    select: { id: true, name: true, host: true },
+  });
+  if (existing && isCanonicalPlaybackEdgeServer(existing) && !allowDeactivatePlaybackEdge()) {
+    return NextResponse.json(
+      {
+        error:
+          "Cannot delete the canonical live playback edge (10gbs). Set ALLOW_DEACTIVATE_PLAYBACK_EDGE=1 only for intentional maintenance.",
+      },
+      { status: 400 }
+    );
+  }
+
   await prisma.stream.updateMany({ where: { serverId: id }, data: { serverId: null } });
   await prisma.streamServer.delete({ where: { id } });
   const { cacheDelExact } = await import("@/lib/cache");
@@ -241,6 +261,20 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  const existing = await prisma.streamServer.findUnique({
+    where: { id },
+    select: { id: true, name: true, host: true, isActive: true, port: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Server not found" }, { status: 404 });
+
+  const deactivateGuard = assertCanSetPlaybackEdgeInactive(
+    existing,
+    body.isActive === undefined ? undefined : Boolean(body.isActive)
+  );
+  if (!deactivateGuard.ok) {
+    return NextResponse.json({ error: deactivateGuard.error }, { status: 400 });
+  }
+
   const server = await prisma.streamServer.update({
     where: { id },
     data: {
@@ -288,6 +322,24 @@ export async function PATCH(req: NextRequest) {
         : {}),
     },
   });
+  const auditMeta: Record<string, unknown> = { name: existing.name, host: existing.host };
+  const changed: string[] = [];
+  if (body.isActive !== undefined && Boolean(body.isActive) !== existing.isActive) {
+    changed.push(`isActive:${existing.isActive}->${Boolean(body.isActive)}`);
+  }
+  if (body.port != null && Number(body.port) !== existing.port) {
+    changed.push(`port:${existing.port}->${Number(body.port)}`);
+  }
+  if (changed.length) {
+    auditMeta.changed = changed;
+    await logActivity("server_update", {
+      userId: session.id,
+      entity: "server",
+      entityId: id,
+      meta: auditMeta,
+    });
+  }
+
   const { cacheDelExact } = await import("@/lib/cache");
   await Promise.all([
     cacheDelExact("stats:header"),
