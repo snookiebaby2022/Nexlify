@@ -48,6 +48,46 @@ restart_panel() {
 
 echo "=== panel-update-recover ($QUICK) ==="
 
+panel_healthy() {
+  local code
+  code="$(curl -sS -o /tmp/nexlify-recover-health.json -w '%{http_code}' -m 8 http://127.0.0.1:13000/api/health 2>/dev/null || echo 000)"
+  if [ "$code" = "200" ] && grep -q '"app":"ok"' /tmp/nexlify-recover-health.json 2>/dev/null; then
+    rm -f /tmp/nexlify-recover-health.json
+    return 0
+  fi
+  rm -f /tmp/nexlify-recover-health.json
+  return 1
+}
+
+snapshot_backup() {
+  if [ -x "$ROOT/scripts/snapshot-next-backup.sh" ]; then
+    bash "$ROOT/scripts/snapshot-next-backup.sh" || true
+  fi
+}
+
+restore_vendor_prebuilt() {
+  local ver url
+  ver="$(node -p 'require("./package.json").version' 2>/dev/null || true)"
+  [ -n "$ver" ] || return 1
+  url="${PANEL_PREBUILT_URL:-https://nexlify.live/downloads/next-${ver}.tar.gz}"
+  export PANEL_VENDOR_IP="${PANEL_VENDOR_IP:-85.17.162.54}"
+  if [ ! -x "$ROOT/scripts/apply-prebuilt-update.sh" ]; then
+    return 1
+  fi
+  echo "Recover: applying vendor prebuilt $url"
+  bash "$ROOT/scripts/apply-prebuilt-update.sh" "$url" download
+  bash "$ROOT/scripts/apply-prebuilt-update.sh" "$url" extract
+  bash "$ROOT/scripts/apply-prebuilt-update.sh" "$url" apply
+}
+
+# Never tear down a serving panel to "fix" a missing standalone file.
+if panel_healthy; then
+  echo "Recover: panel already healthy — leaving it alone"
+  snapshot_backup
+  clear_stale_update_job
+  exit 0
+fi
+
 if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
   bash "$ROOT/scripts/ensure-prisma-client.sh" || echo "WARN: prisma client repair failed"
 fi
@@ -55,30 +95,47 @@ fi
 if has_valid_next; then
   echo "Recover: production build present"
   restart_panel
+  snapshot_backup
   clear_stale_update_job
   exit 0
 fi
 
 if restore_backup; then
   restart_panel
+  snapshot_backup
   clear_stale_update_job
   echo "Recover: OK (restored backup)"
   exit 0
 fi
 
+if restore_vendor_prebuilt; then
+  snapshot_backup
+  clear_stale_update_job
+  echo "Recover: OK (vendor prebuilt)"
+  exit 0
+fi
+
 if [ "$QUICK" = "--quick" ]; then
-  echo "Recover: no valid build and no backup (--quick)" >&2
+  echo "Recover: no valid build, backup, or prebuilt (--quick)" >&2
   exit 1
 fi
 
-echo "Recover: rebuilding panel (no backup available) ..."
-pm2 stop nexlify 2>/dev/null || true
-pm2 delete nexlify 2>/dev/null || true
+echo "Recover: rebuilding panel (last resort — no backup/prebuilt) ..."
+# Do not stop nexlify first — a failed build must not take a working (or
+# restartable) process offline. Use the installed Next binary, never npx.
 if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
   bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
 fi
 export NEXT_PRIVATE_WORKER_THREADS=false
-npm run build
+export NEXLIFY_SKIP_GIT_RESET="${NEXLIFY_SKIP_GIT_RESET:-1}"
+if [ ! -x "$ROOT/node_modules/.bin/next" ]; then
+  echo "Recover: next binary missing — cannot rebuild safely" >&2
+  exit 1
+fi
+if ! "$ROOT/node_modules/.bin/next" build; then
+  echo "Recover: rebuild failed — not stopping panel" >&2
+  exit 1
+fi
 bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
 bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
 restart_panel

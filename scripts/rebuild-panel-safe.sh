@@ -34,6 +34,16 @@ if [ -f "$PROTECTION_FILE" ] && [ "${NEXLIFY_ALLOW_PROTECTED_45:-0}" != "1" ]; t
   echo "ERROR: server 45 is protected; set NEXLIFY_ALLOW_PROTECTED_45=1 only for an operator-approved update" >&2
   exit 78
 fi
+if [ -f "$ROOT/scripts/panel-node-guard.sh" ]; then
+  # shellcheck source=scripts/panel-node-guard.sh
+  . "$ROOT/scripts/panel-node-guard.sh"
+  panel_refuse_node1_unsafe_rebuild || exit $?
+fi
+# Node 1 / production: never git-reset away operator source (that wiped working trees).
+if [ "${NEXLIFY_SKIP_GIT_RESET:-}" != "1" ] && [ -f /etc/nexlify/panel-node-role ] && grep -qx '1' /etc/nexlify/panel-node-role; then
+  export NEXLIFY_SKIP_GIT_RESET=1
+  echo "NOTE: node 1 — skipping git reset (use panel-update-pipeline.sh)"
+fi
 if command -v flock >/dev/null 2>&1; then
   exec 9>/tmp/nexlify-rebuild.lock
   if ! flock -n 9; then

@@ -2592,8 +2592,21 @@ function catalogActionCacheable(url) {
   );
 }
 
-function catalogCacheKey(url) {
-  return String(url || "/").split("#")[0];
+function catalogProfileMode(clientReq) {
+  const ua = String(clientReq?.headers?.["user-agent"] || "").toLowerCase();
+  if (ua.includes("xciptv") || ua.includes("smetv") || ua.includes("dalvik") || ua.includes("nexus")) {
+    return "numeric";
+  }
+  return "string";
+}
+
+function catalogCacheKey(url, clientReq) {
+  const acceptEncoding = String(clientReq?.headers?.["accept-encoding"] || "");
+  const encodingVariant = /\bgzip\b/i.test(acceptEncoding) ? "gzip" : "identity";
+  const mode = catalogProfileMode(clientReq);
+  // Keep compressed/identity and numeric/string responses strictly isolated so
+  // XCIPTV/Dalvik never receives string-ID categories or uncompressed blobs cached by Smarters.
+  return `${String(url || "/").split("#")[0]}::ae=${encodingVariant}::mode=${mode}`;
 }
 
 function catalogResponseHeaders(hdrs, fromCache) {
@@ -2647,7 +2660,7 @@ function fetchCatalogFromPanel(url, clientReq, ctx, onDone) {
           const hdrs = { ...proxyRes.headers };
           const status = proxyRes.statusCode || 502;
           const now = Date.now();
-          const cacheKey = catalogCacheKey(url);
+          const cacheKey = catalogCacheKey(url, clientReq);
           storeCatalogCache(cacheKey, now, status, hdrs, body);
           onDone?.({ status, headers: hdrs, body });
           resolve({ status, headers: hdrs, body });
@@ -2682,7 +2695,7 @@ function forwardCatalogCached(clientReq, clientRes, ctx) {
     forward(clientReq, clientRes, ctx);
     return;
   }
-  const key = catalogCacheKey(url);
+  const key = catalogCacheKey(url, clientReq);
   const now = Date.now();
   const hit = catalogCache.get(key);
   if (hit && hit.expires > now) {

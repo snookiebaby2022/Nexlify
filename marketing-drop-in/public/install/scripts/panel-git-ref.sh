@@ -29,6 +29,7 @@ computed_panel_ref() {
     src \
     scripts \
     prisma \
+    tests \
     public \
     package.json \
     package-lock.json \
@@ -71,6 +72,7 @@ ref="$(
     src \
     scripts \
     prisma \
+    tests \
     public \
     package.json \
     package-lock.json \

@@ -226,12 +226,16 @@ if [ "$HTTP_CODE" != "200" ] && [ "$APP_OK" != "1" ]; then
   fi
 fi
 
-# --- Check 3: Standalone build ---
-if [ ! -f "$PANEL_DIR/.next/standalone/server.js" ]; then
-  log "ERROR: standalone build missing — recover (not a blind PORT=80 cluster start)"
-  if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
-    bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || \
-      bash "$PANEL_DIR/scripts/panel-update-recover.sh" >>"$LOG" 2>&1 || true
+# --- Check 3: production build (cluster uses .next/BUILD_ID; standalone is optional) ---
+if [ -x "$PANEL_DIR/scripts/has-valid-next-build.sh" ] && \
+   ! bash "$PANEL_DIR/scripts/has-valid-next-build.sh" 2>/dev/null; then
+  if [ "$HTTP_CODE" = "200" ] || [ "$APP_OK" = "1" ]; then
+    log "WARN: .next looks incomplete but upstream is healthy — not recovering"
+  else
+    log "ERROR: no valid production build and panel unhealthy — recover --quick only"
+    if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
+      bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+    fi
   fi
 fi
 

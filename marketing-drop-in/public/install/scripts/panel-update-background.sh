@@ -56,12 +56,13 @@ fi
 cd "$ROOT"
 export PANEL_REPO_PATH="$ROOT"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT}/node_modules/.bin:${PATH:-}"
-ERR_LOG="${ROOT}/.update-worker-err.log"
-export ERR_LOG
+# Always use a concrete path (PM2-spawned workers must not rely on ERR_LOG from the environment).
+WORKER_ERR_LOG="${ROOT}/.update-worker-err.log"
+export ERR_LOG="$WORKER_ERR_LOG"
 
 if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
-  if ! bash "$ROOT/scripts/ensure-prisma-client.sh" >>"${ERR_LOG}" 2>&1; then
-    echo "panel-update-background.sh: Prisma client missing — run: bash scripts/ensure-prisma-client.sh" | tee -a "${ERR_LOG}" >&2
+  if ! bash "$ROOT/scripts/ensure-prisma-client.sh" >>"$WORKER_ERR_LOG" 2>&1; then
+    echo "panel-update-background.sh: Prisma client missing — run: bash scripts/ensure-prisma-client.sh" | tee -a "$WORKER_ERR_LOG" >&2
     node -e '
       const fs = require("fs");
       const p = ".update-progress.json";
@@ -80,13 +81,13 @@ fi
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 
 if [ ! -f "${ROOT}/node_modules/tsx/dist/cli.mjs" ] && [ -f "${ROOT}/scripts/ensure-tsx.sh" ]; then
-  bash "${ROOT}/scripts/ensure-tsx.sh" >>"${ERR_LOG}" 2>&1 || true
+  bash "${ROOT}/scripts/ensure-tsx.sh" >>"$WORKER_ERR_LOG" 2>&1 || true
 fi
 
 run_tsx() {
   local tsx_bin="${ROOT}/node_modules/.bin/tsx"
   local tsx_cli="${ROOT}/node_modules/tsx/dist/cli.mjs"
-  local log="${ERR_LOG:-${ROOT}/.update-worker-err.log}"
+  local log="${WORKER_ERR_LOG:-${ROOT}/.update-worker-err.log}"
   if [ -x "$tsx_bin" ]; then
     exec "$tsx_bin" "$TS_SCRIPT" 2>>"$log"
   fi

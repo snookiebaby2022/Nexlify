@@ -166,9 +166,10 @@ const pm2Apps = [
           autorestart: true,
           max_restarts: 25,
           min_uptime: "30s",
-          kill_timeout: 8000,
-          // Recycle individual workers before they wedge the event loop (~2.5GB+ under IPTV load).
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
+          // Drain long get_vod_streams responses before SIGKILL (8s was cutting Firesticks mid-body).
+          kill_timeout: 30000,
+          // 1800M thrashed on large VOD catalogs and caused nginx 502 login failures during recycle.
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "3500M",
           env: panelRuntimeEnv,
         }
       : {
@@ -181,9 +182,9 @@ const pm2Apps = [
           autorestart: true,
           max_restarts: 25,
           min_uptime: "30s",
-          kill_timeout: 8000,
+          kill_timeout: 30000,
           listen_timeout: 90000,
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "3500M",
           env: panelRuntimeEnv,
         },
     {

@@ -171,6 +171,13 @@ nexlify_only_restart() {
     bash scripts/ensure-nginx-panel-hold.sh >>"$LOG_FILE" 2>&1 || true
   fi
 
+  if [ -d .next/static ] && [ ! -d .next/standalone/.next/static/css ]; then
+    log "Ensuring static assets present in standalone/.next/ ..."
+    mkdir -p .next/standalone/.next
+    cp -a .next/static .next/standalone/.next/ 2>/dev/null || true
+    cp -a public .next/standalone/ 2>/dev/null || true
+  fi
+
   log "Restarting nexlify only (preserving nexlify-cron) ..."
   start_nexlify_without_delete
   pm2 save >>"$LOG_FILE" 2>&1 || true
@@ -192,6 +199,9 @@ nexlify_only_restart() {
       fi
     fi
     log "nexlify-only restart OK"
+    if [ -x scripts/snapshot-next-backup.sh ]; then
+      bash scripts/snapshot-next-backup.sh >>"$LOG_FILE" 2>&1 || true
+    fi
     return 0
   fi
 
@@ -215,6 +225,9 @@ full_restart() {
     npm install --no-audit --no-fund --loglevel=error >>"$LOG_FILE" 2>&1 || true
   fi
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
+  if [ -x "$ROOT/scripts/snapshot-next-backup.sh" ]; then
+    bash "$ROOT/scripts/snapshot-next-backup.sh" >>"$LOG_FILE" 2>&1 || true
+  fi
   load_env
   warmup_playback_routes || true
   # shellcheck disable=SC1091
