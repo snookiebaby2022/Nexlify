@@ -190,6 +190,11 @@ export default function ServerSettingsPage() {
               value={streamHttp}
               onChange={(e) => setData({ ...data, streamHttpPort: Number(e.target.value) })}
             />
+            <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
+              Advertised as <code className="text-xs">server_info.port</code> for playback on LB domains (typically{" "}
+              {STREAM_HTTP_PORT}). Portal login stays on panel HTTP/HTTPS ({CUSTOMER_FIREWALL_PORTS.http}/
+              {CUSTOMER_FIREWALL_PORTS.https}) — not the same as this media port.
+            </span>
           </label>
           <label className="block text-sm">
             <span style={{ color: "var(--muted)" }}>Stream HTTPS port</span>

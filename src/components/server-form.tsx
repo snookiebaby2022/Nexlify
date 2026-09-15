@@ -921,6 +921,31 @@ export function ServerForm({
                   />
                 </FormField>
               </div>
+              <div
+                className="rounded-md border px-3 py-2.5 text-sm space-y-1.5"
+                style={{
+                  borderColor: "var(--border)",
+                  background: "var(--bg)",
+                  color: "var(--muted)",
+                }}
+              >
+                <p>
+                  <strong style={{ color: "var(--text)" }}>Portal :80 / :443 vs broadcast port</strong>{" "}
+                  (this HTTP broadcast field, usually <strong>{STREAM_HTTP_PORT}</strong>)
+                </p>
+                <p>
+                  Resellers and apps <em>log in</em> on the portal hostname at port <strong>80</strong> or{" "}
+                  <strong>443</strong> (<code className="text-xs">player_api.php</code>, M3U, EPG). After login,{" "}
+                  <code className="text-xs">server_info.port</code> tells the app which port to use for{" "}
+                  <em>playback</em> (<code className="text-xs">/live/</code>, movies, series) — that is this
+                  broadcast port on the LB, not the panel API port.
+                </p>
+                <p>
+                  On split topology (panel + 10gbs edge), the panel must not carry video bitrate; clients play on{" "}
+                  <code className="text-xs">http://your-stream-domain:{form.port || STREAM_HTTP_PORT}/live/…</code>.
+                  Live Connections in the admin UI counts those playback sessions, not catalog API hits on :80.
+                </p>
+              </div>
               <div className="grid sm:grid-cols-3 gap-3">
                 <FormField label="SSH port">
                   <input
@@ -1119,11 +1144,12 @@ export function ServerForm({
                   <strong style={{ color: "var(--text)" }}>Multiple stream domains (XUI-style)</strong>
                   {" — "}
                   XC apps can <em>login</em> on any hostname that reaches this panel (or an LB that
-                  proxies API). For <em>playback</em>, set Domain Name / Additional domains whose
-                  DNS-only A records point at an LB — <code className="text-xs">server_info.url</code>{" "}
-                  prefers the login hostname when that DNS hits the sticky LB, otherwise an LB
-                  domain / IP. Never point stream DNS at the panel (live-routing lock). Role is under
-                  Advanced → Server role (Main).
+                  proxies API) on port <strong>80/443</strong>. For <em>playback</em>, set Domain Name /
+                  Additional domains whose DNS-only A records point at an LB — apps then use{" "}
+                  <code className="text-xs">server_info</code> (host + <strong>HTTP broadcast port</strong>, e.g.{" "}
+                  {STREAM_HTTP_PORT}) for <code className="text-xs">/live/</code>. Same domain name is common;
+                  different ports separate API from media. Never point stream DNS at the panel-only IP
+                  (live-routing lock). Role is under Advanced → Server role (Main).
                 </div>
               ) : (
                 <div

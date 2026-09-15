@@ -109,14 +109,17 @@ async function main() {
     const remoteScript = `
 set -euo pipefail
 cd '${REMOTE_DIR}'
+bash scripts/lock-live-routing-45.sh unlock 2>/dev/null || true
+chattr -i scripts/iptv-edge-proxy.mjs marketing-drop-in/public/install/scripts/iptv-edge-proxy.mjs 2>/dev/null || true
+chattr -i /etc/nginx/conf.d/nexlify-panel-http.conf /etc/nginx/conf.d/nexlify-live-remote-edge.conf 2>/dev/null || true
+chmod u+w scripts/iptv-edge-proxy.mjs 2>/dev/null || true
 echo "=== Extract ${files.length} files ==="
-tar -xzf '${REMOTE_TAR}'
+tar -xzf '${REMOTE_TAR}' --overwrite --no-same-owner
 sed -i 's/\\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null || true
 chmod +x scripts/*.sh scripts/*.mjs 2>/dev/null || true
 if [ -f nginx/nexlify-panel-http.conf ]; then
   cp -f nginx/nexlify-panel-http.conf /etc/nginx/conf.d/nexlify-panel-http.conf 2>/dev/null || true
 fi
-bash scripts/lock-live-routing-45.sh unlock 2>/dev/null || chattr -i scripts/iptv-edge-proxy.mjs /etc/nginx/conf.d/nexlify-panel-http.conf 2>/dev/null || true
 export NEXLIFY_ALLOW_PROTECTED_45=1 NEXLIFY_SKIP_GIT=1 NEXLIFY_SKIP_GIT_RESET=1 NEXLIFY_FORCE_BUILD=1
 echo "=== Prisma + staging build (node 1 pipeline) ==="
 npx prisma generate
