@@ -19,7 +19,12 @@ async function pushScript(c, name) {
   const p = new (require("@prisma/client").PrismaClient)();
   const s = await get10gbsServer(p);
   await withSshClient({ host: s.host, port: s.port, username: s.user, password: s.password }, async (c) => {
-    for (const sh of ["lb-edge-remote-recover.sh", "ensure-iptv-edge-pm2.sh"]) {
+    for (const sh of [
+      "lb-edge-remote-recover.sh",
+      "ensure-iptv-edge-pm2.sh",
+      "install-iptv-edge-boot.sh",
+      "fix-edge-ports-remote.sh",
+    ]) {
       try {
         await pushScript(c, sh);
         console.log(`pushed ${sh} to 10gbs`);
