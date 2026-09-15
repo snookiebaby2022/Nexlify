@@ -16,7 +16,6 @@ import {
   type PanelApiCaller,
   lineScopeWhere,
   userScopeWhere,
-  connectionScopeWhere,
   assertLineInScope,
 } from "./panel-api-caller";
 import { assertResellerCanCreateLine, assertRoleMaySetUnlimited } from "./reseller-line-guards";
@@ -75,14 +74,20 @@ export async function handleXuiAction(
     }
 
     case "get_lines": {
+      const start = parseBoundedInt(params.get("start"), 0, 0, 1_000_000);
       const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
-      const lines = await prisma.line.findMany({
-        where: lineScopeWhere(caller),
-        take,
-        include: { bouquets: { include: { bouquet: true } } },
-        orderBy: { createdAt: "desc" },
-      });
-      return { status: "success", lines };
+      const where = lineScopeWhere(caller);
+      const [recordsTotal, lines] = await Promise.all([
+        prisma.line.count({ where }),
+        prisma.line.findMany({
+          where,
+          skip: start,
+          take,
+          include: { bouquets: { include: { bouquet: true } } },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+      return { status: "success", recordsTotal, lines };
     }
 
     case "get_line": {
@@ -141,34 +146,39 @@ export async function handleXuiAction(
 
     case "live_connections": {
       const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
-      const connections = await prisma.liveConnection.findMany({
-        where: connectionScopeWhere(caller),
-        take,
-        include: {
-          line: { select: { username: true } },
-          stream: { select: { name: true } },
-        },
-        orderBy: { lastSeenAt: "desc" },
-      });
+      const { listLiveConnections } = await import("./connections");
+      const scope = caller.isAdmin ? undefined : caller.id;
+      const connections = (await listLiveConnections(scope, take)).map((c) => ({
+        ...c,
+        line: c.line ? { username: c.line.username } : null,
+        stream: c.stream ? { name: c.stream.name } : null,
+      }));
       return { status: "success", connections };
     }
 
-    case "activity_logs": {
+    case "activity_logs":
+    case "user_logs": {
+      const start = parseBoundedInt(params.get("start"), 0, 0, 1_000_000);
       const take = parseBoundedInt(params.get("limit"), 100, 1, 500);
-      const logs = await prisma.activityLog.findMany({
-        where: caller.isAdmin
-          ? undefined
-          : {
-              OR: [{ userId: caller.id }, { line: { ownerId: caller.id } }],
-            },
-        take,
-        orderBy: { createdAt: "desc" },
-        include: {
-          user: { select: { username: true } },
-          line: { select: { username: true } },
-        },
-      });
-      return { status: "success", logs };
+      const where = caller.isAdmin
+        ? undefined
+        : {
+            OR: [{ userId: caller.id }, { line: { ownerId: caller.id } }],
+          };
+      const [recordsTotal, logs] = await Promise.all([
+        prisma.activityLog.count({ where }),
+        prisma.activityLog.findMany({
+          where,
+          skip: start,
+          take,
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: { select: { username: true } },
+            line: { select: { username: true } },
+          },
+        }),
+      ]);
+      return { status: "success", recordsTotal, logs };
     }
 
     case "get_access_codes": {
@@ -395,8 +405,10 @@ export async function handleXuiAction(
     }
 
     case "disable_line":
+    case "suspend_line":
       return setLineStatus(params.get("id"), "DISABLED", caller, "line.disabled");
     case "enable_line":
+    case "unsuspend_line":
       return setLineStatus(params.get("id"), "ACTIVE", caller, "line.enabled");
     case "ban_line":
       return setLineStatus(params.get("id"), "BANNED", caller, "line.banned");

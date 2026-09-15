@@ -1,6 +1,12 @@
 import { prisma } from "./prisma";
 import { StreamType } from "@prisma/client";
-import { LIVE_STALE_MS, listActiveConnections, countActiveConnections, deleteStaleConnections } from "./connections";
+import {
+  LIVE_STALE_MS,
+  listActiveConnections,
+  countActiveConnections,
+  deleteStaleConnections,
+  syncLiveConnectionsFromRedisViewers,
+} from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
@@ -31,11 +37,18 @@ export async function jobCleanupConnections() {
   const start = Date.now();
   try {
     const deleted = await deleteStaleConnections();
+    const synced = await syncLiveConnectionsFromRedisViewers(600);
     await listActiveConnections();
+    const detail = [
+      deleted.count ? `removed ${deleted.count} stale connection(s)` : null,
+      synced ? `synced ${synced} from edge viewer keys` : null,
+    ]
+      .filter(Boolean)
+      .join("; ");
     await logCron(
       "cleanup_connections",
       "ok",
-      deleted.count ? `removed ${deleted.count} stale connection(s)` : undefined,
+      detail || undefined,
       Date.now() - start
     );
   } catch (e) {

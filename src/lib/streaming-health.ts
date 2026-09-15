@@ -9,6 +9,7 @@ import { bufferingRisk, bufferingRiskLabel } from "@/lib/server-load-metrics";
 import { batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
 import { listLiveConnections } from "@/lib/connections";
 import { getSourceCircuit } from "@/lib/source-circuit-breaker";
+import { getPlaybackTopologyReport } from "@/lib/playback-topology-probe";
 
 export async function getStreamingHealthSnapshot() {
   const [servers, streamCounts, bouquets, lines, antiFreeze, redisOk, liveProbeStats, loadScores, liveConnections] = await Promise.all([
@@ -220,6 +221,18 @@ export async function getStreamingHealthSnapshot() {
     },
   ];
 
+  const topologyReport = await getPlaybackTopologyReport({ probeEdgeHealth: true });
+  for (const t of topologyReport.checks) {
+    if (t.severity === "info" && t.ok) continue;
+    checklist.push({
+      id: `topology-${t.id}`,
+      label: t.label,
+      ok: t.ok,
+      href: "/admin/streaming/health",
+      hint: t.hint,
+    });
+  }
+
   const readyScore = checklist.filter((c) => c.ok).length;
 
   const riskRows = serverRows.filter((s) => s.isActive && s.bufferingRisk !== "healthy");
@@ -271,5 +284,6 @@ export async function getStreamingHealthSnapshot() {
     readyScore,
     readyTotal: checklist.length,
     streamingReady: readyScore === checklist.length && onlineServers > 0,
+    playbackTopology: topologyReport,
   };
 }

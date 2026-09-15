@@ -156,6 +156,42 @@ export async function countActiveConnections(ownerId?: string): Promise<number> 
  * Open connections + online users from the same lastSeen-fresh session list.
  * Dashboard KPIs must not mix a cached groupBy with a raw COUNT DISTINCT.
  */
+/**
+ * Edge may touch Redis before Postgres on a pulse; repair missing LiveConnection rows
+ * from live:viewer:* (one stream per line+IP) so Open Connections matches XUI.
+ */
+export async function syncLiveConnectionsFromRedisViewers(limit = 500): Promise<number> {
+  const { listRedisActiveViewers } = await import("./live-session");
+  const { pulseLiveConnection } = await import("./connection-pulse");
+  const viewers = await listRedisActiveViewers();
+  if (!viewers.length) return 0;
+
+  const staleBefore = new Date(Date.now() - CAPACITY_STALE_MS);
+  let synced = 0;
+  for (const v of viewers) {
+    if (synced >= limit) break;
+    const existing = await prisma.liveConnection.findFirst({
+      where: {
+        lineId: v.lineId,
+        streamId: v.streamId,
+        lastSeenAt: { gte: staleBefore },
+        ...(v.ip != null ? connectionIpPrismaFilter(v.ip) : {}),
+      },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await pulseLiveConnection({
+      lineId: v.lineId,
+      streamId: v.streamId,
+      ip: v.ip,
+      bytes: 1,
+    });
+    synced += 1;
+  }
+  if (synced > 0) invalidateConnectionCaches();
+  return synced;
+}
+
 export async function liveViewerStats(ownerId?: string | string[]): Promise<{
   onlineConnections: number;
   onlineUsers: number;
@@ -429,16 +465,14 @@ export async function lineHasConnectionCapacity(
   void pruneTestConnectionRows(lineId).catch(() => {});
   void pruneLineStaleConnections(lineId, CAPACITY_STALE_MS).catch(() => {});
 
-  const failOpen = capacityFailOpenEnabled();
   try {
     return await Promise.race([
       lineHasConnectionCapacityInner(lineId, maxConnections, opts),
-      new Promise<boolean>((resolve) =>
-        setTimeout(() => resolve(failOpen), 800)
-      ),
+      // Admit when the check is slow — only an explicit DB "full" should deny (IPTV re-zap storms).
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 800)),
     ]);
   } catch {
-    return failOpen;
+    return capacityFailOpenEnabled();
   }
 }
 
@@ -1061,6 +1095,7 @@ export async function listLiveConnections(ownerId?: string | string[], take = 50
   const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
   const cacheKey = `conn:live:${ownerCacheSuffix(ownerId)}:${gen}`;
   const rows = await cacheGetOrSet(cacheKey, 1, async () => {
+    await cacheGetOrSet("conn:viewer_sync_ts", 15, () => syncLiveConnectionsFromRedisViewers(400));
     const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
     const found = await prisma.liveConnection.findMany({
       where: {

@@ -59,17 +59,23 @@ GET /api/v1?api_key=KEY&action=add_credits&username=reseller1&credits=10`}
       </section>
 
       <section className="rounded-lg border p-4 space-y-2 text-sm" style={{ borderColor: "var(--border)" }}>
-        <h2 className="font-semibold">Billing webhook</h2>
+        <h2 className="font-semibold">Billing / WHMCS provisioning</h2>
         <p style={{ color: "var(--muted)" }}>
           Set <code className="text-xs">BILLING_WEBHOOK_SECRET</code> in the panel <code className="text-xs">.env</code>.
+          WHMCS module: <code className="text-xs">integrations/whmcs/nexlify/</code>
         </p>
         <pre className="text-xs overflow-x-auto rounded border p-3" style={{ borderColor: "var(--border)" }}>
-{`POST /api/billing/webhook
+{`GET  /api/billing/provision     (list packages)
+POST /api/billing/provision
 Header: X-Billing-Secret: YOUR_SECRET
-{"action":"create","username":"u1","password":"p1","days":30,"max_connections":1,"bouquet_ids":["..."],"service_id":"123"}`}
+{"operation":"createLine","serviceId":"123","username":"u1","password":"p1","packageId":"...","days":30}
+
+Legacy webhook:
+POST /api/billing/webhook
+{"action":"create","username":"u1","password":"p1","days":30,"service_id":"123"}`}
         </pre>
         <p style={{ color: "var(--muted)" }}>
-          Actions: create, suspend, unsuspend, terminate, renew, add_credits.
+          Operations: createLine, extendLine, suspendLine, unsuspendLine, terminateLine, adjustCredits, listPackages, getResellerInfo.
         </p>
       </section>
 

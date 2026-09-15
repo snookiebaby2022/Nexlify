@@ -100,9 +100,11 @@ async function assertPlaybackAllowedInner(
   userAgent?: string,
   options?: PlaybackGuardOptions
 ): Promise<PlaybackDenyReason | null> {
-  // Hard kick deny TTL — block reconnect after admin/reseller Kick
-  const { isSessionKicked } = await import("@/lib/connections");
-  if (await isSessionKicked(line.id, clientIp)) return "kicked";
+  // Kick blocks playback only — Xtream player_api listing must stay auth:1 (XUI-style).
+  if (!options?.listingOnly) {
+    const { isSessionKicked } = await import("@/lib/connections");
+    if (await isSessionKicked(line.id, clientIp)) return "kicked";
+  }
 
   // Live/VOD playback with a stream id — skip geo/DDoS/reputation (HLS seg path already does this).
   const hotPath =
@@ -213,7 +215,9 @@ async function assertPlaybackAllowedInner(
     }
   }
 
-  if (clientIp && !(await checkPlaybackRateLimit(line.id, clientIp))) return "rate";
+  if (!options?.listingOnly && clientIp && !(await checkPlaybackRateLimit(line.id, clientIp))) {
+    return "rate";
+  }
 
   if (!options?.listingOnly && line.maxConnections > 0) {
     const ok = await lineHasConnectionCapacity(line.id, line.maxConnections, {

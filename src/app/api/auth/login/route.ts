@@ -94,17 +94,6 @@ export async function POST(req: NextRequest) {
 
     const ip = clientIp(req);
 
-    let rate: { ok: true } | { ok: false; error: string } = { ok: true };
-    try {
-      rate = await checkLoginRateLimit(ip);
-    } catch (err) {
-      console.error("[auth/login] rate limit check failed (fail-closed):", err);
-      return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
-    }
-    if (!rate.ok) {
-      return NextResponse.json({ error: rate.error }, { status: 429 });
-    }
-
     const parsed = await parseJsonBody<{
       username?: unknown;
       password?: unknown;
@@ -121,10 +110,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
     }
 
+    let rate: { ok: true } | { ok: false; error: string } = { ok: true };
+    try {
+      rate = await checkLoginRateLimit(ip, username);
+    } catch (err) {
+      console.error("[auth/login] rate limit check failed (fail-closed):", err);
+      return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
+    }
+    if (!rate.ok) {
+      return NextResponse.json({ error: rate.error }, { status: 429 });
+    }
+
     const user = await verifyPanelLogin(username, password);
     if (!user) {
       try {
-        const fail = await recordLoginFailure(ip);
+        const fail = await recordLoginFailure(ip, username);
         if (fail.locked) {
           return NextResponse.json(
             { error: "Too many attempts. Try again later." },
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     if (user.totpEnabled && user.totpSecret) {
       if (!totpCode || !verifyTotpCode(user.totpSecret, totpCode)) {
         try {
-          await recordLoginFailure(ip);
+          await recordLoginFailure(ip, username);
         } catch {
           /* ignore */
         }
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
     );
 
     try {
-      clearLoginFailures(ip);
+      clearLoginFailures(ip, username);
     } catch {
       /* ignore */
     }

@@ -34,6 +34,8 @@ export const RESELLER_PANEL_API_ACTIONS = new Set([
   "edit_line",
   "disable_line",
   "enable_line",
+  "suspend_line",
+  "unsuspend_line",
   "ban_line",
   "unban_line",
   "delete_line",

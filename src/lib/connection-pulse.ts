@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
 import { normalizeConnectionIp } from "@/lib/connections";
-import { touchLiveSession } from "@/lib/live-session";
+import { setViewerActiveStream, touchLiveSession } from "@/lib/live-session";
 import { markStreamSpliceOk } from "@/lib/viewer-playback-probe";
 import { lineIsPlayable } from "@/lib/lines";
 import { notifyLiveConnectionsChanged } from "@/lib/connection-live-bus";
@@ -49,13 +49,11 @@ async function pulseLiveConnectionInner(opts: {
   if (bytes > 0 || idleMs > 0) {
     void recordConnectionMediaBytes(lineId, streamId, clientIp, bytes, idleMs, onDemand);
   }
-  void touchLiveSession(lineId, streamId, clientIp || null);
   if (bytes > 0) void markStreamSpliceOk(streamId);
-  void refreshConnSlot(lineId, { streamId, clientIp });
 
   const [stream, line] = await Promise.all([
-    prisma.stream.findFirst({
-      where: { id: streamId, isActive: true },
+    prisma.stream.findUnique({
+      where: { id: streamId },
       select: { id: true },
     }),
     prisma.line.findUnique({
@@ -74,6 +72,9 @@ async function pulseLiveConnectionInner(opts: {
       create: { lineId, streamId, ip: clientIp },
       update: { lastSeenAt: now },
     });
+    void touchLiveSession(lineId, streamId, clientIp || null);
+    void setViewerActiveStream(lineId, streamId, clientIp || null);
+    void refreshConnSlot(lineId, { streamId, clientIp });
     notifyLiveConnectionsChanged();
     return;
   } catch (err) {
@@ -86,6 +87,9 @@ async function pulseLiveConnectionInner(opts: {
           data: { lastSeenAt: now },
         })
         .catch(() => undefined);
+      void touchLiveSession(lineId, streamId, clientIp || null);
+      void setViewerActiveStream(lineId, streamId, clientIp || null);
+      void refreshConnSlot(lineId, { streamId, clientIp });
       notifyLiveConnectionsChanged();
       return;
     }
@@ -97,6 +101,9 @@ async function pulseLiveConnectionInner(opts: {
     data: { lastSeenAt: now },
   });
   if (updated.count > 0) {
+    void touchLiveSession(lineId, streamId, clientIp || null);
+    void setViewerActiveStream(lineId, streamId, clientIp || null);
+    void refreshConnSlot(lineId, { streamId, clientIp });
     notifyLiveConnectionsChanged();
     return;
   }
@@ -106,5 +113,8 @@ async function pulseLiveConnectionInner(opts: {
       data: { lineId, streamId, ip: clientIp },
     })
     .catch(() => undefined);
+  void touchLiveSession(lineId, streamId, clientIp || null);
+  void setViewerActiveStream(lineId, streamId, clientIp || null);
+  void refreshConnSlot(lineId, { streamId, clientIp });
   notifyLiveConnectionsChanged();
 }

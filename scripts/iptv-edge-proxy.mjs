@@ -254,6 +254,7 @@ const edgeMetrics = {
   fanKeyframeHolds: 0,
   fanKeyframeHoldTimeouts: 0,
   eventLoopDelayMs: 0,
+  rateLimited: 0,
 };
 /** streamId -> shared MPEG-TS restream */
 /** streamId -> fan (aliases allowed: multiple catalog rows share one fan object). */
@@ -2609,6 +2610,45 @@ function catalogCacheKey(url, clientReq) {
   return `${String(url || "/").split("#")[0]}::ae=${encodingVariant}::mode=${mode}`;
 }
 
+/** Per-IP L7 throttle for catalog floods and live zaps (panel live-auth stays authoritative). */
+const EDGE_RL_WINDOW_MS = Number(process.env.IPTV_EDGE_RL_WINDOW_MS || 60_000);
+const EDGE_RL_CATALOG_MAX = Number(process.env.IPTV_EDGE_RL_CATALOG_MAX || 90);
+const EDGE_RL_LIVE_MAX = Number(process.env.IPTV_EDGE_RL_LIVE_MAX || 180);
+const EDGE_RL_BURST_MAX = Number(process.env.IPTV_EDGE_RL_BURST_MAX || 45);
+const edgeRateBuckets = new Map();
+
+function clientIpFromReq(clientReq) {
+  const fwd = clientReq.headers["x-forwarded-for"];
+  if (fwd) return String(fwd).split(",")[0].trim();
+  return clientReq.socket?.remoteAddress || "unknown";
+}
+
+function edgeRateLimit(clientReq, clientRes, pathOnly) {
+  const catalog =
+    isCatalogPath(pathOnly) ||
+    /\/player_api\.php/i.test(pathOnly) ||
+    /\/panel_api\.php/i.test(pathOnly);
+  const media = /^\/(?:live|timeshift|movie|series)\//i.test(pathOnly);
+  if (!catalog && !media) return true;
+  const max = catalog ? EDGE_RL_CATALOG_MAX : EDGE_RL_LIVE_MAX;
+  const ip = clientIpFromReq(clientReq);
+  const now = Date.now();
+  const key = `${ip}:${catalog ? "catalog" : "media"}`;
+  let bucket = edgeRateBuckets.get(key);
+  if (!bucket || now - bucket.windowStart > EDGE_RL_WINDOW_MS) {
+    bucket = { windowStart: now, count: 0 };
+  }
+  bucket.count += 1;
+  edgeRateBuckets.set(key, bucket);
+  if (bucket.count > max + EDGE_RL_BURST_MAX) {
+    clientRes.writeHead(429, { "content-type": "text/plain", "retry-after": "30" });
+    clientRes.end("rate limit");
+    edgeMetrics.rateLimited = (edgeMetrics.rateLimited || 0) + 1;
+    return false;
+  }
+  return true;
+}
+
 function catalogResponseHeaders(hdrs, fromCache) {
   const out = { ...hdrs };
   delete out["transfer-encoding"];
@@ -3139,7 +3179,8 @@ async function authLiveCached(clientReq) {
     }
     if (hit.data?.upstream) {
       touchHlsDaemon(hit.data.streamId);
-      return enforceEdgeConnSlot(sanitizeAuthUpstream(hit.data), clientReq);
+      // Slot was acquired when this cache entry was created — re-acquire on every seg/zap causes false max-conn.
+      return sanitizeAuthUpstream(hit.data);
     }
   }
   if (edgeRedisEnabled()) {
@@ -3148,7 +3189,7 @@ async function authLiveCached(clientReq) {
       const clean = sanitizeAuthUpstream(redisHit);
       authCache.set(key, { expires: now + authPositiveTtlMs(clean), data: clean });
       if (clean.streamId) touchHlsDaemon(clean.streamId);
-      return enforceEdgeConnSlot(clean, clientReq);
+      return clean;
     }
   }
   try {
@@ -4249,6 +4290,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
 
 async function onRequest(clientReq, clientRes, ctx) {
   const pathOnly = String(clientReq.url || "/").split("?")[0];
+  if (!edgeRateLimit(clientReq, clientRes, pathOnly)) return;
   if (process.env.IPTV_EDGE_DEBUG_UPSTREAM === "1" && pathOnly.startsWith("/live/")) {
     console.log(`[iptv-edge-req] ${clientReq.method} ${pathOnly}`);
   }

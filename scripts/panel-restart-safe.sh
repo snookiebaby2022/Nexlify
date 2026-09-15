@@ -183,6 +183,9 @@ nexlify_only_restart() {
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then
+    if [ -f scripts/verify-playback-topology.mjs ]; then
+      npx tsx scripts/verify-playback-topology.mjs >>"$LOG_FILE" 2>&1 || log "WARN: playback topology probe reported issues"
+    fi
     warmup_playback_routes
     # shellcheck disable=SC1091
     if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then

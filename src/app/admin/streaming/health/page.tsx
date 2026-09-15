@@ -60,6 +60,15 @@ type HealthSnapshot = {
     atRiskServers: { id: string; name: string; risk: string; label: string; headroomPct: number }[];
     sourceDiagnostics: { id: string; name: string; lastProbeError: string | null; sources: { url: string; state: string; failures: number; successes: number; latencyMs: number | null; bitrateKbps: number | null; lastError: string | null }[] }[];
   };
+  playbackTopology?: {
+    ok: boolean;
+    topology: string | null;
+    streamHost: string | null;
+    streamPort: string | null;
+    onlineLbCount: number;
+    totalLbCount: number;
+    checks: { id: string; label: string; ok: boolean; severity: string; hint: string }[];
+  };
 };
 
 export default function StreamingHealthPage() {
@@ -175,6 +184,27 @@ export default function StreamingHealthPage() {
           </p>
         </div>
       </div>
+
+      {data.playbackTopology && (
+        <section className="rounded-lg border p-4 space-y-2" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h2 className="text-sm font-semibold">Playback topology</h2>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Login/API on this panel · play on{" "}
+            <code className="text-xs">
+              {data.playbackTopology.streamHost ?? "—"}:{data.playbackTopology.streamPort ?? "8080"}
+            </code>
+            {" "}({data.playbackTopology.onlineLbCount}/{data.playbackTopology.totalLbCount} edge LB online, mode{" "}
+            {data.playbackTopology.topology ?? "remote-splice"})
+          </p>
+          <ul className="text-xs space-y-1">
+            {data.playbackTopology.checks.map((c) => (
+              <li key={c.id} className={c.ok ? "text-green-500" : c.severity === "critical" ? "text-red-400" : "text-amber-400"}>
+                {c.ok ? "✓" : "✗"} {c.label} — {c.hint}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section
         className="rounded-lg border p-4 space-y-3"

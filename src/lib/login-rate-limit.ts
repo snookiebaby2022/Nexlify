@@ -61,6 +61,15 @@ async function bumpFloodCountDb(key: string, window: number): Promise<number> {
   return row ? Number(row.value) || 0 : result ? 1 : 0;
 }
 
+/** Never bucket every viewer into one `unknown` lock when IP headers are missing. */
+function lockKey(ip: string, username?: string): string {
+  const trimmed = ip?.trim();
+  if (trimmed) return trimmed;
+  const user = username?.trim().toLowerCase();
+  if (user) return `user:${user}`;
+  return "unknown";
+}
+
 async function bumpFloodCount(key: string, window: number): Promise<number> {
   // Prefer Redis (fast, atomic, multi-instance safe)
   const redisCount = await bumpFloodCountRedis(key, window);
@@ -70,11 +79,12 @@ async function bumpFloodCount(key: string, window: number): Promise<number> {
 }
 
 export async function checkLoginRateLimit(
-  ip: string
+  ip: string,
+  username?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const security = await getSettingGroup("security");
   const floodPerMin = Number(security.loginFloodPerMin ?? 0);
-  const key = ip || "unknown";
+  const key = lockKey(ip, username);
   const now = Date.now();
   const entry = await readEntry(key);
 
@@ -94,11 +104,14 @@ export async function checkLoginRateLimit(
   return { ok: true };
 }
 
-export async function recordLoginFailure(ip: string): Promise<{ locked: boolean }> {
+export async function recordLoginFailure(
+  ip: string,
+  username?: string
+): Promise<{ locked: boolean }> {
   const security = await getSettingGroup("security");
   const max = Math.max(1, Number(security.maxLoginAttempts ?? 5) || 5);
   const lockMin = Number(security.lockoutMinutes ?? 15);
-  const key = ip || "unknown";
+  const key = lockKey(ip, username);
   const now = Date.now();
   const entry = await readEntry(key);
 
@@ -116,8 +129,8 @@ export async function recordLoginFailure(ip: string): Promise<{ locked: boolean 
   return { locked };
 }
 
-export async function clearLoginFailures(ip: string) {
-  const key = ip || "unknown";
+export async function clearLoginFailures(ip: string, username?: string) {
+  const key = lockKey(ip, username);
   await prisma.panelSetting.deleteMany({
     where: { key: { in: [RL_PREFIX + key] } },
   });

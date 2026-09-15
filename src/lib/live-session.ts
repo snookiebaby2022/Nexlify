@@ -87,6 +87,40 @@ export async function listRedisLiveSessions(): Promise<RedisLiveSession[]> {
   return dedupeRedisLiveSessions(parsed);
 }
 
+export type RedisActiveViewer = {
+  lineId: string;
+  streamId: string;
+  ip: string | null;
+};
+
+/** One active stream per line + viewer IP (XUI-style zap target). */
+export function parseViewerActiveStreamKey(key: string): { lineId: string; ip: string | null } | null {
+  const prefix = "live:viewer:";
+  if (!key.startsWith(prefix)) return null;
+  const rest = key.slice(prefix.length);
+  const i = rest.indexOf(":");
+  if (i <= 0) return null;
+  const lineId = rest.slice(0, i);
+  const ipRaw = rest.slice(i + 1);
+  const ip = !ipRaw || ipRaw === "*" ? null : ipRaw;
+  if (!lineId) return null;
+  return { lineId, ip };
+}
+
+export async function listRedisActiveViewers(): Promise<RedisActiveViewer[]> {
+  const keys = await cacheScanKeys("live:viewer:*", 5000);
+  if (!keys.length) return [];
+  const streamIds = await cacheMget<string>(keys);
+  const out: RedisActiveViewer[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    const meta = parseViewerActiveStreamKey(keys[i]);
+    const streamId = streamIds[i]?.trim();
+    if (!meta?.lineId || !streamId) continue;
+    out.push({ lineId: meta.lineId, streamId, ip: meta.ip });
+  }
+  return out;
+}
+
 export async function touchLiveSession(
   lineId: string,
   streamId: string,
