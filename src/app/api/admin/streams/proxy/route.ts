@@ -23,9 +23,18 @@ export async function POST(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const parsed = await parseJsonBody<{ url?: unknown; hls?: unknown }>(req);
+  const parsed = await parseJsonBody<{ url?: unknown; hls?: unknown; streamId?: unknown }>(req);
   if (!parsed.ok) return parsed.response;
-  const url = String(parsed.data.url ?? "").trim();
+  let url = String(parsed.data.url ?? "").trim();
+  const streamId = String(parsed.data.streamId ?? "").trim();
+  if (!url && streamId) {
+    const { prisma } = await import("@/lib/prisma");
+    const stream = await prisma.stream.findUnique({
+      where: { id: streamId },
+      select: { streamUrl: true },
+    });
+    url = String(stream?.streamUrl ?? "").trim();
+  }
   if (!url) return NextResponse.json({ error: "url required" }, { status: 400 });
 
   try {
@@ -41,11 +50,13 @@ export async function POST(req: NextRequest) {
     parsed.data.hls === true ||
     adminPreviewWantsHls(url, false) ||
     (!url.includes(".ts") && /^https?:\/\//i.test(url));
+  const isTs = /\.ts($|\?)/i.test(url) || /\/live\//i.test(url);
   const token = mintAdminStreamProxyToken(url, session.id);
   const playbackUrl = adminProxyPlaybackPath(token, {
-    hls: wantsHls && !isHlsPlaybackUrl(url) ? true : undefined,
+    hls: wantsHls && !isHlsPlaybackUrl(url) && !isTs ? true : undefined,
+    mpegts: isTs || undefined,
   });
-  return NextResponse.json({ token, playbackUrl, hls: wantsHls });
+  return NextResponse.json({ token, playbackUrl, hls: wantsHls, mpegts: isTs });
 }
 
 export async function GET(req: NextRequest) {

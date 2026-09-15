@@ -437,37 +437,44 @@ export async function getDashboardSummary() {
   };
 }
 
-/** Dashboard summary scoped to a reseller/sub-reseller's owned lines. */
-export async function getResellerDashboardSummary(ownerId: string) {
+function activeLinesWhereForOwners(ownerIds: string[]) {
   const now = new Date();
-  const lineWhere = { ownerId };
+  const owner =
+    ownerIds.length === 1 ? { ownerId: ownerIds[0] } : { ownerId: { in: ownerIds } };
+  return { ...owner, status: "ACTIVE" as const, expiresAt: { gt: now } };
+}
 
-  const [
-    totalLiveStreams,
-    totalActiveLines,
-    viewer,
-    allServers,
-    onlineServerCount,
-  ] = await Promise.all([
-    prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
-    prisma.line.count({
-      where: { ...lineWhere, status: "ACTIVE", expiresAt: { gt: now } },
-    }),
-    liveViewerStats(ownerId),
-    prisma.streamServer.count(),
-    prisma.streamServer.count({
-      where: { healthStatus: { in: ["online", "healthy"] } },
-    }),
-  ]);
+/** Dashboard summary scoped to a reseller's tree (self + direct sub-resellers). */
+export async function getResellerDashboardSummary(ownerIds: string[]) {
+  const lineWhere = activeLinesWhereForOwners(ownerIds);
+  const viewerScope = ownerIds.length === 1 ? ownerIds[0] : ownerIds;
 
-  const streamSettings = await getSettingGroup("streams");
-  const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);
-  const maxConnections =
-    perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
+  const [totalActiveLines, viewer, allServers, onlineServerCount, connectionCapSum] =
+    await Promise.all([
+      prisma.line.count({ where: lineWhere }),
+      liveViewerStats(viewerScope),
+      prisma.streamServer.count(),
+      prisma.streamServer.count({
+        where: { healthStatus: { in: ["online", "healthy"] } },
+      }),
+      prisma.line.aggregate({
+        where: lineWhere,
+        _sum: { maxConnections: true },
+      }),
+    ]);
+
+  let maxConnections = connectionCapSum._sum.maxConnections ?? 0;
+  if (maxConnections <= 0) {
+    const streamSettings = await getSettingGroup("streams");
+    const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);
+    maxConnections =
+      perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
+  }
 
   return {
     onlineStreams: viewer.onlineStreams,
-    totalLiveStreams,
+    /** Reseller UI shows live viewers only — not the panel-wide channel catalog (admin uses totalLiveStreams). */
+    totalLiveStreams: 0,
     onlineUsers: viewer.onlineUsers,
     totalActiveLines,
     onlineConnections: viewer.onlineConnections,

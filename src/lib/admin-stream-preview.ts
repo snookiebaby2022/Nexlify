@@ -5,10 +5,11 @@ export const ADMIN_PROXY_MAX_REDIRECTS = 5;
 
 export function adminProxyPlaybackPath(
   token: string,
-  opts?: { hls?: boolean; relayTarget?: string }
+  opts?: { hls?: boolean; mpegts?: boolean; relayTarget?: string }
 ): string {
   const params = new URLSearchParams({ t: token });
   if (opts?.hls) params.set("hls", "1");
+  if (opts?.mpegts) params.set("mpegts", "1");
   if (opts?.relayTarget) params.set("r", encodePreviewRelayTarget(opts.relayTarget));
   return `/api/admin/streams/proxy?${params.toString()}`;
 }

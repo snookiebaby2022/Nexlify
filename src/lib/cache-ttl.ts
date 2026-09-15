@@ -10,7 +10,8 @@ export type CacheTtlSettings = {
 const FALLBACK: CacheTtlSettings = {
   stats: 45,
   epg: 43_200,
-  categories: 120,
+  // 5 min default — 120s caused frequent Redis misses on get_live_categories (~2s DB hits).
+  categories: 300,
   playbackUrl: 60,
 };
 

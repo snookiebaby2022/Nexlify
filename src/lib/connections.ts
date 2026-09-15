@@ -457,7 +457,17 @@ async function lineHasConnectionCapacityInner(
     streamId: opts?.streamId,
     clientIp,
   });
-  if (slot === "denied") return false;
+  if (slot === "denied") {
+    // Verify against DB ground truth before denying playback.
+    // Stale Redis set entries from dropped sockets must not block the line.
+    const allowed = await lineHasConnectionCapacityDb(lineId, maxConnections, opts);
+    if (!allowed) return false;
+    const { getSlotsRedis } = await import("@/lib/redis");
+    const redisClient = getSlotsRedis();
+    if (redisClient) {
+      await redisClient.del(`nexlify:conn:slots:${lineId}`).catch(() => {});
+    }
+  }
 
   const { cacheGet, cacheSet } = await import("@/lib/cache");
   const cacheKey = `conn:cap:${lineId}:${clientIp ?? ""}:${opts?.streamId ?? ""}`;

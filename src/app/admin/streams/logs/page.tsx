@@ -59,8 +59,6 @@ export default function StreamLogsPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
   }, [load]);
 
   return (

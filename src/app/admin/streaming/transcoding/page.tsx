@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FFMPEG_TRANSCODE_PROFILES } from "@/lib/ffmpeg-transcode-profiles";
-import { GPU_TRANSCODE_LADDER } from "@/lib/gpu-transcode";
+import { GPU_TRANSCODE_LADDER } from "@/lib/gpu-transcode-ladder";
 
 export default function TranscodingHubPage() {
   return (

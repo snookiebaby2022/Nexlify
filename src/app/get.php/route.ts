@@ -74,9 +74,12 @@ export async function GET(req: NextRequest) {
   const includeSeries =
     req.nextUrl.searchParams.get("include_series") === "1" ||
     req.nextUrl.searchParams.get("include_series") === "true";
+  const liveOnly =
+    req.nextUrl.searchParams.get("live_only") === "1" ||
+    req.nextUrl.searchParams.get("live_only") === "true";
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
-  const body = buildM3uStream(line, baseUrl, type, output, { includeSeries });
+  const body = buildM3uStream(line, baseUrl, type, output, { includeSeries, liveOnly });
 
   return iptvText(body, {
     headers: {

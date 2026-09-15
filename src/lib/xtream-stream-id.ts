@@ -12,6 +12,20 @@ export function cuidToNum(id: string): number {
   return Math.abs(h);
 }
 
+/**
+ * Dual-tag "Recently Added" listing rows need a distinct stream_id so XCIPTV's
+ * SQLite upsert (PK=stream_id) does not overwrite the genre row.
+ * XOR bit 29 keeps the alias in the positive signed-32 range (Android int-safe).
+ * Negatives were rejected/skipped by some XCIPTV builds and broke the import.
+ */
+export const XTREAM_RECENT_ALIAS_XOR = 0x20000000;
+
+export function xtreamRecentAliasStreamId(streamId: number): number {
+  const n = Math.abs(Number(streamId)) || 1;
+  return (n ^ XTREAM_RECENT_ALIAS_XOR) >>> 0;
+}
+
+
 /** Xtream category_id: numeric string for XCIPTV / XUI apps (cuid hashed). */
 export function xtreamCategoryId(categoryId: string | null | undefined): string {
   if (!categoryId) return "0";
@@ -181,7 +195,7 @@ export async function resolveStreamIdParam(
   const raw = streamIdParam.replace(/\.(ts|m3u8|mp4|mkv|avi|mov|webm)$/i, "").trim();
   if (!raw) return null;
 
-  if (!/^\d+$/.test(raw)) {
+  if (!/^-?\d+$/.test(raw)) {
     const exists = await prisma.stream.findUnique({ where: { id: raw }, select: { id: true } });
     return exists?.id ?? raw;
   }
@@ -189,6 +203,18 @@ export async function resolveStreamIdParam(
   const numericId = parseInt(raw, 10);
   if (!Number.isFinite(numericId)) return null;
 
+  const abs = Math.abs(numericId);
+  const resolved = await resolveXtreamNumericStreamId(abs, opts);
+  if (resolved) return resolved;
+  // Dual-tag Recently Added rows use stream_id ^ XTREAM_RECENT_ALIAS_XOR
+  // (and older builds briefly used negatives).
+  return resolveXtreamNumericStreamId((abs ^ XTREAM_RECENT_ALIAS_XOR) >>> 0, opts);
+}
+
+async function resolveXtreamNumericStreamId(
+  numericId: number,
+  opts?: { username?: string; lineId?: string }
+): Promise<string | null> {
   let lineId = opts?.lineId ?? null;
   if (!lineId && opts?.username) {
     const row = await prisma.line.findUnique({

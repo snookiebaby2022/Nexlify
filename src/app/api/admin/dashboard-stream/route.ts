@@ -6,6 +6,7 @@ import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
 import { getDashboardPlaybackBandwidth } from "@/lib/dashboard-server-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { ownerLineOwnerIds } from "@/lib/owner-scope";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -15,7 +16,6 @@ export async function GET(req: NextRequest) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const encoder = new TextEncoder();
-  const ownerId = session.role === "ADMIN" ? undefined : session.id;
   const { dashboardSseMs } = await getServerPollIntervals();
 
   const stream = new ReadableStream({
@@ -27,18 +27,37 @@ export async function GET(req: NextRequest) {
       const update = async () => {
         try {
           const now = new Date();
+          const scope =
+            session.role === PanelRole.ADMIN ? undefined : await ownerLineOwnerIds(session);
+          const lineWhere =
+            scope == null
+              ? { status: "ACTIVE" as const, expiresAt: { gt: now } }
+              : scope.length === 1
+                ? { ownerId: scope[0], status: "ACTIVE" as const, expiresAt: { gt: now } }
+                : {
+                    ownerId: { in: scope },
+                    status: "ACTIVE" as const,
+                    expiresAt: { gt: now },
+                  };
           const [rows, activeLines] = await Promise.all([
-            listLiveConnections(ownerId),
-            prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
+            listLiveConnections(scope),
+            prisma.line.count({ where: lineWhere }),
           ]);
 
           const live = rows.filter((r) => !isTestConnectionIp(r.ip));
           const users = new Set(live.map((r) => r.lineId));
-          const streams = new Set(
-            live.filter((r) => r.stream?.type === "LIVE").map((r) => r.streamId).filter(Boolean)
-          );
+          const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
 
-          const playback = await getDashboardPlaybackBandwidth();
+          const playback =
+            session.role === PanelRole.ADMIN
+              ? await getDashboardPlaybackBandwidth()
+              : {
+                  networkInMbps: 0,
+                  networkOutMbps: 0,
+                  lbCapMbps: 0,
+                  panelProxyMbps: 0,
+                  measured: false,
+                };
 
           send({
             timestamp: now.toISOString(),
@@ -60,7 +79,7 @@ export async function GET(req: NextRequest) {
             })),
           });
         } catch (err) {
-          send({ error: String(err) });
+          send({ error: "update_failed" });
         }
       };
 

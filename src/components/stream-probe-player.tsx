@@ -36,7 +36,9 @@ export function StreamProbePlayer({
   const [probing, setProbing] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [resolvedUrl, setResolvedUrl] = useState(streamUrl);
-  const [showPlayer, setShowPlayer] = useState(Boolean(playFirst && canPlayInBrowser(streamUrl)));
+  const [showPlayer, setShowPlayer] = useState(
+    Boolean(playFirst && (canPlayInBrowser(streamUrl) || Boolean(streamId)))
+  );
   const [playerError, setPlayerError] = useState("");
 
   const attachMedia = useCallback(async (url: string) => {
@@ -57,7 +59,7 @@ export function StreamProbePlayer({
   useEffect(() => {
     setResolvedUrl(streamUrl);
     setProbe(null);
-    setShowPlayer(Boolean(playFirst && canPlayInBrowser(streamUrl)));
+    setShowPlayer(Boolean(playFirst && (canPlayInBrowser(streamUrl) || Boolean(streamId))));
     setPlayerError("");
     probedOnErrorRef.current = false;
   }, [streamUrl, playFirst]);
@@ -70,6 +72,7 @@ export function StreamProbePlayer({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: streamUrl,
+          streamId,
           hls: isBrowserHlsUrl(streamUrl) || (!streamUrl.includes(".ts") && /^https?:\/\//i.test(streamUrl)),
         }),
       });
@@ -149,7 +152,7 @@ export function StreamProbePlayer({
   }, [playerError]);
 
   const displayUrl = streamUrl;
-  const canPlay = canPlayInBrowser(streamUrl) || canPlayInBrowser(resolvedUrl);
+  const canPlay = canPlayInBrowser(streamUrl) || canPlayInBrowser(resolvedUrl) || Boolean(streamId);
   const statusColor =
     probe?.status === "online"
       ? "var(--success)"

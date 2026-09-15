@@ -11,6 +11,7 @@ import {
   buildCanonicalCategoryMaps,
   canonicalNumericForCategory,
 } from "./xtream-category-canonical";
+import { xtreamExportCategoryIdValue } from "./xtream-safe";
 import { parseXtreamVodMeta } from "./vod-meta";
 
 export { cuidToNum, resolveStreamIdParam };
@@ -66,7 +67,8 @@ export function emptyXtreamSeriesInfo() {
 export async function xtreamVodInfo(
   line: LineWithBouquets,
   _baseUrl: string,
-  streamIdParam: string
+  streamIdParam: string,
+  numericCategoryId = false,
 ) {
   const streamId = await resolveStreamIdParam(streamIdParam, { lineId: line.id });
   if (!streamId) return null;
@@ -103,7 +105,10 @@ export async function xtreamVodInfo(
       stream_id: cuidToNum(full.id),
       name: xtreamSafeText(full.name) || "Movie",
       added: String(xtreamAddedUnix(full.createdAt, full.updatedAt)),
-      category_id: canonicalNumericForCategory(canonical, full.categoryId),
+      category_id: xtreamExportCategoryIdValue(
+        canonicalNumericForCategory(canonical, full.categoryId),
+        numericCategoryId,
+      ),
       container_extension: ext,
       custom_sid: "",
       direct_source: "",
@@ -115,7 +120,8 @@ export async function xtreamVodInfo(
 export async function xtreamSeriesInfo(
   line: LineWithBouquets,
   _baseUrl: string,
-  seriesIdParam: string
+  seriesIdParam: string,
+  numericCategoryId = false,
 ) {
   const streamId = await resolveStreamIdParam(seriesIdParam, { lineId: line.id });
   if (!streamId) return null;
@@ -187,7 +193,10 @@ export async function xtreamSeriesInfo(
       backdrop_path: backdropPath(meta.backdrop),
       youtube_trailer: metaText(meta.trailer),
       episode_run_time: metaText(meta.duration) || "0",
-      category_id: canonicalNumericForCategory(canonical, seed.categoryId),
+      category_id: xtreamExportCategoryIdValue(
+        canonicalNumericForCategory(canonical, seed.categoryId),
+        numericCategoryId,
+      ),
     },
     episodes: seasons,
   };

@@ -50,6 +50,7 @@ import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtre
 import { cacheGetOrSet } from "./cache";
 
 type RequestHeaders = { get(name: string): string | null };
+const XTREAM_LEAN_ICON_PLACEHOLDER = "https://darkcdn.site/favicon.ico";
 
 function lineDateMs(value: Date | string | null | undefined): number {
   if (!value) return 0;
@@ -505,10 +506,14 @@ export async function xtreamLiveStreams(
   return live.map((s, i) => mapXtreamLiveItem(s, i, canonical, opts));
 }
 
-export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string, categoryId?: string | null) {
+export async function xtreamVodStreams(
+  line: LineWithBouquets,
+  _baseUrl: string,
+  categoryId?: string | null,
+  opts?: { numericCategoryId?: boolean },
+) {
   let vod;
   let forceRecentCategoryId: string | undefined;
-  let dualTagRecent = false;
   if (!isXtreamAllCategoryParam(categoryId)) {
     const ids = await categoryIdsForXtreamFilter(categoryId!, StreamType.MOVIE);
     if (ids === "missing") return [];
@@ -519,8 +524,6 @@ export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string,
         const canonicalMaps = await buildCanonicalCategoryMaps(StreamType.MOVIE);
         forceRecentCategoryId =
           canonicalMaps.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId;
-      } else {
-        dualTagRecent = true;
       }
     } else {
       vod = await streamsForLineExport(line, {
@@ -532,47 +535,39 @@ export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string,
     }
   } else {
     vod = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
-    dualTagRecent = true;
   }
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
-  const recentCategoryId =
-    canonical.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId;
-
-  if (forceRecentCategoryId) {
-    return vod.map((s, i) =>
-      mapXtreamVodItem(s, i, canonical, { forceCategoryNumericId: forceRecentCategoryId })
-    );
-  }
-
-  if (!dualTagRecent || !recentCategoryId) {
-    return vod.map((s, i) => mapXtreamVodItem(s, i, canonical));
-  }
-
+  const seenStreamIds = new Set<number>();
+  let outIndex = 0;
   const out: ReturnType<typeof mapXtreamVodItem>[] = [];
   for (let i = 0; i < vod.length; i++) {
     const s = vod[i]!;
-    const genreItem = mapXtreamVodItem(
-      s,
-      i,
-      canonical,
-      i < VIRTUAL_RECENT_VOD_LIMIT ? { alsoCategoryNumericIds: [recentCategoryId] } : undefined
-    );
-    out.push(genreItem);
-    if (i < VIRTUAL_RECENT_VOD_LIMIT && String(genreItem.category_id) !== String(recentCategoryId)) {
-      out.push(
-        mapXtreamVodItem(s, i, canonical, { forceCategoryNumericId: recentCategoryId })
-      );
+    const item = mapXtreamVodItem(s, outIndex, canonical, {
+      forceCategoryNumericId: forceRecentCategoryId,
+      numericCategoryId: Boolean(opts?.numericCategoryId),
+    });
+    if (!seenStreamIds.has(item.stream_id)) {
+      out.push(item);
+      seenStreamIds.add(item.stream_id);
+      outIndex++;
     }
   }
   return out;
 }
 
-export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  return xtreamCategoriesForType(line, StreamType.MOVIE);
+export async function xtreamVodCategoriesForLine(
+  line: LineWithBouquets,
+  numericCategoryId = false
+) {
+  return xtreamCategoriesForType(line, StreamType.MOVIE, numericCategoryId);
 }
 
-export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
+export async function xtreamSeriesForLine(
+  line: LineWithBouquets,
+  categoryId?: string | null,
+  opts?: { numericCategoryId?: boolean },
+) {
   const bouquetIds = activeBouquetIds(line);
   if (!bouquetIds.length) return [];
 
@@ -595,11 +590,18 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.SERIES);
 
-  return seeds.map((s, i) => mapXtreamSeriesItem(s, i, canonical));
+  return seeds.map((s, i) =>
+    mapXtreamSeriesItem(s, i, canonical, {
+      numericCategoryId: Boolean(opts?.numericCategoryId),
+    })
+  );
 }
 
-export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  return xtreamCategoriesForType(line, StreamType.SERIES);
+export async function xtreamSeriesCategoriesForLine(
+  line: LineWithBouquets,
+  numericCategoryId = false
+) {
+  return xtreamCategoriesForType(line, StreamType.SERIES, numericCategoryId);
 }
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" | "auto" = "auto") {

@@ -18,7 +18,7 @@ import {
   xtreamCatalogDirectSource,
   xtreamListingExtension,
 } from "@/lib/xtream-safe";
-import { cuidToNum } from "@/lib/xtream-stream-id";
+import { cuidToNum, xtreamRecentAliasStreamId } from "@/lib/xtream-stream-id";
 import { xtreamListingRating } from "@/lib/vod-meta";
 
 /** XCIPTV drops / ignores VOD rows with category_id "0" in Latest + folders.
@@ -104,38 +104,58 @@ export function mapXtreamVodItem(
   index: number,
   canonical: CanonicalCategoryMaps,
   opts?: {
+    numericCategoryId?: boolean;
     forceCategoryNumericId?: string;
     /** Extra folder ids (e.g. virtual Recently Added) for apps that read category_ids. */
     alsoCategoryNumericIds?: string[];
+    /** Distinct stream_id for dual-tag Recently Added rows (XCIPTV SQLite PK). */
+    recentAliasStreamId?: boolean;
+    /** Drop poster URLs on huge full dumps; get_vod_info still returns artwork. */
+    omitListingIcons?: boolean;
+    /** Optional non-empty fallback for clients that drop blank icon rows. */
+    iconPlaceholder?: string;
+    /** Explicit unique listing number for alias rows. */
+    listingNum?: number;
   }
 ) {
   const genreCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
   const numCategoryId = opts?.forceCategoryNumericId || genreCategoryId;
   const stars = xtreamListingRating(s.vodRating);
-  const icon = xtreamSafeText(s.streamIcon);
+  const icon = opts?.omitListingIcons
+    ? xtreamSafeText(opts.iconPlaceholder) || ""
+    : xtreamSafeText(s.streamIcon);
   const added = xtreamAddedUnix(s.createdAt, s.updatedAt);
   const modified = xtreamUnix(s.updatedAt);
   const also = [
     ...(opts?.alsoCategoryNumericIds ?? []),
-    // Keep genre visible in category_ids when we force Recently Added on a duplicate row.
+    // Keep genre visible in category_ids when we force Recently Added on a row.
     opts?.forceCategoryNumericId && opts.forceCategoryNumericId !== genreCategoryId
       ? genreCategoryId
       : undefined,
   ];
+  // Lean listing: Firesticks omit Accept-Encoding so full get_vod_streams is huge.
+  // Empty movie_image; optional empty stream_icon on full dumps.
+  const directSource = xtreamCatalogDirectSource();
+  const baseStreamId = cuidToNum(s.id);
+  const categoryId = xtreamExportCategoryIdValue(
+    numCategoryId,
+    Boolean(opts?.numericCategoryId),
+  );
   return {
-    num: index + 1,
+    num: opts?.listingNum ?? index + 1,
     name: xtreamSafeText(s.name) || "Movie",
     stream_type: "movie" as const,
-    stream_id: cuidToNum(s.id),
+    stream_id: opts?.recentAliasStreamId
+      ? xtreamRecentAliasStreamId(baseStreamId)
+      : baseStreamId,
     stream_icon: icon,
     movie_image: icon,
     rating: stars.rating,
     rating_5based: stars.rating_5based,
     added: String(added),
-    updated_at: modified,
     last_modified: String(modified),
     is_adult: s.isAdult ? 1 : 0,
-    category_id: xtreamExportCategoryId(numCategoryId),
+    category_id: categoryId,
     category_ids: xtreamCategoryIds(numCategoryId, also),
     container_extension: xtreamListingExtension(
       s.containerExtension,
@@ -143,7 +163,7 @@ export function mapXtreamVodItem(
       s.urlExt ?? s.streamUrl
     ),
     custom_sid: "",
-    direct_source: xtreamCatalogDirectSource(),
+    direct_source: directSource || "",
   };
 }
 
@@ -151,7 +171,7 @@ export function mapXtreamSeriesItem(
   s: SeriesSeedRow,
   index: number,
   canonical: CanonicalCategoryMaps,
-  opts?: { forceCategoryNumericId?: string }
+  opts?: { forceCategoryNumericId?: string; numericCategoryId?: boolean }
 ) {
   const numCategoryId =
     opts?.forceCategoryNumericId ||
@@ -163,6 +183,10 @@ export function mapXtreamSeriesItem(
   const modified = xtreamUnix(s.updatedAt);
   const stars = xtreamListingRating(s.vodRating);
   const cover = xtreamSafeText(s.streamIcon);
+  const categoryId = xtreamExportCategoryIdValue(
+    numCategoryId,
+    Boolean(opts?.numericCategoryId),
+  );
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Series",
@@ -180,7 +204,7 @@ export function mapXtreamSeriesItem(
     backdrop_path: [] as string[],
     youtube_trailer: "",
     episode_run_time: "0",
-    category_id: xtreamExportCategoryId(numCategoryId),
+    category_id: categoryId,
     category_ids: xtreamCategoryIds(numCategoryId),
   };
 }
