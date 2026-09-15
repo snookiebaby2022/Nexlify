@@ -24,6 +24,9 @@ async function pushScript(c, name) {
       "ensure-iptv-edge-pm2.sh",
       "install-iptv-edge-boot.sh",
       "fix-edge-ports-remote.sh",
+      "iptv-edge-proxy.mjs",
+      "edge-redis-slots.mjs",
+      "edge-redis-auth.mjs",
     ]) {
       try {
         await pushScript(c, sh);
