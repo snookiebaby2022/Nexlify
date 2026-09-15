@@ -576,6 +576,35 @@ export async function handleXuiExtendedAction(
       return { status: "success", staff: { id: staff.id, username: staff.username }, password };
     }
 
+    case "get_settings": {
+      const { getSettingGroup } = await import("./panel-settings");
+      const [streams, billing, security] = await Promise.all([
+        getSettingGroup("streams"),
+        getSettingGroup("billing"),
+        getSettingGroup("security"),
+      ]);
+      return {
+        status: "success",
+        settings: { streaming: streams, billing, security },
+      };
+    }
+
+    case "credit_logs": {
+      const start = parseBoundedInt(params.get("start"), 0, 0, 1_000_000);
+      const limit = parseBoundedInt(params.get("limit"), 50, 1, 500);
+      const where = caller.isAdmin ? {} : { userId: caller.id };
+      const [recordsTotal, logs] = await Promise.all([
+        prisma.creditTransaction.count({ where }),
+        prisma.creditTransaction.findMany({
+          where,
+          skip: start,
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+      return { status: "success", recordsTotal, credit_logs: logs };
+    }
+
     default:
       return null;
   }
