@@ -25,6 +25,25 @@ export default function WhiteLabelSettingsPage() {
           ],
         },
         {
+          title: "Sidebar",
+          fields: [
+            {
+              key: "whiteLabelSidebarNavAccent",
+              label: "Category highlight colour",
+              type: "color",
+              placeholder: "#22d3ee",
+              hint: "Colour for the active sidebar category label and sub-link highlight. Leave empty to use the accent colour.",
+            },
+            {
+              key: "whiteLabelSidebarHiddenHrefs",
+              label: "Hidden sidebar links",
+              type: "textarea",
+              placeholder: "/admin/stream_errors\n/admin/management/logs",
+              hint: "One path per line (e.g. /admin/logs). Matching top-level and submenu links are hidden for all admins.",
+            },
+          ],
+        },
+        {
           title: "Custom CSS",
           fields: [
             { key: "whiteLabelCustomCss", label: "Custom CSS", type: "textarea", placeholder: "/* Add your custom styles here */\n.panel-sidebar { background: #1a1a2e; }", hint: "Injected into the panel head. Use with caution." },

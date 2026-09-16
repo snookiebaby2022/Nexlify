@@ -12,6 +12,8 @@ export type ResellerWhiteLabel = {
   customCss?: string;
   faviconUrl?: string;
   headerColor?: string;
+  sidebarNavAccent?: string;
+  sidebarHiddenHrefs?: string;
 };
 
 export async function getWhiteLabelForUserId(userId: string): Promise<ResellerWhiteLabel | null> {

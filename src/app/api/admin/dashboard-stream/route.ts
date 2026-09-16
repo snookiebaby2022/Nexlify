@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
+import { isCatalogApiChannelId } from "@/lib/catalog-api-channel";
+import { isTestConnectionIp, listLiveConnections, liveViewerStats } from "@/lib/connections";
 import { getDashboardPlaybackBandwidth } from "@/lib/dashboard-server-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -39,14 +40,13 @@ export async function GET(req: NextRequest) {
                     status: "ACTIVE" as const,
                     expiresAt: { gt: now },
                   };
-          const [rows, activeLines] = await Promise.all([
+          const [rows, activeLines, viewer] = await Promise.all([
             listLiveConnections(scope),
             prisma.line.count({ where: lineWhere }),
+            liveViewerStats(scope),
           ]);
 
           const live = rows.filter((r) => !isTestConnectionIp(r.ip));
-          const users = new Set(live.map((r) => r.lineId));
-          const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
 
           const playback =
             session.role === PanelRole.ADMIN
@@ -61,16 +61,21 @@ export async function GET(req: NextRequest) {
 
           send({
             timestamp: now.toISOString(),
-            onlineConnections: live.length,
-            onlineUsers: users.size,
-            onlineStreams: streams.size,
+            onlineConnections: viewer.onlineConnections,
+            onlineUsers: viewer.onlineUsers,
+            onlineStreams: viewer.onlineStreams,
+            onlineWatchingConnections: viewer.onlineWatchingConnections,
+            onlineApiConnections: viewer.onlineApiConnections,
             totalActiveLines: activeLines,
             networkInMbps: playback.networkInMbps,
             networkOutMbps: playback.networkOutMbps,
             lbCapMbps: playback.lbCapMbps,
             panelProxyMbps: playback.panelProxyMbps,
             bandwidthMeasured: playback.measured,
-            connections: live.slice(0, 10).map((c) => ({
+            connections: live
+              .filter((c) => !isCatalogApiChannelId(c.stream?.channelId))
+              .slice(0, 10)
+              .map((c) => ({
               id: c.id,
               line: c.line?.username ?? "unknown",
               stream: c.stream?.name ?? "unknown",

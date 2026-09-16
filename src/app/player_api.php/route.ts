@@ -48,6 +48,7 @@ import { prisma } from "@/lib/prisma";
 import { resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { publicOriginFromRequest } from "@/lib/public-origin";
+import { pulseXtreamCatalogActivity } from "@/lib/catalog-api-connection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -212,15 +213,27 @@ async function handlePlayerApiInner(
 
   const baseUrl = panelBase;
 
+  const catalogPulse = (act: string) => {
+    void pulseXtreamCatalogActivity({
+      lineId: line.id,
+      ip,
+      userAgent,
+      action: act,
+    });
+  };
+
   if (!action) {
     // Login/user_info only needs live ready for first zap. VOD/series are
     // warmed by cron; launching all three for every login caused DB storms.
+    catalogPulse("login");
     void warmXtreamLiveCatalogNow(line).catch(() => undefined);
     warmLineXmltv(line);
     return j(await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin));
   }
 
   const bouquetToken = lineBouquetCacheToken(line);
+
+  catalogPulse(action);
 
   switch (action) {
     case "get_live_categories": {

@@ -988,7 +988,12 @@ export async function PATCH(req: NextRequest) {
         userId: session.id,
         entity: "stream",
         entityId: id,
-        meta: { name: stream.name },
+        meta: {
+          name: stream.name,
+          streamName: stream.name,
+          streamId: id,
+          type: stream.type,
+        },
       });
     } catch {
       /* non-fatal */

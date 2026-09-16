@@ -153,6 +153,10 @@ type DashboardSummary = {
 
   onlineConnections: number;
 
+  onlineWatchingConnections?: number;
+
+  onlineApiConnections?: number;
+
   maxConnections: number;
 
   onlineServers: number;
@@ -333,10 +337,18 @@ export function PanelDashboard({
         onlineConnections: liveStats.onlineConnections,
         onlineUsers: liveStats.onlineUsers,
         onlineStreams: liveStats.onlineStreams,
+        onlineWatchingConnections: liveStats.onlineWatchingConnections,
+        onlineApiConnections: liveStats.onlineApiConnections,
         totalLiveStreams: isReseller ? 0 : d?.totalLiveStreams,
         totalActiveLines: liveStats.totalActiveLines ?? d?.totalActiveLines,
       }
-    : d ?? undefined;
+    : d
+      ? {
+          ...d,
+          onlineWatchingConnections: d.onlineWatchingConnections,
+          onlineApiConnections: d.onlineApiConnections,
+        }
+      : undefined;
   const watchingNowValue = (() => {
     const n = liveSummary?.onlineStreams ?? d?.onlineStreams ?? "—";
     const denom = liveSummary?.totalLiveStreams ?? d?.totalLiveStreams;

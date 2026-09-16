@@ -28,6 +28,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         brandTitle,
         headerColor: String(wl.whiteLabelHeaderColor ?? ""),
         faviconUrl: String(wl.whiteLabelFaviconUrl ?? ""),
+        sidebarNavAccent: String(wl.whiteLabelSidebarNavAccent ?? ""),
+        sidebarHiddenHrefs: String(wl.whiteLabelSidebarHiddenHrefs ?? ""),
       }}
     >
       {children}

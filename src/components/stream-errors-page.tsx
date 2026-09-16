@@ -29,6 +29,17 @@ type ProcessErr = {
   server: { name: string };
 };
 
+type PlaybackIssue = {
+  id: string;
+  action: string;
+  createdAt: string;
+  lineUsername: string | null;
+  streamName: string | null;
+  streamId: string | null;
+  detail: string | null;
+  status: number | null;
+};
+
 function formatWhen(iso: string | null | undefined) {
   if (!iso) return "Never";
   const t = new Date(iso).getTime();
@@ -72,22 +83,26 @@ export function StreamErrorsClient() {
   );
   const [streams, setStreams] = useState<StreamErr[]>([]);
   const [processes, setProcesses] = useState<ProcessErr[]>([]);
+  const [playbackIssues, setPlaybackIssues] = useState<PlaybackIssue[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
+  const [playbackHours, setPlaybackHours] = useState(24);
 
   const load = useCallback(() => {
-    fetch("/api/admin/stream-errors", { cache: "no-store" })
+    fetch(`/api/admin/stream-errors?hours=${playbackHours}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         setStreams(d.streams ?? d.probeFails ?? []);
         setProcesses(d.processErrors ?? []);
+        setPlaybackIssues(d.playbackIssues ?? []);
       })
       .catch(() => setMsg("Could not load stream errors"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [playbackHours]);
 
   useEffect(() => {
+    setLoading(true);
     load();
   }, [load]);
 
@@ -151,6 +166,49 @@ export function StreamErrorsClient() {
           >
             <RefreshCw size={14} /> Refresh
           </button>
+          <button
+            type="button"
+            className="text-sm px-3 py-1.5 rounded border"
+            style={{ borderColor: "var(--border)" }}
+            disabled={Boolean(busy)}
+            onClick={async () => {
+              if (!confirm("Clear live probe fail flags on the dashboard (does not delete streams)?")) return;
+              setBusy("clearFlags");
+              try {
+                const res = await fetch("/api/admin/stream-errors", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "clear_live_dashboard_issues" }),
+                });
+                const data = await res.json().catch(() => ({}));
+                setMsg(res.ok ? `Cleared flags (activated ${data.activated ?? 0}).` : data.error ?? "Failed");
+                load();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            Clear probe flags
+          </button>
+          <button
+            type="button"
+            className="text-sm px-3 py-1.5 rounded border"
+            style={{ borderColor: "rgba(239,68,68,0.45)", color: "#f87171" }}
+            disabled={Boolean(busy)}
+            onClick={async () => {
+              if (!confirm("Delete playback error log entries from the last 24h view?")) return;
+              setBusy("clearLogs");
+              try {
+                await fetch("/api/admin/logs?action=playback_", { method: "DELETE" });
+                setMsg("Cleared playback error logs.");
+                load();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            Clear playback logs
+          </button>
           <Link
             href="/admin/content/streams?status=offline"
             className="text-sm px-3 py-1.5 rounded border"
@@ -158,10 +216,17 @@ export function StreamErrorsClient() {
           >
             Manage streams
           </Link>
+          <Link
+            href="/admin/management/logs"
+            className="text-sm px-3 py-1.5 rounded border"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Audit log
+          </Link>
         </div>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-xl border p-4" style={{ borderColor: "rgba(239,68,68,0.4)", background: "rgba(239,68,68,0.08)" }}>
           <p className="text-xs uppercase" style={{ color: "var(--muted)" }}>Dead</p>
           <p className="text-3xl font-bold tabular-nums mt-1">{dead.length}</p>
@@ -177,7 +242,80 @@ export function StreamErrorsClient() {
           <p className="text-3xl font-bold tabular-nums mt-1">{processes.length}</p>
           <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Restream process errors, not source HEAD checks</p>
         </div>
+        <div className="rounded-xl border p-4" style={{ borderColor: "rgba(59,130,246,0.4)", background: "rgba(59,130,246,0.08)" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs uppercase" style={{ color: "var(--muted)" }}>
+              Viewer playback ({playbackHours === 168 ? "7d" : playbackHours === 720 ? "30d" : `${playbackHours}h`})
+            </p>
+            <select
+              className="text-xs rounded border px-2 py-1 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={playbackHours}
+              onChange={(e) => setPlaybackHours(Number(e.target.value))}
+              aria-label="Playback log retention window"
+            >
+              <option value={24}>Last 24 hours</option>
+              <option value={168}>Last 7 days</option>
+              <option value={720}>Last 30 days</option>
+            </select>
+          </div>
+          <p className="text-3xl font-bold tabular-nums mt-1">{playbackIssues.length}</p>
+          <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>Drops, origin fails, relay errors from activity log</p>
+        </div>
       </div>
+
+      {playbackIssues.length > 0 && (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--border)" }}>
+          <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <h2 className="text-sm font-semibold">Recent viewer playback issues</h2>
+            <div className="flex items-center gap-3">
+              <a
+                href={`/api/admin/stream-errors/export?hours=${playbackHours}`}
+                className="text-xs underline"
+                style={{ color: "var(--accent)" }}
+              >
+                Export CSV
+              </a>
+              <Link href="/admin/streams/logs" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Stream logs
+              </Link>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b" style={{ borderColor: "var(--border)" }}>
+                  <th className="p-2">When</th>
+                  <th className="p-2">Action</th>
+                  <th className="p-2">Line</th>
+                  <th className="p-2">Stream</th>
+                  <th className="p-2">Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playbackIssues.slice(0, 25).map((row) => (
+                  <tr key={row.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                    <td className="p-2 whitespace-nowrap">{formatWhen(row.createdAt)}</td>
+                    <td className="p-2 font-mono text-xs">{row.action}</td>
+                    <td className="p-2">{row.lineUsername ?? "—"}</td>
+                    <td className="p-2">
+                      {row.streamName ?? row.streamId ?? "—"}
+                      {row.streamId && row.streamName ? (
+                        <span className="block text-xs font-mono" style={{ color: "var(--muted)" }}>
+                          {row.streamId}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                      {row.detail ?? (row.status != null ? `HTTP ${row.status}` : "—")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div

@@ -104,6 +104,8 @@ export function formatAuditMeta(meta: unknown): string | null {
   if (m.minSpeedKbps != null) parts.push(`min ${m.minSpeedKbps} Kbps`);
   if (m.maxSpeedKbps != null) parts.push(`max ${m.maxSpeedKbps} Kbps`);
   if (m.name) parts.push(String(m.name));
+  if (m.streamName) parts.push(String(m.streamName));
+  if (m.streamId && !m.name && !m.streamName) parts.push(`stream ${m.streamId}`);
   if (m.detail) parts.push(String(m.detail));
   if (m.error) parts.push(String(m.error));
   if (m.status != null) parts.push(`HTTP ${m.status}`);

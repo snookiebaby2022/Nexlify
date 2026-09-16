@@ -67,6 +67,12 @@ export function PanelShell({
   const accent = whiteLabel?.accentColor;
   const brandLogo = whiteLabel?.logoUrl;
   const headerColor = whiteLabel?.headerColor;
+  const sidebarNavAccent = whiteLabel?.sidebarNavAccent?.trim();
+  const sidebarHiddenHrefs = whiteLabel?.sidebarHiddenHrefs ?? "";
+  const shellStyle = {
+    ...(accent ? { ["--accent" as string]: accent } : {}),
+    ...(sidebarNavAccent ? { ["--sidebar-nav-accent" as string]: sidebarNavAccent } : {}),
+  } as React.CSSProperties;
 
   return (
     <ResellerGroupFlagsProvider flags={role === "RESELLER" ? resellerFlags : DEFAULT_RESELLER_GROUP_FLAGS}>
@@ -74,7 +80,7 @@ export function PanelShell({
     <DashboardLiveMetricsProvider enabled={liveMetricsEnabled}>
     <div
       className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}${isTablet ? " panel-shell--tablet" : ""}${isCompact ? " panel-shell--compact" : ""}`}
-      style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}
+      style={Object.keys(shellStyle).length ? shellStyle : undefined}
     >
       <ImpersonationBanner />
       {mobileNav && (
@@ -97,6 +103,7 @@ export function PanelShell({
                   brandHref={dashboardHref}
                   showReport
                   username={username}
+                  hiddenHrefs={sidebarHiddenHrefs}
                   onNavigate={() => setMobileNav(false)}
                 />
               </Suspense>
@@ -127,6 +134,7 @@ export function PanelShell({
               brandHref={dashboardHref}
               username={username}
               forceCollapsed={isTablet}
+              hiddenHrefs={sidebarHiddenHrefs}
             />
           ) : (
             <ResellerPanelSidebar

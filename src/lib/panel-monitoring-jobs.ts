@@ -386,5 +386,29 @@ export async function runTelegramMonitoringJob() {
     if (r.ok) alerts++;
   }
 
+  if (settings.alertPlaybackOriginFail) {
+    const windowMin = Math.max(5, Number(settings.playbackOriginFailWindowMinutes ?? 15));
+    const threshold = Math.max(3, Number(settings.playbackOriginFailThreshold ?? 25));
+    const since = new Date(Date.now() - windowMin * 60_000);
+    const failCount = await prisma.activityLog.count({
+      where: { createdAt: { gte: since }, action: "playback_origin_fail" },
+    });
+    const dedupeKey = "monitor:playback_origin_fail_alert";
+    const lastAlertAt = await cacheGet<number>(dedupeKey);
+    const dedupeMs = windowMin * 60_000;
+    if (
+      failCount >= threshold &&
+      (typeof lastAlertAt !== "number" || Date.now() - lastAlertAt >= dedupeMs)
+    ) {
+      const r = await sendTelegramAlert(
+        `Nexlify alert: ${failCount} playback origin fail(s) in the last ${windowMin} min (threshold ${threshold}). Check Stream errors.`
+      );
+      if (r.ok) {
+        alerts++;
+        await cacheSet(dedupeKey, Date.now(), Math.ceil(dedupeMs / 1000));
+      }
+    }
+  }
+
   return { alerts };
 }

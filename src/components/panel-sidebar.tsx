@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
+import { filterSidebarEntries, orderSidebarEntries, parseSidebarHiddenHrefs } from "@/lib/sidebar-customization";
 import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { searchOperatorFeatures } from "@/lib/operator-feature-index";
 import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
@@ -380,6 +381,7 @@ export function PanelSidebar({
   showReport = false,
   username,
   forceCollapsed,
+  hiddenHrefs,
 }: {
   entries: SidebarNavEntry[];
   className?: string;
@@ -390,6 +392,8 @@ export function PanelSidebar({
   username?: string;
   /** Used by the unfolded-foldable/tablet shell rail. */
   forceCollapsed?: boolean;
+  /** Newline/comma-separated paths to hide (from white-label settings). */
+  hiddenHrefs?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -406,9 +410,13 @@ export function PanelSidebar({
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [navFilter, setNavFilter] = useState("");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [sidebarOrder, setSidebarOrder] = useState<string[] | undefined>(undefined);
   const deferredFilter = useDeferredValue(navFilter);
   const isFiltering = deferredFilter.trim().length > 0;
-  const visibleEntries = filterNavEntries(entries, deferredFilter);
+  const hidden = parseSidebarHiddenHrefs(hiddenHrefs);
+  const orderedEntries = orderSidebarEntries(entries, sidebarOrder);
+  const scopedEntries = filterSidebarEntries(orderedEntries, hidden);
+  const visibleEntries = filterNavEntries(scopedEntries, deferredFilter);
   const routeActiveIds = activeGroupIds(pathname, entries, search);
   /** Mobile drawer: never use the desktop collapsed (72px) rail. */
   const isMobileDrawer = Boolean(onNavigate);
@@ -417,6 +425,27 @@ export function PanelSidebar({
   useEffect(() => {
     setPendingHref(null);
   }, [pathname, search]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/admin/ui-preferences")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (cancelled) return;
+          const order = d?.preferences?.sidebarOrder;
+          if (Array.isArray(order) && order.length) setSidebarOrder(order);
+        })
+        .catch(() => {});
+    };
+    load();
+    const onPrefs = () => load();
+    window.addEventListener("nexlify-sidebar-prefs-updated", onPrefs);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("nexlify-sidebar-prefs-updated", onPrefs);
+    };
+  }, []);
 
   useEffect(() => {
     for (const entry of entries) {
@@ -632,11 +661,13 @@ export function AdminPanelSidebar({
   brandHref = "/admin/dashboard",
   username,
   forceCollapsed,
+  hiddenHrefs,
 }: {
   brand?: string;
   brandHref?: string;
   username?: string;
   forceCollapsed?: boolean;
+  hiddenHrefs?: string;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
@@ -647,6 +678,7 @@ export function AdminPanelSidebar({
         showReport
         username={username}
         forceCollapsed={forceCollapsed}
+        hiddenHrefs={hiddenHrefs}
       />
     </Suspense>
   );

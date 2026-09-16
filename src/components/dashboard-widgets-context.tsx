@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import type { DashboardWidgetsPayload } from "@/lib/dashboard-widgets";
-import { startVisibleInterval } from "@/lib/perf-polling";
+import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
+
+const DASHBOARD_POLLS = resolveClientPollIntervals();
 
 type DashboardWidgetsContextValue = {
   data: DashboardWidgetsPayload | null;
@@ -60,7 +62,7 @@ export function DashboardWidgetsProvider({
 
   useEffect(() => {
     refresh();
-    return startVisibleInterval(refresh, 120_000);
+    return startVisibleInterval(refresh, DASHBOARD_POLLS.dashboardMs);
   }, [refresh]);
 
   return (

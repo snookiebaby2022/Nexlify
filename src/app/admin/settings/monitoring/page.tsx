@@ -49,6 +49,24 @@ export default function MonitoringSettingsPage() {
               type: "yesno",
               hint: "Off by default. Needs catalog probes, which burn Main CPU. Use Diagnostics or click a failing channel instead.",
             },
+            {
+              key: "alertPlaybackOriginFail",
+              label: "Playback origin fail spike",
+              type: "yesno",
+              hint: "Telegram when many viewers log playback_origin_fail in a short window (real edge playback issues).",
+            },
+            {
+              key: "playbackOriginFailWindowMinutes",
+              label: "Spike window (minutes)",
+              type: "number",
+              hint: "Rolling window for counting origin failures. Default 15.",
+            },
+            {
+              key: "playbackOriginFailThreshold",
+              label: "Spike threshold (events)",
+              type: "number",
+              hint: "Alert when origin failures in that window reach this count. Default 25.",
+            },
           ],
         },
         {

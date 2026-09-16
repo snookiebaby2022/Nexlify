@@ -370,6 +370,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/settings/cron", label: "Scheduled tasks", section: "Maintenance" },
           { href: "/admin/settings/backup", label: "Backup", section: "Maintenance" },
           { href: "/admin/settings/updates", label: "Panel update", section: "Maintenance" },
+          { href: "/admin/settings/sidebar", label: "Sidebar layout", section: "Branding" },
           { href: "/admin/settings/white-label", label: "White-label", section: "Branding" },
           { href: "/admin/player/multiview", label: "Multi-view player", section: "Branding", keywords: "grid webplayer 1-stream" },
           { href: "/admin/profile", label: "My Profile", section: "Account" },

@@ -127,6 +127,12 @@ export function LineEditForm({
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [line, setLine] = useState<LineDetail | null>(null);
+  const [viewerActivity, setViewerActivity] = useState<{
+    lastApiAt: string | null;
+    lastPlayAt: string | null;
+    lastApiLabel: string | null;
+    lastPlayStreamName: string | null;
+  } | null>(null);
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
@@ -241,6 +247,8 @@ export function LineEditForm({
           return;
         }
         setLine(row);
+        const va = lineRes.data.viewerActivity as typeof viewerActivity;
+        setViewerActivity(va && typeof va === "object" ? va : null);
         const notes = splitLineNotes(row.notes, notesViewer);
         const unlimited = isUnlimitedLineExpiry(row.expiresAt);
         setForm({
@@ -645,6 +653,31 @@ export function LineEditForm({
 
         {tab === "details" && (
           <div className="grid lg:grid-cols-2 gap-4 sm:gap-5">
+            {viewerActivity && (
+              <Card title="Live activity (recent)">
+                <p className="text-sm" style={{ color: "var(--muted)" }}>
+                  From open Live Connection rows — catalog API vs actual playback.
+                </p>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div>
+                    <dt className="font-medium">Last API / playlist</dt>
+                    <dd>
+                      {viewerActivity.lastApiAt
+                        ? `${new Date(viewerActivity.lastApiAt).toLocaleString()}${viewerActivity.lastApiLabel ? ` · ${viewerActivity.lastApiLabel}` : ""}`
+                        : "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="font-medium">Last playback</dt>
+                    <dd>
+                      {viewerActivity.lastPlayAt
+                        ? `${new Date(viewerActivity.lastPlayAt).toLocaleString()}${viewerActivity.lastPlayStreamName ? ` · ${viewerActivity.lastPlayStreamName}` : ""}`
+                        : "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </Card>
+            )}
             <Card title="Account">
               <FormField label="Username">
                 {panel === "admin" ? (

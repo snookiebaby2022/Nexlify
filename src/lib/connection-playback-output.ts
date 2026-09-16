@@ -1,7 +1,7 @@
 import { cacheGet, cacheMget, cacheSet, cacheDel } from "@/lib/cache";
 import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 
-export type PlaybackOutputLabel = "MPEGTS" | "HLS" | "RTMP";
+export type PlaybackOutputLabel = "MPEGTS" | "HLS" | "RTMP" | "API";
 
 const OUTPUT_TTL_SEC = 180;
 

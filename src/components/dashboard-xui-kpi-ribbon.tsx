@@ -8,6 +8,8 @@ type Summary = {
   onlineConnections?: number;
   onlineUsers?: number;
   onlineStreams?: number;
+  onlineWatchingConnections?: number;
+  onlineApiConnections?: number;
   totalLiveStreams?: number;
 };
 
@@ -123,6 +125,14 @@ export function DashboardXuiKpiRibbon({
           gradient="linear-gradient(135deg, #00a65a 0%, #008d4c 100%)"
           href={connectionsHref}
           icon={<Zap size={28} />}
+          sub={
+            summary?.onlineWatchingConnections != null || summary?.onlineApiConnections != null ? (
+              <p className="text-[13px] font-semibold opacity-90">
+                {(summary?.onlineWatchingConnections ?? 0).toLocaleString()} watching ·{" "}
+                {(summary?.onlineApiConnections ?? 0).toLocaleString()} API / playlist
+              </p>
+            ) : undefined
+          }
         />
         <KpiTile
           label="Online Users"
@@ -130,6 +140,13 @@ export function DashboardXuiKpiRibbon({
           gradient="linear-gradient(135deg, #3c8dbc 0%, #2e6da4 100%)"
           href={linesHref}
           icon={<Users size={28} />}
+          sub={
+            summary?.onlineWatchingConnections != null ? (
+              <p className="text-[13px] font-semibold opacity-90">
+                Distinct lines with any open session (playback or catalog API).
+              </p>
+            ) : undefined
+          }
         />
         <KpiTile
           label="LB egress"

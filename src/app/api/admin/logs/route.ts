@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma } from "@prisma/client";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { parseLogLimit } from "@/lib/log-page";
+import { enrichActivityLogsForDisplay } from "@/lib/log-display";
 
 function activityWhere(req: NextRequest): Prisma.ActivityLogWhereInput {
   const actionFilter = req.nextUrl.searchParams.get("action")?.trim();
@@ -42,7 +43,8 @@ export async function GET(req: NextRequest) {
       line: { select: { username: true } },
     },
   }).catch(() => []);
-  return NextResponse.json({ logs });
+  const enriched = await enrichActivityLogsForDisplay(logs);
+  return NextResponse.json({ logs: enriched });
 }
 
 export async function DELETE(req: NextRequest) {

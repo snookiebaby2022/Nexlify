@@ -18,6 +18,7 @@ import { logAdminCredentialChange } from "@/lib/admin-access";
 import { adminOrLineOwnerWhere } from "@/lib/line-owner-filter";
 import { getClientIp } from "@/lib/client-ip";
 import { deleteManagedLine } from "@/lib/line-delete";
+import { getLineViewerActivity } from "@/lib/line-viewer-activity";
 import { sessionPaysLineCredits } from "@/lib/reseller-credit-charge";
 import {
   assertRoleMaySetUnlimitedConnections,
@@ -57,7 +58,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   });
   if (!line) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ line });
+  const viewerActivity = await getLineViewerActivity(line.id);
+
+  return NextResponse.json({ line, viewerActivity });
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {

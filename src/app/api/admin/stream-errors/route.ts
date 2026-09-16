@@ -9,15 +9,28 @@ import { invalidateDashboardStats } from "@/lib/cache-invalidate";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { logActivity } from "@/lib/lines";
+import {
+  PLAYBACK_ISSUE_ACTIONS,
+  parseStreamErrorsPlaybackHours,
+  playbackSinceFromHours,
+} from "@/lib/stream-errors-playback";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const payload = await cacheGetOrSet("stream-errors:list", 8, async () => {
+  const playbackHours = parseStreamErrorsPlaybackHours(req.nextUrl.searchParams.get("hours"));
+  const cacheKey = `stream-errors:list:${playbackHours}`;
+
+  const payload = await cacheGetOrSet(cacheKey, 8, async () => {
     const staleBefore = new Date(Date.now() - 120_000);
 
-    const [probeFails, processErrors] = await Promise.all([
+    const playbackSince = playbackSinceFromHours(playbackHours);
+
+    const [probeFails, processErrors, playbackIssues] = await Promise.all([
       prisma.stream.findMany({
         where: liveOriginOrSpliceFailWhere(),
         select: {
@@ -49,6 +62,17 @@ export async function GET() {
         take: 50,
         orderBy: { lastSeenAt: "desc" },
       }),
+      prisma.activityLog.findMany({
+        where: {
+          createdAt: { gte: playbackSince },
+          action: { in: [...PLAYBACK_ISSUE_ACTIONS] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 80,
+        include: {
+          line: { select: { username: true } },
+        },
+      }),
     ]);
 
     const streams = probeFails.map((s) => {
@@ -66,16 +90,34 @@ export async function GET() {
       };
     });
 
+    const playback = playbackIssues.map((row) => {
+      const meta =
+        row.meta && typeof row.meta === "object" ? (row.meta as Record<string, unknown>) : {};
+      return {
+        id: row.id,
+        action: row.action,
+        createdAt: row.createdAt,
+        lineUsername: row.line?.username ?? (meta.lineUsername as string | undefined) ?? null,
+        streamName: (meta.streamName as string | undefined) ?? (meta.name as string | undefined) ?? null,
+        streamId: row.entityId ?? (meta.streamId as string | undefined) ?? null,
+        detail: (meta.error as string | undefined) ?? (meta.detail as string | undefined) ?? null,
+        status: meta.status != null ? Number(meta.status) : null,
+      };
+    });
+
     return {
       counts: {
         dead: streams.filter((s) => s.kind === "dead").length,
         unstable: streams.filter((s) => s.kind === "unstable").length,
         process: processErrors.length,
+        playback: playback.length,
         total: streams.length,
       },
       streams,
       probeFails: streams,
       processErrors,
+      playbackIssues: playback,
+      playbackHours,
     };
   });
 

@@ -9,6 +9,7 @@ import {
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 import { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 import { LIVE_GEN_KEY, notifyLiveConnectionsChanged } from "./connection-live-bus";
+import { CATALOG_API_CHANNEL_MARKER, isCatalogApiChannelId } from "./catalog-api-channel";
 
 export { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 
@@ -27,7 +28,7 @@ export const LIVE_PIPE_IDLE_ABORT_MS = 8 * 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect disconnects quickly
 
 /** Exact Redis keys only — never SCAN the catalog keyspace with conn:*. */
-function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string | null }) {
+export function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string | null }) {
   void cacheGet<number>(LIVE_GEN_KEY)
     .then((g) => cacheSet(LIVE_GEN_KEY, (typeof g === "number" ? g : 0) + 1, 86_400))
     .catch(() => {});
@@ -192,25 +193,40 @@ export async function syncLiveConnectionsFromRedisViewers(limit = 500): Promise<
   return synced;
 }
 
-export async function liveViewerStats(ownerId?: string | string[]): Promise<{
+export type LiveViewerStats = {
   onlineConnections: number;
   onlineUsers: number;
+  /** Distinct streams with active playback (excludes Xtream API catalog rows). */
   onlineStreams: number;
-}> {
+  onlineWatchingConnections: number;
+  onlineApiConnections: number;
+};
+
+export async function liveViewerStats(ownerId?: string | string[]): Promise<LiveViewerStats> {
   const rows = await listLiveConnections(ownerId);
   const users = new Set<string>();
   const streams = new Set<string>();
   let onlineConnections = 0;
+  let onlineWatchingConnections = 0;
+  let onlineApiConnections = 0;
   for (const row of rows) {
     if (isTestConnectionIp(row.ip)) continue;
     onlineConnections += 1;
     users.add(row.lineId);
-    if (row.streamId) streams.add(row.streamId);
+    const catalog = isCatalogApiChannelId(row.stream?.channelId);
+    if (catalog) {
+      onlineApiConnections += 1;
+    } else if (row.streamId) {
+      onlineWatchingConnections += 1;
+      streams.add(row.streamId);
+    }
   }
   return {
     onlineConnections,
     onlineUsers: users.size,
     onlineStreams: streams.size,
+    onlineWatchingConnections,
+    onlineApiConnections,
   };
 }
 
@@ -220,7 +236,7 @@ export async function listOnlineLiveStreamIds(ownerId?: string): Promise<string[
   const ids = new Set<string>();
   for (const row of rows) {
     if (isTestConnectionIp(row.ip)) continue;
-    if (row.streamId) ids.add(row.streamId);
+    if (row.streamId && !isCatalogApiChannelId(row.stream?.channelId)) ids.add(row.streamId);
   }
   return [...ids];
 }
@@ -441,7 +457,10 @@ async function countCapacitySessions(lineId: string, staleMs: number = CAPACITY_
     where: {
       lineId,
       lastSeenAt: { gte: staleBefore },
-      NOT: anonymousIpNotFilter(),
+      NOT: [
+        anonymousIpNotFilter(),
+        { stream: { channelId: CATALOG_API_CHANNEL_MARKER } },
+      ],
     },
   });
   return result.length;
@@ -538,7 +557,10 @@ async function lineHasConnectionCapacityDb(
         lineId,
         ...connectionIpPrismaFilter(clientIp),
         lastSeenAt: { gte: staleBefore },
-        NOT: anonymousIpNotFilter(),
+        NOT: [
+          anonymousIpNotFilter(),
+          { stream: { channelId: CATALOG_API_CHANNEL_MARKER } },
+        ],
       },
       select: { streamId: true },
       take: 50,
@@ -1069,6 +1091,7 @@ const connectionInclude = {
       id: true,
       name: true,
       type: true,
+      channelId: true,
       serverId: true,
       server: { select: { id: true, name: true, host: true, domain: true } },
     },

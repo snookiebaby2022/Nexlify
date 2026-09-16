@@ -872,22 +872,22 @@ button {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: #ff7043;
+  color: var(--sidebar-nav-accent, #ff7043);
   text-transform: none;
 }
 
 .panel-nav-section--active > .panel-nav-section-label {
-  color: #fb923c;
-  text-shadow: 0 0 12px rgba(249, 115, 22, 0.35);
+  color: var(--sidebar-nav-accent, #fb923c);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--sidebar-nav-accent, #fb923c) 35%, transparent);
 }
 
 .panel-nav-section-items {
-  border-left: 3px solid rgba(255, 112, 67, 0.55);
+  border-left: 3px solid color-mix(in srgb, var(--sidebar-nav-accent, #ff7043) 55%, transparent);
   padding-left: 0.35rem;
 }
 
 .panel-nav-section--active > .panel-nav-section-items {
-  border-left-color: #fb923c;
+  border-left-color: var(--sidebar-nav-accent, #fb923c);
 }
 
 .panel-nav-sub-link {
@@ -920,10 +920,14 @@ button {
 .panel-nav-sub-link--active {
   color: #fff !important;
   font-weight: 650;
-  background: linear-gradient(90deg, rgba(124, 58, 237, 0.45), rgba(234, 88, 12, 0.42)) !important;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--sidebar-nav-accent, #7c3aed) 45%, transparent),
+    color-mix(in srgb, var(--sidebar-nav-accent, #ea580c) 42%, transparent)
+  ) !important;
   box-shadow:
-    inset 3px 0 0 0 #f97316,
-    0 0 0 1px rgba(249, 115, 22, 0.28) !important;
+    inset 3px 0 0 0 var(--sidebar-nav-accent, #f97316),
+    0 0 0 1px color-mix(in srgb, var(--sidebar-nav-accent, #f97316) 28%, transparent) !important;
 }
 
 .panel-nav-sub-link--pending:not(.panel-nav-sub-link--active) {

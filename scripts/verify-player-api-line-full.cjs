@@ -95,6 +95,12 @@ async function probeBase(base) {
       return out;
     }
 
+    out.steps.player_api_reachable = {
+      status: auth.status,
+      bytes: auth.bytes,
+      has_server_info: Boolean(auth.json?.server_info),
+    };
+
     const si = auth.json?.server_info || {};
     out.steps.server_info = {
       url: si.url,
@@ -207,10 +213,22 @@ async function probeBase(base) {
       out.steps.live_bytes = liveProbe;
     }
 
+    const edgeBase = process.env.EDGE_PLAYER_API_BASE?.trim();
+    if (edgeBase) {
+      const edgeAuth = await fetchJson(edgeBase, q(""));
+      out.steps.edge_player_api_forward = {
+        base: edgeBase,
+        status: edgeAuth.status,
+        auth: edgeAuth.json?.user_info?.auth,
+        panel_url: si.url,
+      };
+    }
+
     out.ok =
       out.steps.auth?.user_info?.auth === 1 &&
       out.steps.live_categories?.count > 0 &&
-      out.steps.vod_categories?.count > 0;
+      out.steps.vod_categories?.count > 0 &&
+      (out.steps.edge_player_api_forward ? out.steps.edge_player_api_forward.auth === 1 : true);
   } catch (e) {
     out.error = String(e.message || e);
   }

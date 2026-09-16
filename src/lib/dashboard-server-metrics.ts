@@ -427,6 +427,8 @@ export async function getDashboardSummary() {
 
   return {
     onlineStreams: viewer.onlineStreams,
+    onlineWatchingConnections: viewer.onlineWatchingConnections,
+    onlineApiConnections: viewer.onlineApiConnections,
     totalLiveStreams,
     onlineUsers: viewer.onlineUsers,
     totalActiveLines,
@@ -473,6 +475,8 @@ export async function getResellerDashboardSummary(ownerIds: string[]) {
 
   return {
     onlineStreams: viewer.onlineStreams,
+    onlineWatchingConnections: viewer.onlineWatchingConnections,
+    onlineApiConnections: viewer.onlineApiConnections,
     /** Reseller UI shows live viewers only — not the panel-wide channel catalog (admin uses totalLiveStreams). */
     totalLiveStreams: 0,
     onlineUsers: viewer.onlineUsers,

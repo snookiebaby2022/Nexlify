@@ -13,6 +13,8 @@ type LogRow = {
   entityId: string | null;
   meta: unknown;
   createdAt: string;
+  who?: string;
+  streamName?: string | null;
   user?: { username: string; role: string } | null;
   line?: { username: string } | null;
 };
@@ -133,7 +135,16 @@ export default function ManagementLogsPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      {log.user ? (
+                      {log.who && log.who !== "—" ? (
+                        <>
+                          {log.who}
+                          {log.user?.role ? (
+                            <span className="block text-xs" style={{ color: "var(--muted)" }}>
+                              {log.user.role}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : log.user ? (
                         <>
                           {log.user.username}
                           <span className="block text-xs" style={{ color: "var(--muted)" }}>
@@ -149,11 +160,15 @@ export default function ManagementLogsPage() {
                       {log.entity ? (
                         <>
                           {log.entity}
-                          {log.entityId && (
+                          {log.streamName ? (
+                            <span className="block text-xs truncate max-w-[200px]" style={{ color: "var(--muted)" }}>
+                              {log.streamName}
+                            </span>
+                          ) : log.entityId ? (
                             <span className="block text-xs font-mono truncate max-w-[140px]" style={{ color: "var(--muted)" }}>
                               {log.entityId}
                             </span>
-                          )}
+                          ) : null}
                         </>
                       ) : (
                         "—"

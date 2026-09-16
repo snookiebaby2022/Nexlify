@@ -383,6 +383,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     alertAbuse: false,
     highLoadConnectionsThreshold: 500,
     offlineStreamMinutes: 1,
+    alertPlaybackOriginFail: true,
+    playbackOriginFailWindowMinutes: 15,
+    playbackOriginFailThreshold: 25,
     metricsExportEnabled: false,
     metricsExportToken: "",
   },
@@ -583,6 +586,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     whiteLabelHeaderColor: "",
     whiteLabelCustomCss: "",
     whiteLabelDomain: "",
+    whiteLabelSidebarNavAccent: "",
+    whiteLabelSidebarHiddenHrefs: "",
   },
   "server-guard": {
     serverGuardEnabled: true,

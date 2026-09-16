@@ -7,6 +7,8 @@ export type DashboardStreamData = {
   onlineConnections: number;
   onlineUsers: number;
   onlineStreams: number;
+  onlineWatchingConnections?: number;
+  onlineApiConnections?: number;
   totalActiveLines: number;
   networkInMbps: number;
   networkOutMbps: number;

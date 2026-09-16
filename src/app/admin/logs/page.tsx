@@ -16,7 +16,10 @@ type LogRow = {
   id: string;
   action: string;
   entity: string | null;
+  entityId?: string | null;
   createdAt: string;
+  who?: string;
+  streamName?: string | null;
   user?: { username: string } | null;
   line?: { username: string } | null;
 };
@@ -147,8 +150,15 @@ export default function LogsHubPage() {
                 <tr key={row.id} className="border-t" style={{ borderColor: "var(--border)" }}>
                   <td className="p-2 whitespace-nowrap">{new Date(row.createdAt).toLocaleString()}</td>
                   <td className="p-2">{row.action}</td>
-                  <td className="p-2">{row.user?.username ?? row.line?.username ?? "—"}</td>
-                  <td className="p-2">{row.entity ?? "—"}</td>
+                  <td className="p-2">{row.who ?? row.user?.username ?? row.line?.username ?? "—"}</td>
+                  <td className="p-2">
+                    {row.entity ?? "—"}
+                    {row.streamName ? (
+                      <span className="block text-xs" style={{ color: "var(--muted)" }}>
+                        {row.streamName}
+                      </span>
+                    ) : null}
+                  </td>
                 </tr>
               ))
             )}
