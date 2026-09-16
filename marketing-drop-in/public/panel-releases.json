@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.93",
+  "latestVersion": "2.0.94",
   "releases": [
+    {
+      "version": "2.0.94",
+      "date": "2026-09-16",
+      "channel": "stable",
+      "summary": "Disabled Streams: batch full-probe no longer dies on gateway HTML timeouts.",
+      "changelog": [
+        "Disabled Streams / Stream errors / dashboard Issues: full probe runs in chunks of 10 so nginx or Cloudflare do not return HTML 504 pages",
+        "probe-batch API: longer maxDuration for large batches",
+        "Clearer error when a probe response is HTML instead of JSON"
+      ],
+      "fixes": [
+        "Probing 50 disabled streams showed Unexpected token < / DOCTYPE is not valid JSON"
+      ],
+      "notes": [
+        "Hard-refresh Admin after update, then retry Probe selected on Disabled Streams."
+      ]
+    },
     {
       "version": "2.0.93",
       "date": "2026-09-16",
