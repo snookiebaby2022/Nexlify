@@ -1,7 +1,32 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.92",
+  "latestVersion": "2.0.93",
   "releases": [
+    {
+      "version": "2.0.93",
+      "date": "2026-09-16",
+      "channel": "stable",
+      "summary": "Ops UX: stream-error clears, sidebar personalization, richer logs, ticket email/Telegram, and safer line credential kicks.",
+      "changelog": [
+        "Stream errors: Clear all plus playback-log clear for the selected 24h/7d/30d window",
+        "Disabled streams: auto-category from name prefixes, existing categories, or linked provider catalog",
+        "Admin and reseller Sidebar layout: reorder, remove/restore sections, and accent colour",
+        "Audit log and Stream logs: How to fix guidance for playback, probe, and login issues",
+        "Login logs: IPTV app logins, IP/meta search, and clearer failed-username display",
+        "Support tickets: optional admin email and Telegram on create/reply (SMTP + Monitoring Telegram)",
+        "Line edit: Kick all IPTV sessions when saving username/password changes",
+        "Deploy: optional Cloudflare cache purge after panel apply"
+      ],
+      "fixes": [
+        "Login logs showed blank User/Line for failed panel logins and never recorded Xtream/M3U app auth",
+        "Playback clear on Stream errors ignored the selected retention window",
+        "Sidebar customization could only reorder — no per-user hide or colour"
+      ],
+      "notes": [
+        "Enable ticket email under Settings → Notifications and Telegram under Monitoring when you want out-of-panel alerts.",
+        "Hard-refresh Admin after update. Resellers can open Sidebar layout from Account."
+      ]
+    },
     {
       "version": "2.0.92",
       "date": "2026-09-11",
