@@ -38,6 +38,19 @@ function collectFiles() {
       if (fs.existsSync(abs)) out.add(f);
     }
   }
+  if (out.size === 0) {
+    const committed = execSync("git diff-tree --no-commit-id --name-only -r HEAD", {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+    for (const line of committed.split(/\r?\n/)) {
+      const f = line.trim().replace(/\\/g, "/");
+      if (!f) continue;
+      if (f.startsWith("graft/")) continue;
+      const abs = path.join(ROOT, f);
+      if (fs.existsSync(abs)) out.add(f);
+    }
+  }
   return [...out].sort();
 }
 
