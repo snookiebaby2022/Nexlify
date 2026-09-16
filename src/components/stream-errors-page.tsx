@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Radio, RefreshCw, Wrench } from "lucide-react";
 import { notifyStreamHealthChanged } from "@/lib/stream-health-events";
 import { adminToast } from "@/lib/admin-toast";
+import { probeStreamsBatchClient } from "@/lib/probe-batch-client";
 
 type Kind = "all" | "dead" | "unstable" | "process";
 
@@ -55,19 +56,11 @@ function formatWhen(iso: string | null | undefined) {
 async function fullProbe(ids: string[]) {
   const unique = [...new Set(ids)].slice(0, 50);
   if (!unique.length) return { recovered: 0, stillFailed: unique.length, recoveredIds: [] as string[] };
-  const res = await fetch("/api/admin/streams/probe-batch", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ streamIds: unique, fast: false }),
-  });
-  const data = (await res.json()) as {
-    results?: Record<string, { lastProbeOk?: boolean; error?: string }>;
-  };
-  if (!res.ok || !data.results) throw new Error("Probe failed");
+  const results = await probeStreamsBatchClient(unique, { fast: false, chunkSize: 10 });
   const recoveredIds: string[] = [];
   let stillFailed = 0;
   for (const id of unique) {
-    const row = data.results[id];
+    const row = results[id];
     if (row && !row.error && row.lastProbeOk) recoveredIds.push(id);
     else stillFailed += 1;
   }

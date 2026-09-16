@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Power, RefreshCw, Wrench } from "lucide-react";
 import { notifyStreamHealthChanged, STREAM_HEALTH_CHANGED } from "@/lib/stream-health-events";
 import { adminToast } from "@/lib/admin-toast";
+import { probeStreamsBatchClient } from "@/lib/probe-batch-client";
 
 type IssueStats = {
   inactiveStreams?: number;
@@ -134,26 +135,15 @@ export function DashboardIssuesPanel({
     setBusy(which);
     setMsg("");
     try {
-      const res = await fetch("/api/admin/streams/probe-batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ streamIds: ids, fast: false }),
-      });
-      const data = (await res.json()) as {
-        results?: Record<string, { lastProbeOk?: boolean; error?: string }>;
-      };
-      if (!res.ok || !data.results) {
-        setMsg("Full probe failed");
-        return;
-      }
+      const results = await probeStreamsBatchClient(ids, { fast: false, chunkSize: 10 });
       let recovered = 0;
       let still = 0;
       for (const id of ids) {
-        const row = data.results[id];
+        const row = results[id];
         if (row && !row.error && row.lastProbeOk) recovered += 1;
         else still += 1;
       }
-      setFailed((prev) => prev.filter((s) => data.results?.[s.id]?.lastProbeOk !== true));
+      setFailed((prev) => prev.filter((s) => results[s.id]?.lastProbeOk !== true));
       setMsg(
         recovered
           ? `Cleared ${recovered} from the dashboard${still ? ` · ${still} still failing` : ""}.`
@@ -167,8 +157,8 @@ export function DashboardIssuesPanel({
       );
       notifyStreamHealthChanged();
       refresh();
-    } catch {
-      setMsg("Network error while probing");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Network error while probing");
     } finally {
       setBusy(null);
     }

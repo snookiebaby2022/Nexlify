@@ -8,6 +8,9 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { decideProbePersist } from "@/lib/stream-probe-persist";
 
+/** Full probes of many streams can exceed the default route budget; clients also chunk. */
+export const maxDuration = 300;
+
 const MAX_IDS = 50;
 const CONCURRENCY = 4;
 

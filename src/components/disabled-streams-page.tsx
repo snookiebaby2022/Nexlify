@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Power, RefreshCw, Trash2, Wrench } from "lucide-react";
 import { adminToast } from "@/lib/admin-toast";
+import { probeStreamsBatchClient } from "@/lib/probe-batch-client";
 import { notifyStreamHealthChanged } from "@/lib/stream-health-events";
 
 type StreamRow = {
@@ -202,19 +203,10 @@ export function DisabledStreamsClient() {
     setBusy("probe");
     setMsg("");
     try {
-      const res = await fetch("/api/admin/streams/probe-batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ streamIds: ids, fast: false }),
-      });
-      const data = (await res.json()) as {
-        results?: Record<string, { lastProbeOk?: boolean; error?: string }>;
-        error?: string;
-      };
-      if (!res.ok || !data.results) throw new Error(data.error || "Probe failed");
+      const results = await probeStreamsBatchClient(ids, { fast: false, chunkSize: 10 });
       let ok = 0;
       for (const id of ids) {
-        const row = data.results[id];
+        const row = results[id];
         if (row && !row.error && row.lastProbeOk) ok += 1;
       }
       adminToast(`Probed ${ids.length}: ${ok} online`, "success");
