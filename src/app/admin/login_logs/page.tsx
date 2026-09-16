@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/format";
+import { formatAuditAction } from "@/lib/audit-log";
+import { formatLoginLogDetails } from "@/lib/log-display";
 import { LogsPageToolbar } from "@/components/logs-page-toolbar";
 import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
@@ -12,9 +14,25 @@ type LoginLogRow = {
   entityId: string | null;
   meta: unknown;
   createdAt: string;
+  who?: string;
   user?: { username: string; role: string } | null;
   line?: { username: string } | null;
 };
+
+function displayUser(log: LoginLogRow): string {
+  if (log.user?.username) return log.user.username;
+  if (log.action.startsWith("iptv_line_login")) return "—";
+  if (log.who && log.who !== "—") return log.who;
+  return "—";
+}
+
+function displayLine(log: LoginLogRow): string {
+  if (log.line?.username) return log.line.username;
+  const m = log.meta && typeof log.meta === "object" ? (log.meta as Record<string, unknown>) : {};
+  if (typeof m.lineUsername === "string" && m.lineUsername.trim()) return m.lineUsername.trim();
+  if (log.action.startsWith("iptv_line_login") && typeof m.username === "string") return m.username.trim();
+  return "—";
+}
 
 export default function LoginLogsPage() {
   const [logs, setLogs] = useState<LoginLogRow[]>([]);
@@ -47,7 +65,8 @@ export default function LoginLogsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Login Logs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Panel login attempts and authentication events.
+          Panel admin/reseller logins and IPTV app authentication (player_api / M3U). Failed panel logins show the
+          attempted username in User; IPTV lines appear under Line.
         </p>
       </div>
 
@@ -72,7 +91,7 @@ export default function LoginLogsPage() {
         <input
           className="rounded-lg border px-3 py-2 text-sm flex-1 min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
-          placeholder="Search user, IP, details..."
+          placeholder="Search user, line, IP, details..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
@@ -112,27 +131,22 @@ export default function LoginLogsPage() {
                     {formatDateTime(log.createdAt)}
                   </td>
                   <td className="p-3">
-                    <span className="font-medium">{log.action}</span>
+                    <span className="font-medium">{formatAuditAction(log.action)}</span>
+                    <span className="block text-xs font-mono" style={{ color: "var(--muted)" }}>
+                      {log.action}
+                    </span>
                   </td>
                   <td className="p-3">
-                    {log.user ? (
-                      <>
-                        {log.user.username}
-                        <span className="block text-xs" style={{ color: "var(--muted)" }}>
-                          {log.user.role}
-                        </span>
-                      </>
-                    ) : (
-                      "—"
-                    )}
+                    {displayUser(log)}
+                    {log.user?.role ? (
+                      <span className="block text-xs" style={{ color: "var(--muted)" }}>
+                        {log.user.role}
+                      </span>
+                    ) : null}
                   </td>
-                  <td className="p-3">{log.line?.username ?? "—"}</td>
+                  <td className="p-3">{displayLine(log)}</td>
                   <td className="p-3 text-xs" style={{ color: "var(--muted)" }}>
-                    {log.meta ? (
-                      <code className="break-all">{JSON.stringify(log.meta).slice(0, 120)}</code>
-                    ) : (
-                      "—"
-                    )}
+                    {formatLoginLogDetails(log)}
                   </td>
                 </tr>
               ))}

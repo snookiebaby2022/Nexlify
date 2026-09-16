@@ -6,7 +6,7 @@ export default function SidebarSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Sidebar layout</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Personalize menu order. To hide items for all admins, use Settings → White-label → Hidden sidebar links.
+          Reorder items, hide categories you do not use, and pick a menu accent colour. Changes apply only to your login.
         </p>
       </div>
       <SidebarNavCustomizer />

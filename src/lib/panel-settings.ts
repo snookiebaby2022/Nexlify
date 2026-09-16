@@ -357,6 +357,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     notifyNewLine: true,
     notifyLowCredits: true,
     notifyTicketReply: true,
+    ticketNotifyEmail: true,
+    ticketNotifyTelegram: true,
     smsEnabled: false,
     twilioAccountSid: "",
     twilioAuthToken: "",

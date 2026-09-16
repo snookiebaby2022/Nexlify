@@ -7,6 +7,8 @@ import { formatDateTime } from "@/lib/format";
 import { formatUptime } from "@/lib/stream-live-stats";
 import { LogsPageToolbar } from "@/components/logs-page-toolbar";
 import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
+import { auditLogFixHint } from "@/lib/log-fix-hints";
+import { streamProbeFixHint } from "@/lib/stream-probe-fix-hints";
 
 type ProcessLog = {
   id: string;
@@ -100,17 +102,21 @@ export default function StreamLogsPage() {
           </p>
         ) : (
           <DataTable
-            headers={["When", "Event", "Stream", "Detail"]}
-            rows={playbackEvents.map((a) => [
-              formatDateTime(a.createdAt),
-              a.action.replace("playback_", "").replace(/_/g, " "),
-              a.streamName ?? (a.entityId ? `${a.entityId.slice(0, 8)}…` : "—"),
-              String(
+            headers={["When", "Event", "Stream", "Detail", "How to fix"]}
+            rows={playbackEvents.map((a) => {
+              const detail = String(
                 (a.meta as { detail?: string; error?: string })?.detail ??
                   (a.meta as { error?: string })?.error ??
                   "—"
-              ),
-            ])}
+              );
+              return [
+                formatDateTime(a.createdAt),
+                a.action.replace("playback_", "").replace(/_/g, " "),
+                a.streamName ?? (a.entityId ? `${a.entityId.slice(0, 8)}…` : "—"),
+                detail,
+                auditLogFixHint(a.action, a.meta, detail) ?? "—",
+              ];
+            })}
           />
         )}
       </section>
@@ -119,17 +125,21 @@ export default function StreamLogsPage() {
         <section>
           <h2 className="text-lg font-medium mb-3">HLS relay errors</h2>
           <DataTable
-            headers={["Stream", "Status", "Detail", "Time"]}
-            rows={relayErrors.map((a) => [
-              a.streamName ?? (a.entityId ? `${a.entityId.slice(0, 8)}…` : "—"),
-              String((a.meta as { status?: number })?.status ?? "—"),
-              String(
+            headers={["Stream", "Status", "Detail", "How to fix", "Time"]}
+            rows={relayErrors.map((a) => {
+              const detail = String(
                 (a.meta as { detail?: string; error?: string })?.detail ??
                   (a.meta as { error?: string })?.error ??
                   "upstream failed"
-              ),
-              formatDateTime(a.createdAt),
-            ])}
+              );
+              return [
+                a.streamName ?? (a.entityId ? `${a.entityId.slice(0, 8)}…` : "—"),
+                String((a.meta as { status?: number })?.status ?? "—"),
+                detail,
+                auditLogFixHint(a.action, a.meta, detail) ?? "—",
+                formatDateTime(a.createdAt),
+              ];
+            })}
           />
         </section>
       )}
@@ -167,7 +177,7 @@ export default function StreamLogsPage() {
           </p>
         ) : (
         <DataTable
-          headers={["Stream", "Server", "Status", "Uptime", "Error", "Last seen"]}
+          headers={["Stream", "Server", "Status", "Uptime", "Error", "How to fix", "Last seen"]}
           rows={processes.map((p) => {
             const uptime =
               p.startedAt && p.status === "running"
@@ -175,6 +185,7 @@ export default function StreamLogsPage() {
                     Math.max(0, Math.floor((Date.now() - new Date(p.startedAt).getTime()) / 1000))
                   )
                 : "—";
+            const err = p.errorMessage ?? "";
             return [
               p.stream ? (
                 <Link
@@ -190,7 +201,8 @@ export default function StreamLogsPage() {
               p.server.name,
               p.status,
               uptime,
-              p.errorMessage ?? "—",
+              err || "—",
+              streamProbeFixHint(err) || "—",
               formatDateTime(p.lastSeenAt),
             ];
           })}

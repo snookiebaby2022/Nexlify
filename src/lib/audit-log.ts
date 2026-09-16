@@ -42,6 +42,10 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   playback_origin_fail: "Playback origin failed",
   playback_failover: "Playback failover",
   stream_primary_failover: "Live primary failover",
+  iptv_line_login: "IPTV app login",
+  iptv_line_login_failed: "IPTV login failed",
+  streams_auto_category: "Auto-assigned stream categories",
+  clear_playback_logs: "Cleared playback error logs",
 };
 
 export function formatAuditAction(action: string): string {

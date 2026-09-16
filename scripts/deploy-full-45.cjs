@@ -142,6 +142,7 @@ bash scripts/panel-update-pipeline.sh apply
 pm2 restart nexlify-cron --update-env 2>/dev/null || true
 nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
 bash scripts/lock-live-routing-45.sh 2>/dev/null || true
+node scripts/purge-cloudflare-panel-cache.cjs 2>&1 || echo "WARN: Cloudflare purge skipped/failed"
 echo "=== Topology verify ==="
 npx tsx scripts/verify-playback-topology.mjs 2>/dev/null || bash scripts/check-live-routing-drift.sh || true
 echo "=== Deploy 10gbs edge ==="

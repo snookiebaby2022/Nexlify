@@ -140,6 +140,7 @@ export function LineEditForm({
   const [allowTrials, setAllowTrials] = useState(true);
   const [credentialMinLength, setCredentialMinLength] = useState(MIN_LINE_CREDENTIAL_FLOOR);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [kickOnCredentialChange, setKickOnCredentialChange] = useState(false);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -394,15 +395,17 @@ export function LineEditForm({
     }
 
     const notes = mergeLineNotesForSave(notesViewer, line.notes, form.adminNotes, form.resellerNotes);
+    const usernameChanging =
+      panel === "admin" && form.username.trim() && form.username !== line.username;
+    const passwordChanging = form.password !== line.password;
     const res = await fetch(`${linesApiRoot(panel)}/${lineId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username:
-          panel === "admin" && form.username.trim() && form.username !== line.username
-            ? sanitizeCredentialInput(form.username)
-            : undefined,
-        password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
+        username: usernameChanging ? sanitizeCredentialInput(form.username) : undefined,
+        password: passwordChanging ? sanitizeCredentialInput(form.password) : undefined,
+        kickSessions:
+          kickOnCredentialChange && (passwordChanging || usernameChanging) ? true : undefined,
         maxConnections:
           panel === "reseller" && nextMax === line.maxConnections ? undefined : nextMax,
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
@@ -713,6 +716,22 @@ export function LineEditForm({
                     <RefreshCw size={18} />
                   </button>
                 </div>
+                {line &&
+                (form.password !== line.password ||
+                  (panel === "admin" && form.username.trim() !== line.username)) ? (
+                  <label className="mt-2 flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={kickOnCredentialChange}
+                      onChange={(e) => setKickOnCredentialChange(e.target.checked)}
+                    />
+                    <span style={{ color: "var(--muted)" }}>
+                      Kick all active IPTV sessions when saving username/password changes (forces apps to
+                      re-login).
+                    </span>
+                  </label>
+                ) : null}
               </FormField>
               {panel === "admin" && (
                 <FormField label="Owner">

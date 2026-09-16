@@ -49,7 +49,15 @@ export default function NotificationsSettingsPage() {
             { key: "notifyLowCredits", label: "Low credits", type: "yesno" },
             { key: "notifyLowCreditThreshold", label: "Low credit threshold", type: "number" },
             { key: "smsNotifyLowCredit", label: "SMS on low credits", type: "yesno" },
-            { key: "notifyTicketReply", label: "Ticket updates", type: "yesno" },
+            { key: "notifyTicketReply", label: "Ticket updates (in-panel)", type: "yesno" },
+          ],
+        },
+        {
+          title: "Support tickets (email & Telegram)",
+          info: "Uses SMTP above and Monitoring → Telegram bot token/chat ID. Optional — in-panel alerts still work when these are off.",
+          fields: [
+            { key: "ticketNotifyEmail", label: "Email admin on new ticket & replies", type: "yesno" },
+            { key: "ticketNotifyTelegram", label: "Telegram admin on new ticket & replies", type: "yesno" },
           ],
         },
       ]}

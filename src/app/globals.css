@@ -786,6 +786,17 @@ button {
     inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
+.panel-sidebar-user-accent .panel-nav-link--active,
+.panel-sidebar-user-accent .panel-nav-sub-link--active,
+.panel-sidebar-user-accent .panel-nav-group-btn--active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 50%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 22%, transparent) 100%
+  ) !important;
+  box-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 30%, transparent) !important;
+}
+
 .panel-nav-link--pending:not(.panel-nav-link--active) {
   background: rgba(34, 211, 238, 0.18) !important;
 }

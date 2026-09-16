@@ -139,6 +139,13 @@ export async function notifyTicketCreated(opts: {
         },
       });
     }
+
+    const { notifyTicketCreatedExternal } = await import("@/lib/ticket-external-notify");
+    void notifyTicketCreatedExternal({
+      ticketId: opts.ticketId,
+      subject: opts.subject,
+      createdByUsername: opts.createdByUsername,
+    });
   } catch (err) {
     console.error("[notifyTicketCreated]", err);
   }
@@ -190,6 +197,16 @@ export async function notifyTicketReply(opts: {
         },
       });
     }
+
+    const { notifyTicketReplyExternal } = await import("@/lib/ticket-external-notify");
+    void notifyTicketReplyExternal({
+      subject: opts.subject,
+      authorUsername: opts.authorUsername,
+      authorRole: opts.authorRole,
+      body: opts.body,
+      ticketCreatedById: opts.ticketCreatedById,
+      assignedToId: opts.assignedToId,
+    });
   } catch (err) {
     console.error("[notifyTicketReply]", err);
   }

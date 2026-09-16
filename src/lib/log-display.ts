@@ -38,7 +38,27 @@ export function resolveLogLineUsername(log: LogLike): string | null {
   if (log.line?.username) return log.line.username;
   const m = metaRecord(log.meta);
   if (typeof m.lineUsername === "string" && m.lineUsername.trim()) return m.lineUsername.trim();
+  if (typeof m.username === "string" && log.action?.startsWith("iptv_line_login")) {
+    return m.username.trim();
+  }
   return null;
+}
+
+/** Human-readable login log details (panel + IPTV). */
+export function formatLoginLogDetails(log: LogLike): string {
+  const m = metaRecord(log.meta);
+  const parts: string[] = [];
+  if (typeof m.ip === "string" && m.ip.trim()) parts.push(`IP ${m.ip.trim()}`);
+  if (typeof m.role === "string" && m.role.trim()) parts.push(`role ${m.role.trim()}`);
+  if (typeof m.reason === "string" && m.reason.trim()) parts.push(m.reason.trim());
+  if (typeof m.deny === "string" && m.deny.trim()) parts.push(`deny: ${m.deny.trim()}`);
+  if (typeof m.userAgent === "string" && m.userAgent.trim()) {
+    parts.push(m.userAgent.trim().slice(0, 80));
+  }
+  if (!parts.length && Object.keys(m).length) {
+    return JSON.stringify(m).slice(0, 200);
+  }
+  return parts.join(" · ") || "—";
 }
 
 export function resolveLogStreamLabel(log: LogLike): string | null {

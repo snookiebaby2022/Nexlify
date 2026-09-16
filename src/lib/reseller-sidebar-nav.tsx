@@ -13,6 +13,7 @@ export function getResellerSidebarNav(opts?: Partial<ResellerGroupFlags>): Sideb
   const nav = { ...DEFAULT_GROUP_NAV, ...(opts?.nav ?? {}) };
   const accountItems = [
     { href: "/reseller/profile", label: "My Profile" },
+    { href: "/reseller/settings/sidebar", label: "Sidebar layout" },
     ...(nav.credits ? [{ href: "/reseller/credits", label: "My Credits" }] : []),
     { href: "/reseller/user_logs", label: "Activity Log" },
     ...(showApiPage ? [{ href: "/reseller/api", label: apiNavLabel }] : []),

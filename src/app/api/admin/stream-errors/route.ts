@@ -137,6 +137,26 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return parsed.response;
 
     const action = String(parsed.data.action ?? "");
+
+    if (action === "clear_playback_logs") {
+      const hours = parseStreamErrorsPlaybackHours(
+        parsed.data.hours != null ? String(parsed.data.hours) : null
+      );
+      const since = playbackSinceFromHours(hours);
+      const deleted = await prisma.activityLog.deleteMany({
+        where: {
+          createdAt: { gte: since },
+          action: { in: [...PLAYBACK_ISSUE_ACTIONS] },
+        },
+      });
+      await logActivity("clear_playback_logs", {
+        userId: session.id,
+        entity: "stream",
+        meta: { hours, deleted: deleted.count },
+      });
+      return NextResponse.json({ ok: true, deleted: deleted.count, hours });
+    }
+
     if (action !== "clear_live_dashboard_issues") {
       return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
     }

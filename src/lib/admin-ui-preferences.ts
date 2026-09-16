@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 
 export type AdminUiPreferences = {
   sidebarOrder?: string[];
+  /** Top-level sidebar entry keys to hide for this user (see sidebarEntryKey). */
+  sidebarHiddenKeys?: string[];
+  /** Hex or CSS color for sidebar accent highlights (optional). */
+  sidebarAccentColor?: string;
 };
 
 function prefsKey(userId: string) {
@@ -19,6 +23,10 @@ export async function getAdminUiPreferences(userId: string): Promise<AdminUiPref
     const parsed = JSON.parse(row.value) as AdminUiPreferences;
     if (!parsed || typeof parsed !== "object") return {};
     if (parsed.sidebarOrder && !Array.isArray(parsed.sidebarOrder)) delete parsed.sidebarOrder;
+    if (parsed.sidebarHiddenKeys && !Array.isArray(parsed.sidebarHiddenKeys)) delete parsed.sidebarHiddenKeys;
+    if (typeof parsed.sidebarAccentColor === "string" && !parsed.sidebarAccentColor.trim()) {
+      delete parsed.sidebarAccentColor;
+    }
     return parsed;
   } catch {
     return {};
@@ -30,6 +38,13 @@ export async function saveAdminUiPreferences(userId: string, patch: AdminUiPrefe
   const next: AdminUiPreferences = { ...current, ...patch };
   if (patch.sidebarOrder) {
     next.sidebarOrder = patch.sidebarOrder.filter((k) => typeof k === "string" && k.trim());
+  }
+  if (patch.sidebarHiddenKeys) {
+    next.sidebarHiddenKeys = patch.sidebarHiddenKeys.filter((k) => typeof k === "string" && k.trim());
+  }
+  if (patch.sidebarAccentColor !== undefined) {
+    const c = String(patch.sidebarAccentColor ?? "").trim();
+    next.sidebarAccentColor = c || undefined;
   }
   await prisma.panelSetting.upsert({
     where: { key: prefsKey(userId) },

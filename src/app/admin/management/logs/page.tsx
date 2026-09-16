@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/format";
 import { formatAuditAction, formatAuditMeta } from "@/lib/audit-log";
+import { auditLogFixHint } from "@/lib/log-fix-hints";
 import { LogsPageToolbar } from "@/components/logs-page-toolbar";
 import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
@@ -110,12 +111,13 @@ export default function ManagementLogsPage() {
               <th className="p-3 font-medium">Line</th>
               <th className="p-3 font-medium">Target</th>
               <th className="p-3 font-medium">Details</th>
+              <th className="p-3 font-medium min-w-[200px]">How to fix</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="p-8 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={7} className="p-8 text-center" style={{ color: "var(--muted)" }}>
                   Loading…
                 </td>
               </tr>
@@ -123,6 +125,13 @@ export default function ManagementLogsPage() {
             {!loading &&
               logs.map((log) => {
                 const meta = formatAuditMeta(log.meta);
+                const fix = auditLogFixHint(
+                  log.action,
+                  log.meta,
+                  typeof log.meta === "object" && log.meta && "detail" in (log.meta as object)
+                    ? String((log.meta as { detail?: string }).detail ?? "")
+                    : null
+                );
                 return (
                   <tr key={log.id} className="border-b" style={{ borderColor: "var(--border)" }}>
                     <td className="p-3 whitespace-nowrap" style={{ color: "var(--muted)" }}>
@@ -177,12 +186,15 @@ export default function ManagementLogsPage() {
                     <td className="p-3 text-xs" style={{ color: "var(--muted)" }}>
                       {meta ?? "—"}
                     </td>
+                    <td className="p-3 text-xs leading-snug" style={{ color: "var(--muted)" }}>
+                      {fix ?? "—"}
+                    </td>
                   </tr>
                 );
               })}
             {!loading && !logs.length && (
               <tr>
-                <td colSpan={6} className="p-8 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={7} className="p-8 text-center" style={{ color: "var(--muted)" }}>
                   No log entries match your filters.
                 </td>
               </tr>

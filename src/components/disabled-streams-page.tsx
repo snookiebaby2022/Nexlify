@@ -136,6 +136,63 @@ export function DisabledStreamsClient() {
     }
   }
 
+  async function autoCategorySelected() {
+    const ids = [...selected];
+    if (!ids.length) return;
+    setBusy("auto-cat");
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/streams/auto-category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: "selected", streamIds: ids, onlyUncategorized: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Auto-category failed");
+      adminToast(`Assigned categories to ${Number(data.updated ?? 0)} stream(s)`, "success");
+      await load();
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Auto-category failed";
+      setMsg(err);
+      adminToast(err, "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function autoCategoryAllUncategorized() {
+    const ok = window.confirm(
+      `Auto-detect categories from stream names for up to 2000 disabled uncategorized streams${type !== "ALL" ? ` (${type})` : ""}?`
+    );
+    if (!ok) return;
+    setBusy("auto-cat-all");
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/streams/auto-category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scope: "all_inactive_uncategorized",
+          type: type === "ALL" ? undefined : type,
+          onlyUncategorized: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Auto-category failed");
+      adminToast(
+        `Updated ${Number(data.updated ?? 0)} · skipped ${Number(data.skipped ?? 0)} (no prefix match)`,
+        "success"
+      );
+      await load();
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Auto-category failed";
+      setMsg(err);
+      adminToast(err, "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function probeSelected() {
     const ids = [...selected].slice(0, PAGE_SIZE);
     if (!ids.length) {
@@ -329,6 +386,23 @@ export function DisabledStreamsClient() {
             onClick={() => void probeSelected()}
           >
             {busy === "probe" ? "Probing…" : "Probe"}
+          </button>
+          <button
+            type="button"
+            className="xui-lines-toolbar-btn"
+            disabled={!selected.size || Boolean(busy)}
+            title="Name prefix, existing category match, or provider EPG/group when linked"
+            onClick={() => void autoCategorySelected()}
+          >
+            {busy === "auto-cat" ? "…" : "Auto category"}
+          </button>
+          <button
+            type="button"
+            className="xui-lines-toolbar-btn"
+            disabled={Boolean(busy)}
+            onClick={() => void autoCategoryAllUncategorized()}
+          >
+            {busy === "auto-cat-all" ? "…" : "Auto category all"}
           </button>
           <button
             type="button"

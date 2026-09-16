@@ -12,7 +12,12 @@ import {
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
-import { filterSidebarEntries, orderSidebarEntries, parseSidebarHiddenHrefs } from "@/lib/sidebar-customization";
+import {
+  filterSidebarEntries,
+  filterSidebarEntriesByKeys,
+  orderSidebarEntries,
+  parseSidebarHiddenHrefs,
+} from "@/lib/sidebar-customization";
 import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { searchOperatorFeatures } from "@/lib/operator-feature-index";
 import { usePanelI18n } from "@/lib/i18n/use-panel-i18n";
@@ -411,11 +416,15 @@ export function PanelSidebar({
   const [navFilter, setNavFilter] = useState("");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [sidebarOrder, setSidebarOrder] = useState<string[] | undefined>(undefined);
+  const [sidebarHiddenKeys, setSidebarHiddenKeys] = useState<string[] | undefined>(undefined);
+  const [sidebarAccentColor, setSidebarAccentColor] = useState<string | undefined>(undefined);
   const deferredFilter = useDeferredValue(navFilter);
   const isFiltering = deferredFilter.trim().length > 0;
   const hidden = parseSidebarHiddenHrefs(hiddenHrefs);
+  const hiddenKeySet = new Set(sidebarHiddenKeys ?? []);
   const orderedEntries = orderSidebarEntries(entries, sidebarOrder);
-  const scopedEntries = filterSidebarEntries(orderedEntries, hidden);
+  const afterPersonalHide = filterSidebarEntriesByKeys(orderedEntries, hiddenKeySet);
+  const scopedEntries = filterSidebarEntries(afterPersonalHide, hidden);
   const visibleEntries = filterNavEntries(scopedEntries, deferredFilter);
   const routeActiveIds = activeGroupIds(pathname, entries, search);
   /** Mobile drawer: never use the desktop collapsed (72px) rail. */
@@ -435,6 +444,11 @@ export function PanelSidebar({
           if (cancelled) return;
           const order = d?.preferences?.sidebarOrder;
           if (Array.isArray(order) && order.length) setSidebarOrder(order);
+          const hiddenKeys = d?.preferences?.sidebarHiddenKeys;
+          if (Array.isArray(hiddenKeys)) setSidebarHiddenKeys(hiddenKeys);
+          const accent = d?.preferences?.sidebarAccentColor;
+          if (typeof accent === "string" && accent.trim()) setSidebarAccentColor(accent.trim());
+          else setSidebarAccentColor(undefined);
         })
         .catch(() => {});
     };
@@ -556,7 +570,16 @@ export function PanelSidebar({
     : openIds;
 
   return (
-    <aside className={`panel-sidebar ${effectiveCollapsed ? "panel-sidebar--collapsed" : ""} ${className}`}>
+    <aside
+      className={`panel-sidebar ${effectiveCollapsed ? "panel-sidebar--collapsed" : ""} ${
+        sidebarAccentColor ? "panel-sidebar-user-accent" : ""
+      } ${className ?? ""}`}
+      style={
+        sidebarAccentColor
+          ? ({ ["--accent" as string]: sidebarAccentColor } as React.CSSProperties)
+          : undefined
+      }
+    >
       {brand && (
         <div className="panel-sidebar-brand">
           <PanelBrandMark name={brand} href={brandHref} size="sm" />

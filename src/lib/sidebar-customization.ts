@@ -10,6 +10,14 @@ export function parseSidebarHiddenHrefs(raw: string | undefined | null): Set<str
   return set;
 }
 
+export function filterSidebarEntriesByKeys(
+  entries: SidebarNavEntry[],
+  hiddenKeys: Set<string>
+): SidebarNavEntry[] {
+  if (!hiddenKeys.size) return entries;
+  return entries.filter((e) => !hiddenKeys.has(sidebarEntryKey(e)));
+}
+
 export function filterSidebarEntries(
   entries: SidebarNavEntry[],
   hidden: Set<string>

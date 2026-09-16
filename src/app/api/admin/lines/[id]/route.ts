@@ -436,6 +436,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     await invalidateXtreamCategories();
   }
 
+  let kickedSessions = 0;
+  const passwordChanged = Boolean(nextPassword && nextPassword !== existing.password);
+  const usernameChanged = line.username !== existing.username;
+  if (body.kickSessions === true && (passwordChanged || usernameChanged)) {
+    const { kickLineConnections } = await import("@/lib/connections");
+    kickedSessions = await kickLineConnections(line.id, session.id);
+  }
+
   await logActivity(renewResult ? "renew_line" : "edit_line", {
     userId: session.id,
     lineId: line.id,
@@ -446,8 +454,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           days: renewResult.daysAdded,
           previousExpiresAt: renewResult.previousExpiresAt.toISOString(),
           reactivated: renewResult.reactivated,
+          ...(kickedSessions ? { kickedSessions } : {}),
         }
-      : undefined,
+      : kickedSessions
+        ? { kickedSessions }
+        : undefined,
   });
 
   return NextResponse.json({
@@ -465,6 +476,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       : undefined,
     creditsCharged: creditCharge?.charged ?? 0,
     creditsRemaining: creditCharge?.balanceAfter ?? undefined,
+    kickedSessions,
   });
   } catch (e) {
     return apiMutationErrorResponse(e);

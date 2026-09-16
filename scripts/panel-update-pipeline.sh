@@ -97,6 +97,9 @@ cmd_apply() {
     echo "APPLY_OK LIVE=$(cat .next/BUILD_ID 2>/dev/null || echo unknown)"
     curl -sS -m 8 http://127.0.0.1:13000/api/health || true
     echo
+    if [ -f "$ROOT/scripts/purge-cloudflare-panel-cache.cjs" ]; then
+      node "$ROOT/scripts/purge-cloudflare-panel-cache.cjs" 2>&1 || echo "WARN: Cloudflare purge skipped/failed"
+    fi
     if [ -x "$ROOT/scripts/snapshot-next-backup.sh" ]; then
       bash "$ROOT/scripts/snapshot-next-backup.sh" || true
     fi

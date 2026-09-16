@@ -27,10 +27,25 @@ export async function PUT(req: NextRequest) {
     const parsed = await parseJsonBody(req);
     if (!parsed.ok) return parsed.response;
 
-    const body = parsed.data as { sidebarOrder?: unknown };
-    const patch: { sidebarOrder?: string[] } = {};
+    const body = parsed.data as {
+      sidebarOrder?: unknown;
+      sidebarHiddenKeys?: unknown;
+      sidebarAccentColor?: unknown;
+    };
+    const patch: {
+      sidebarOrder?: string[];
+      sidebarHiddenKeys?: string[];
+      sidebarAccentColor?: string;
+    } = {};
     if (Array.isArray(body.sidebarOrder)) {
       patch.sidebarOrder = body.sidebarOrder.filter((k): k is string => typeof k === "string");
+    }
+    if (Array.isArray(body.sidebarHiddenKeys)) {
+      patch.sidebarHiddenKeys = body.sidebarHiddenKeys.filter((k): k is string => typeof k === "string");
+    }
+    if (body.sidebarAccentColor !== undefined) {
+      patch.sidebarAccentColor =
+        typeof body.sidebarAccentColor === "string" ? body.sidebarAccentColor : "";
     }
 
     const preferences = await saveAdminUiPreferences(session.id, patch);

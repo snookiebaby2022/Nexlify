@@ -190,12 +190,20 @@ async function handlePlayerApiInner(
     return j(xtreamUnauthPayload(panelBase, userAgent));
   }
 
+  const ip = getClientIp(req) ?? "unknown";
+
   const line = await getLineByCredentials(username, password);
   if (!line) {
+    const { logIptvLineLoginFailed } = await import("@/lib/line-iptv-login-log");
+    void logIptvLineLoginFailed({
+      username: String(username),
+      ip,
+      reason: "bad_credentials",
+      userAgent,
+    });
     return j(xtreamUnauthPayload(panelBase, userAgent));
   }
 
-  const ip = getClientIp(req);
   const deny = await assertPlaybackAllowed(
     asPlaybackGuardLine(line),
     ip,
@@ -203,6 +211,14 @@ async function handlePlayerApiInner(
     { listingOnly: true },
   );
   if (deny) {
+    const { logIptvLineLoginFailed } = await import("@/lib/line-iptv-login-log");
+    void logIptvLineLoginFailed({
+      username: line.username,
+      ip,
+      reason: "denied",
+      deny,
+      userAgent,
+    });
     const payload = xtreamUnauthPayload(panelBase, userAgent);
     payload.user_info.message = playbackDenyMessage(deny);
     return j(
@@ -226,6 +242,13 @@ async function handlePlayerApiInner(
     // Login/user_info only needs live ready for first zap. VOD/series are
     // warmed by cron; launching all three for every login caused DB storms.
     catalogPulse("login");
+    const { logIptvLineLoginSuccess } = await import("@/lib/line-iptv-login-log");
+    void logIptvLineLoginSuccess({
+      lineId: line.id,
+      lineUsername: line.username,
+      ip,
+      userAgent,
+    });
     void warmXtreamLiveCatalogNow(line).catch(() => undefined);
     warmLineXmltv(line);
     return j(await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin));

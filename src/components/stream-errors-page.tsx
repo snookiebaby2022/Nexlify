@@ -196,11 +196,18 @@ export function StreamErrorsClient() {
             style={{ borderColor: "rgba(239,68,68,0.45)", color: "#f87171" }}
             disabled={Boolean(busy)}
             onClick={async () => {
-              if (!confirm("Delete playback error log entries from the last 24h view?")) return;
+              const label =
+                playbackHours === 168 ? "7 days" : playbackHours === 720 ? "30 days" : `${playbackHours} hours`;
+              if (!confirm(`Delete playback error log entries from the last ${label}?`)) return;
               setBusy("clearLogs");
               try {
-                await fetch("/api/admin/logs?action=playback_", { method: "DELETE" });
-                setMsg("Cleared playback error logs.");
+                const res = await fetch("/api/admin/stream-errors", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "clear_playback_logs", hours: playbackHours }),
+                });
+                const data = await res.json().catch(() => ({}));
+                setMsg(res.ok ? `Cleared ${data.deleted ?? 0} playback log row(s).` : data.error ?? "Failed");
                 load();
               } finally {
                 setBusy(null);
@@ -208,6 +215,40 @@ export function StreamErrorsClient() {
             }}
           >
             Clear playback logs
+          </button>
+          <button
+            type="button"
+            className="text-sm px-3 py-1.5 rounded border font-medium"
+            style={{ borderColor: "rgba(239,68,68,0.55)", color: "#fca5a5" }}
+            disabled={Boolean(busy)}
+            onClick={async () => {
+              if (
+                !confirm(
+                  "Clear probe fail flags on the dashboard AND delete playback logs for the selected time window?"
+                )
+              )
+                return;
+              setBusy("clearAll");
+              try {
+                await fetch("/api/admin/stream-errors", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "clear_live_dashboard_issues" }),
+                });
+                const res = await fetch("/api/admin/stream-errors", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "clear_playback_logs", hours: playbackHours }),
+                });
+                const data = await res.json().catch(() => ({}));
+                setMsg(`Cleared dashboard flags and ${data.deleted ?? 0} playback log row(s).`);
+                load();
+              } finally {
+                setBusy(null);
+              }
+            }}
+          >
+            Clear all
           </button>
           <Link
             href="/admin/content/streams?status=offline"

@@ -5,23 +5,13 @@ import { PanelRole, Prisma } from "@prisma/client";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { parseLogLimit } from "@/lib/log-page";
 import { enrichActivityLogsForDisplay } from "@/lib/log-display";
+import { buildActivityLogWhere } from "@/lib/activity-log-query";
 
 function activityWhere(req: NextRequest): Prisma.ActivityLogWhereInput {
-  const actionFilter = req.nextUrl.searchParams.get("action")?.trim();
-  const q = req.nextUrl.searchParams.get("q")?.trim();
-  const where: Prisma.ActivityLogWhereInput = {};
-  if (actionFilter) {
-    where.action = { contains: actionFilter, mode: "insensitive" };
-  }
-  if (q) {
-    where.OR = [
-      { entity: { contains: q, mode: "insensitive" } },
-      { entityId: { contains: q, mode: "insensitive" } },
-      { user: { username: { contains: q, mode: "insensitive" } } },
-      { line: { username: { contains: q, mode: "insensitive" } } },
-    ];
-  }
-  return where;
+  return buildActivityLogWhere({
+    actionFilter: req.nextUrl.searchParams.get("action")?.trim(),
+    q: req.nextUrl.searchParams.get("q")?.trim(),
+  });
 }
 
 export async function GET(req: NextRequest) {
