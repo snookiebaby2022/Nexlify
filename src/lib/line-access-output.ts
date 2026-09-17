@@ -8,13 +8,14 @@ export const ACCESS_OUTPUT_OPTIONS: {
   /** Tokens stored in Line.allowedOutput (comma-separated). */
   tokens: string[];
 }[] = [
-  { id: "hls", label: "HLS", tokens: ["hls", "m3u8"] },
+  // MPEG-TS first: XCIPTV / Smarters / VLC pick allowed_output_formats[0].
   { id: "mpegts", label: "MPEGTS", tokens: ["ts"] },
+  { id: "hls", label: "HLS", tokens: ["hls", "m3u8"] },
   { id: "rtmp", label: "RTMP", tokens: ["rtmp"] },
 ];
 
-/** Default: all formats enabled (matches XUI Access Output all-checked). */
-export const DEFAULT_ALLOWED_OUTPUT = "hls,m3u8,ts,rtmp";
+/** Default: all formats enabled; ts before hls so IPTV apps open MPEG-TS. */
+export const DEFAULT_ALLOWED_OUTPUT = "ts,hls,m3u8,rtmp";
 
 /** XUI stores allowed_outputs as JSON-ish id lists: [1,2,3] → m3u8, ts, rtmp. */
 const XUI_OUTPUT_ID_MAP: Record<string, AccessOutputId> = {
@@ -85,13 +86,14 @@ export function normalizeAllowedOutputInput(raw: unknown): string | undefined {
 
 /** Formats for Xtream `user_info.allowed_output_formats` (never leave XUI `[1,2,3]` raw).
  *  Xtream Codes / IPTV Smarters expect `m3u8`, `ts`, `rtmp` — not a `hls` token.
+ *  Prefer `ts` first so Android IPTV apps open the splice path instead of HLS remux.
  */
 export function toXtreamAllowedOutputFormats(raw: string | null | undefined): string[] {
   const selected = parseAccessOutput(raw);
   const effective = selected.size ? selected : defaultAccessOutputSelection();
   const out: string[] = [];
-  if (effective.has("hls")) out.push("m3u8");
   if (effective.has("mpegts")) out.push("ts");
+  if (effective.has("hls")) out.push("m3u8");
   if (effective.has("rtmp")) out.push("rtmp");
-  return out.length ? out : ["m3u8", "ts", "rtmp"];
+  return out.length ? out : ["ts", "m3u8", "rtmp"];
 }

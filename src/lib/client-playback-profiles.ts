@@ -1,6 +1,14 @@
 /** Per-app playback tuning — XCIPTV prefers TS, Smarters HLS, etc. */
 
-export type ClientProfileId = "auto" | "smarters" | "xciptv" | "tivimate" | "mag" | "vlc" | "nexus";
+export type ClientProfileId =
+  | "auto"
+  | "smarters"
+  | "xciptv"
+  | "tivimate"
+  | "mag"
+  | "vlc"
+  | "nexus"
+  | "smarttv";
 
 export type ClientPlaybackProfile = {
   id: ClientProfileId;
@@ -16,7 +24,8 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
   auto: {
     id: "auto",
     label: "Auto-detect from User-Agent",
-    liveOutput: "auto",
+    // Unknown IPTV apps almost always want MPEG-TS; smart TVs use the smarttv profile.
+    liveOutput: "ts",
     vodDirectPlay: false,
     // Prefetch on login starts HLS packagers on the panel and stalls first zap.
     zapPrefetchOnPlaylist: false,
@@ -76,6 +85,15 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     zapPrefetchOnPlaylist: false,
     numericCategoryId: true,
   },
+  smarttv: {
+    id: "smarttv",
+    label: "LG / Samsung Smart TV",
+    // Native TV players cannot play unbounded MPEG-TS — keep HLS first.
+    liveOutput: "hls",
+    vodDirectPlay: false,
+    zapPrefetchOnPlaylist: false,
+    numericCategoryId: false,
+  },
 };
 
 export function detectClientProfile(userAgent?: string | null): ClientProfileId {
@@ -94,7 +112,7 @@ export function detectClientProfile(userAgent?: string | null): ClientProfileId 
   }
   if (ua.includes("dalvik")) return "xciptv";
   if (ua.includes("nexus") || ua.includes("nexustv")) return "nexus";
-  // LG/Samsung native players cannot play unbounded MPEG-TS. Keep m3u8 first.
+  // LG/Samsung native players cannot play unbounded MPEG-TS.
   if (
     ua.includes("web0s") ||
     ua.includes("webos") ||
@@ -104,7 +122,7 @@ export function detectClientProfile(userAgent?: string | null): ClientProfileId 
     ua.includes("smarttv") ||
     ua.includes("smart-tv")
   ) {
-    return "auto";
+    return "smarttv";
   }
   if (ua.includes("smarters") || ua.includes("iptv smarters")) return "smarters";
   // Bare OkHttp is IPTV Smarters Pro / XCIPTV on Android — not Chrome.

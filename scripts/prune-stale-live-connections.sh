@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-THRESHOLD_SEC="${NEXLIFY_CONN_STALE_SEC:-90}"
+THRESHOLD_SEC="${NEXLIFY_CONN_STALE_SEC:-600}"
 export THRESHOLD_SEC
 
 if command -v node >/dev/null 2>&1 && [ -d node_modules/@prisma/client ]; then

@@ -17,7 +17,9 @@ const MINUTE_MS = 60_000;
 const LOCK_TTL_S = 300; // 5-minute safety net
 const MINUTE_LOCK_KEY = "nexlify:cron:minute";
 /** Exit for PM2 recycle when RSS exceeds this (MB). */
-const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "800");
+const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "1200");
+/** Prevent overlapping minute ticks when jobs run longer than 60s. */
+let ticking = false;
 
 /**
  * Hourly jobs must survive PM2 recycle. Seeding lastHour to "now" meant a
@@ -84,8 +86,14 @@ function maybeRecycleForMemory() {
 }
 
 async function tickMinute() {
+  if (ticking) {
+    console.log("[nexlify-cron] previous minute tick still running — skipping overlap");
+    return;
+  }
+  ticking = true;
   if (!(await acquireLock(MINUTE_LOCK_KEY))) {
     console.log("[nexlify-cron] another instance holds the minute lock — skipping");
+    ticking = false;
     return;
   }
 
@@ -103,6 +111,7 @@ async function tickMinute() {
     console.error("[nexlify-cron] minute jobs error", e);
   } finally {
     await releaseLock(MINUTE_LOCK_KEY);
+    ticking = false;
     maybeRecycleForMemory();
   }
 }
@@ -119,4 +128,4 @@ setInterval(() => {
   void pumpPlexSyncQueue().catch((e) => {
     console.error("[nexlify-cron] plex sync pump", e);
   });
-}, 5_000);
+}, 15_000);

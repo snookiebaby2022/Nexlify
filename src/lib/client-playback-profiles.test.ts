@@ -40,14 +40,24 @@ describe("client playback profiles", () => {
       detectClientProfile(
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
       ),
-      "auto"
+      "smarttv"
     );
   });
 
   it("does not prefetch live zaps for unmatched User-Agents (avoids panel HLS ffmpeg on login)", () => {
     const profile = resolveClientPlaybackProfile("SomeIptvApp/1.0");
     assert.equal(profile.id, "auto");
+    assert.equal(profile.liveOutput, "ts");
     assert.equal(profile.zapPrefetchOnPlaylist, false);
+  });
+
+  it("puts HLS first for smart TV profiles", () => {
+    const profile = resolveClientPlaybackProfile(
+      "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
+    );
+    assert.equal(profile.id, "smarttv");
+    assert.equal(profile.liveOutput, "hls");
+    assert.deepEqual(preferLiveOutputFormats(["ts", "m3u8", "rtmp"], profile), ["m3u8", "ts", "rtmp"]);
   });
 
   it("does not prefetch streams during XCIPTV catalog updates", () => {

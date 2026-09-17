@@ -17,6 +17,8 @@ export async function pulseLiveConnection(opts: {
   onDemand?: boolean;
   userAgent?: string;
   playbackPath?: string;
+  /** Skip SSE notify (batch path notifies once). */
+  quiet?: boolean;
 }): Promise<void> {
   try {
     await pulseLiveConnectionInner(opts);
@@ -37,6 +39,7 @@ async function pulseLiveConnectionInner(opts: {
   onDemand?: boolean;
   userAgent?: string;
   playbackPath?: string;
+  quiet?: boolean;
 }): Promise<void> {
   const lineId = opts.lineId?.trim();
   const streamId = opts.streamId?.trim();
@@ -75,7 +78,7 @@ async function pulseLiveConnectionInner(opts: {
     void touchLiveSession(lineId, streamId, clientIp || null);
     void setViewerActiveStream(lineId, streamId, clientIp || null);
     void refreshConnSlot(lineId, { streamId, clientIp });
-    notifyLiveConnectionsChanged();
+    if (!opts.quiet) notifyLiveConnectionsChanged();
     return;
   } catch (err) {
     const code = (err as { code?: string })?.code;
@@ -90,7 +93,7 @@ async function pulseLiveConnectionInner(opts: {
       void touchLiveSession(lineId, streamId, clientIp || null);
       void setViewerActiveStream(lineId, streamId, clientIp || null);
       void refreshConnSlot(lineId, { streamId, clientIp });
-      notifyLiveConnectionsChanged();
+      if (!opts.quiet) notifyLiveConnectionsChanged();
       return;
     }
     /* Unique index may not be migrated yet — legacy path. */
@@ -104,7 +107,7 @@ async function pulseLiveConnectionInner(opts: {
     void touchLiveSession(lineId, streamId, clientIp || null);
     void setViewerActiveStream(lineId, streamId, clientIp || null);
     void refreshConnSlot(lineId, { streamId, clientIp });
-    notifyLiveConnectionsChanged();
+    if (!opts.quiet) notifyLiveConnectionsChanged();
     return;
   }
 
@@ -116,5 +119,5 @@ async function pulseLiveConnectionInner(opts: {
   void touchLiveSession(lineId, streamId, clientIp || null);
   void setViewerActiveStream(lineId, streamId, clientIp || null);
   void refreshConnSlot(lineId, { streamId, clientIp });
-  notifyLiveConnectionsChanged();
+  if (!opts.quiet) notifyLiveConnectionsChanged();
 }

@@ -1,11 +1,19 @@
 #!/usr/bin/env node
 /**
  * Aggressive connection enforcer: drop over-cap + stale every pass.
- * Intended as a short-interval cron (every 15s) companion to the 1-minute job.
+ * Intended as a short-interval cron companion to the 1-minute job.
+ *
+ * Stale window must stay well above edge pulse intervals. A 3-minute cut while
+ * panel :13000 is resetting pulses kicks healthy viewers and looks like buffering.
  */
 process.chdir(require("path").join(__dirname, ".."));
 require("./load-env.cjs").loadEnv();
 const { PrismaClient } = require("@prisma/client");
+
+const STALE_MS = Math.max(
+  5 * 60 * 1000,
+  Number(process.env.NEXLIFY_CONN_STALE_MS || 10 * 60 * 1000) || 10 * 60 * 1000
+);
 
 (async () => {
   const p = new PrismaClient();
@@ -30,9 +38,8 @@ const { PrismaClient } = require("@prisma/client");
       if (!ids.length) continue;
       dropped += (await p.liveConnection.deleteMany({ where: { id: { in: ids } } })).count;
     }
-    // 3-minute stale is safer than 10m while pulse is flaky under load
     const stale = await p.liveConnection.deleteMany({
-      where: { lastSeenAt: { lt: new Date(Date.now() - 3 * 60 * 1000) } },
+      where: { lastSeenAt: { lt: new Date(Date.now() - STALE_MS) } },
     });
     // Also collapse duplicate (lineId, streamId, ip) keeping newest
     const dups = await p.$executeRawUnsafe(`
@@ -47,7 +54,8 @@ const { PrismaClient } = require("@prisma/client");
       JSON.stringify({
         overLines: over.length,
         droppedExtras: dropped,
-        droppedStale3m: stale.count,
+        droppedStaleMs: STALE_MS,
+        droppedStale: stale.count,
         droppedDupPairs: dups,
         remaining: await p.liveConnection.count(),
       })

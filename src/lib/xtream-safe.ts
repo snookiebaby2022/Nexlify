@@ -73,7 +73,12 @@ export function xtreamOutputFormats(raw: string | null | undefined): string[] {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
     .map((s) => (s === "hls" ? "m3u8" : s));
-  const out = [...new Set(parts)].filter((s) => s === "m3u8" || s === "ts" || s === "rtmp");
+  const selected = new Set(parts.filter((s) => s === "m3u8" || s === "ts" || s === "rtmp"));
+  // Canonical order: MPEG-TS first (XCIPTV/Smarters), then HLS, then RTMP.
+  const out: string[] = [];
+  if (selected.has("ts")) out.push("ts");
+  if (selected.has("m3u8")) out.push("m3u8");
+  if (selected.has("rtmp")) out.push("rtmp");
   return out.length ? out : ["ts", "m3u8"];
 }
 

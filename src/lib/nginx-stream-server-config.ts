@@ -25,7 +25,7 @@ export async function buildStreamServerNginxConfig(panelUrl?: string): Promise<s
   };
 
   const snippet = buildNginxAgentSnippet(nginx);
-  const preferredOutput = String(streams.preferredLiveOutput ?? "hls");
+  const preferredOutput = String(streams.preferredLiveOutput ?? "ts");
 
   return `# Nexlify stream server — generated ${new Date().toISOString()}
 # Panel: ${panelOrigin}

@@ -63,8 +63,8 @@ describe("xtream-safe", () => {
     assert.equal(xtreamDeltaArray(rows, 0, (r) => r.updated_at).length, 2);
   });
 
-  it("maps hls to m3u8 so XCIPTV does not request a .hls container", () => {
-    assert.deepEqual(xtreamOutputFormats("hls,m3u8,ts,rtmp"), ["m3u8", "ts", "rtmp"]);
+  it("maps hls to m3u8 and prefers mpegts first for IPTV apps", () => {
+    assert.deepEqual(xtreamOutputFormats("hls,m3u8,ts,rtmp"), ["ts", "m3u8", "rtmp"]);
   });
 
   it("defaults live output to mpegts first", () => {

@@ -34,19 +34,19 @@ describe("line-access-output", () => {
 
   it("normalizes empty input to default", () => {
     assert.equal(normalizeAllowedOutputInput(""), DEFAULT_ALLOWED_OUTPUT);
-    assert.equal(normalizeAllowedOutputInput("hls,ts,rtmp"), "hls,m3u8,ts,rtmp");
+    assert.equal(normalizeAllowedOutputInput("hls,ts,rtmp"), "ts,hls,m3u8,rtmp");
   });
 
   it("parses XUI numeric allowed_outputs [1,2,3]", () => {
     const selected = parseAccessOutput("[1,2,3]");
     assert.equal(selected.size, 3);
     assert.equal(normalizeAllowedOutputInput("[1,2,3]"), DEFAULT_ALLOWED_OUTPUT);
-    assert.equal(normalizeAllowedOutputInput("[1,2]"), "hls,m3u8,ts");
+    assert.equal(normalizeAllowedOutputInput("[1,2]"), "ts,hls,m3u8");
   });
 
-  it("expands XUI ids for Xtream player payloads", () => {
+  it("expands XUI ids for Xtream player payloads with ts first", () => {
     const formats = toXtreamAllowedOutputFormats("[1,2,3]");
-    assert.deepEqual(formats, ["m3u8", "ts", "rtmp"]);
+    assert.deepEqual(formats, ["ts", "m3u8", "rtmp"]);
     assert.equal(formats.includes("hls"), false);
   });
 });
