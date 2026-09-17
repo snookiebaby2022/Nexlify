@@ -3274,20 +3274,56 @@ function hlsDirFresh(streamId) {
   }
 }
 
+/**
+ * Trim trailing HLS segments that are not on disk yet.
+ * Race: ffmpeg updates index.m3u8 before closing segN.ts — mid-list existsSync
+ * holes make players skip a media sequence number. Only drop from the end.
+ */
 function filterPlaylistToExisting(body, dir) {
   const lines = body.split("\n");
-  const out = [];
+  const header = [];
+  const entries = [];
+  let pendingExtinf = null;
+  const ready = (name) => {
+    try {
+      const st = fs.statSync(path.join(dir, name));
+      return st.isFile() && st.size > 0;
+    } catch {
+      return false;
+    }
+  };
+
   for (const line of lines) {
     const t = line.trim();
     if (t.startsWith("#EXT-X-DISCONTINUITY")) continue;
-    const name = t.split(/[\\/]/).pop() ?? t;
-    if (/^seg\d+\.ts$/i.test(name)) {
-      if (!fs.existsSync(path.join(dir, name))) {
-        if (out.length && out[out.length - 1].trim().startsWith("#EXTINF")) out.pop();
-        continue;
-      }
+    if (t.startsWith("#EXTINF")) {
+      pendingExtinf = line;
+      continue;
     }
-    out.push(line);
+    const name = t.split(/[\\/]/).pop() ?? t;
+    if (pendingExtinf && /^seg\d+\.ts$/i.test(name)) {
+      entries.push({ extinf: pendingExtinf, uri: name, uriRaw: line });
+      pendingExtinf = null;
+      continue;
+    }
+    if (!entries.length) {
+      if (pendingExtinf) {
+        header.push(pendingExtinf);
+        pendingExtinf = null;
+      }
+      header.push(line);
+    } else {
+      pendingExtinf = null;
+    }
+  }
+
+  while (entries.length && !ready(entries[entries.length - 1].uri)) {
+    entries.pop();
+  }
+
+  const out = [...header];
+  for (const entry of entries) {
+    out.push(entry.extinf, entry.uriRaw);
   }
   return out.join("\n");
 }

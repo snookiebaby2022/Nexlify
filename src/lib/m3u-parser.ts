@@ -71,6 +71,85 @@ export function parseM3u(content: string): M3uEntry[] {
   return entries;
 }
 
+export type M3uValidationIssue = {
+  code: "empty" | "missing_extm3u" | "missing_extinf" | "malformed_url" | "no_entries";
+  message: string;
+  line?: number;
+  url?: string;
+};
+
+export type M3uValidationResult = {
+  valid: boolean;
+  entries: M3uEntry[];
+  issues: M3uValidationIssue[];
+};
+
+/** Validate playlist structure before import — empty, missing tags, bad URLs. */
+export function validateM3uPlaylist(content: string): M3uValidationResult {
+  const issues: M3uValidationIssue[] = [];
+  const raw = String(content ?? "").replace(/^\uFEFF/, "");
+  if (!raw.trim()) {
+    return {
+      valid: false,
+      entries: [],
+      issues: [{ code: "empty", message: "Playlist is empty" }],
+    };
+  }
+
+  const lines = raw.split(/\r?\n/);
+  const hasExtm3u = lines.some((l) => l.trim().startsWith("#EXTM3U"));
+  if (!hasExtm3u) {
+    issues.push({ code: "missing_extm3u", message: "Missing #EXTM3U header" });
+  }
+
+  const hasExtinf = lines.some((l) => l.trim().startsWith("#EXTINF:"));
+  if (!hasExtinf) {
+    issues.push({ code: "missing_extinf", message: "Missing #EXTINF tags" });
+  }
+
+  const entries = parseM3u(raw);
+  if (!entries.length) {
+    issues.push({ code: "no_entries", message: "No playable entries found" });
+  }
+
+  entries.forEach((entry, index) => {
+    const url = entry.url.trim();
+    if (!isStreamUrlLine(url)) {
+      issues.push({
+        code: "malformed_url",
+        message: `Malformed stream URL on entry ${index + 1}`,
+        url,
+      });
+      return;
+    }
+    // Relative paths are allowed; absolute schemes must look like a URI.
+    if (url.includes("://")) {
+      try {
+        // eslint-disable-next-line no-new
+        new URL(url.startsWith("//") ? `http:${url}` : url);
+      } catch {
+        issues.push({
+          code: "malformed_url",
+          message: `Malformed stream URL on entry ${index + 1}`,
+          url,
+        });
+      }
+    } else if (/[\s<>"{}|\\^`]/.test(url)) {
+      issues.push({
+        code: "malformed_url",
+        message: `Malformed stream URL on entry ${index + 1}`,
+        url,
+      });
+    }
+  });
+
+  return {
+    valid: issues.length === 0,
+    entries,
+    issues,
+  };
+}
+
 export function guessStreamType(entry: M3uEntry, forced?: "LIVE" | "MOVIE" | "SERIES") {
   if (forced) return forced;
   const url = entry.url ?? "";

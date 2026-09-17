@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseM3u, guessStreamType } from "./m3u-parser";
+import { parseM3u, guessStreamType, validateM3uPlaylist } from "./m3u-parser";
 import { liveStreamDisplayName } from "./import-live-m3u";
 
 test("guessStreamType treats Xtream short mpegts paths as LIVE", () => {
@@ -86,4 +86,57 @@ test("liveStreamDisplayName prefers tvgName", () => {
     }),
     "Clean Name"
   );
+});
+
+test("validateM3uPlaylist rejects empty playlists", () => {
+  for (const content of ["", "   ", "\n\n", "\uFEFF"]) {
+    const result = validateM3uPlaylist(content);
+    assert.equal(result.valid, false);
+    assert.equal(result.entries.length, 0);
+    assert.ok(result.issues.some((i) => i.code === "empty"));
+  }
+});
+
+test("validateM3uPlaylist flags missing #EXTINF tags", () => {
+  const result = validateM3uPlaylist(`#EXTM3U
+http://provider.example/live/1.ts
+`);
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((i) => i.code === "missing_extinf"));
+  assert.ok(result.issues.some((i) => i.code === "no_entries"));
+  assert.equal(result.entries.length, 0);
+});
+
+test("validateM3uPlaylist flags malformed URLs", () => {
+  const result = validateM3uPlaylist(`#EXTM3U
+#EXTINF:-1,Broken
+http://exa mple.com/bad space
+#EXTINF:-1,Also broken
+http://[not-a-valid-host
+`);
+  assert.equal(result.valid, false);
+  const malformed = result.issues.filter((i) => i.code === "malformed_url");
+  assert.ok(malformed.length >= 1, "expected at least one malformed_url issue");
+  assert.ok(malformed.every((i) => typeof i.url === "string"));
+});
+
+test("validateM3uPlaylist accepts a well-formed playlist", () => {
+  const result = validateM3uPlaylist(`#EXTM3U
+#EXTINF:-1 tvg-name="BBC One",BBC
+http://provider.example/live/1.ts
+#EXTINF:-1,Sky
+https://cdn.example/stream/2.m3u8
+`);
+  assert.equal(result.valid, true);
+  assert.equal(result.issues.length, 0);
+  assert.equal(result.entries.length, 2);
+});
+
+test("validateM3uPlaylist flags missing #EXTM3U header", () => {
+  const result = validateM3uPlaylist(`#EXTINF:-1,Only entry
+http://provider.example/live/1.ts
+`);
+  assert.equal(result.valid, false);
+  assert.ok(result.issues.some((i) => i.code === "missing_extm3u"));
+  assert.equal(result.entries.length, 1);
 });

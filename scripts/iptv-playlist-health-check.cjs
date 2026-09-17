@@ -10,10 +10,14 @@
  *   --playlist PATH       M3U file (or IPTV_HEALTH_PLAYLIST env)
  *   --report-dir DIR      Output directory (default: reports/iptv-health)
  *   --fail-threshold PCT  Alert when failure rate exceeds this % (default: 5)
- *   --concurrency N       Parallel probes (default: 12)
- *   --timeout MS          Per-request timeout (default: 15000)
+ *   --concurrency N       Parallel probes (default: 12, max: 32 — avoid hundreds of
+ *                         simultaneous ffprobe/HTTP sockets; use a queue instead)
+ *   --timeout MS          Per-request / ffprobe timeout (default: 15000; with --ffprobe
+ *                         prefer 5000 via CLI or IPTV_HEALTH_TIMEOUT_MS)
  *   --max-streams N       Cap playlist entries (default: unlimited)
  *   --skip-playlist       Only run darkcdn.store CDN probes
+ *   --ffprobe             Also run ffprobe for codec/resolution/bitrate (requires ffprobe)
+ *   --ffprobe-bin PATH    ffprobe binary (default: ffprobe / FFPROBE_PATH)
  *
  * Exit codes:
  *   0 — success, failure rate at or below threshold
@@ -24,9 +28,10 @@ const fs = require("fs");
 const path = require("path");
 const http = require("http");
 const https = require("https");
-const { pathToFileURL } = require("url");
+const { spawn } = require("child_process");
 
 const UA = "Nexlify-IPTV-HealthCheck/1.0";
+const MAX_CONCURRENCY = 32;
 
 const DARKCDN_ENDPOINTS = [
   { label: "Panel HTTPS", url: "https://darkcdn.store/" },
@@ -44,6 +49,8 @@ function parseArgs(argv) {
     timeoutMs: Number(process.env.IPTV_HEALTH_TIMEOUT_MS || 15000),
     maxStreams: 0,
     skipPlaylist: false,
+    ffprobe: false,
+    ffprobeBin: process.env.FFPROBE_PATH || "ffprobe",
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -54,10 +61,16 @@ function parseArgs(argv) {
     else if (a === "--timeout" && argv[i + 1]) out.timeoutMs = Number(argv[++i]);
     else if (a === "--max-streams" && argv[i + 1]) out.maxStreams = Number(argv[++i]);
     else if (a === "--skip-playlist") out.skipPlaylist = true;
+    else if (a === "--ffprobe") out.ffprobe = true;
+    else if (a === "--ffprobe-bin" && argv[i + 1]) out.ffprobeBin = argv[++i];
     else if (a === "--help" || a === "-h") {
       console.log(fs.readFileSync(__filename, "utf8").match(/\/\*\*[\s\S]*?\*\//)?.[0] || "");
       process.exit(0);
     }
+  }
+  out.concurrency = Math.max(1, Math.min(MAX_CONCURRENCY, Number(out.concurrency) || 12));
+  if (out.ffprobe && !process.env.IPTV_HEALTH_TIMEOUT_MS && !argv.includes("--timeout")) {
+    out.timeoutMs = 5000;
   }
   return out;
 }
@@ -206,7 +219,116 @@ function looksLikeMpegTs(buf) {
   return sync >= 2;
 }
 
-async function probeStream(entry, timeoutMs) {
+/** Optional media probe. Queued via mapPool — never spawn hundreds at once. */
+function runFfprobe(url, timeoutMs, bin) {
+  return new Promise((resolve) => {
+    const args = [
+      "-v",
+      "error",
+      "-show_entries",
+      "stream=codec_type,codec_name,width,height,bit_rate:format=bit_rate",
+      "-of",
+      "json",
+      "-user_agent",
+      UA,
+      "-analyzeduration",
+      "2000000",
+      "-probesize",
+      "1048576",
+      "-i",
+      url,
+    ];
+    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      resolve({
+        ok: false,
+        videoCodec: null,
+        audioCodec: null,
+        resolution: null,
+        bitrate: null,
+        error: `ffprobe timeout after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
+
+    child.stdout.on("data", (c) => {
+      stdout += c.toString();
+    });
+    child.stderr.on("data", (c) => {
+      stderr += c.toString();
+    });
+    child.on("error", (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        ok: false,
+        videoCodec: null,
+        audioCodec: null,
+        resolution: null,
+        bitrate: null,
+        error: e.message || "ffprobe spawn failed",
+      });
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        const data = JSON.parse(stdout || "{}");
+        const streams = Array.isArray(data.streams) ? data.streams : [];
+        const video = streams.find((s) => s.codec_type === "video");
+        const audio = streams.find((s) => s.codec_type === "audio");
+        const formatBr = data.format?.bit_rate ? Number(data.format.bit_rate) : null;
+        const streamBr = video?.bit_rate
+          ? Number(video.bit_rate)
+          : audio?.bit_rate
+            ? Number(audio.bit_rate)
+            : null;
+        const bitrate = formatBr || streamBr || null;
+        const resolution =
+          video?.width && video?.height ? `${video.width}x${video.height}` : null;
+        const videoCodec = video?.codec_name || null;
+        const audioCodec = audio?.codec_name || null;
+        if (!videoCodec && !audioCodec) {
+          resolve({
+            ok: false,
+            videoCodec,
+            audioCodec,
+            resolution,
+            bitrate,
+            error: (stderr.trim() || `ffprobe exit ${code}`).slice(0, 220),
+          });
+          return;
+        }
+        resolve({
+          ok: true,
+          videoCodec,
+          audioCodec,
+          resolution,
+          bitrate,
+          error: null,
+        });
+      } catch (e) {
+        resolve({
+          ok: false,
+          videoCodec: null,
+          audioCodec: null,
+          resolution: null,
+          bitrate: null,
+          error: (stderr.trim() || e.message || "ffprobe parse failed").slice(0, 220),
+        });
+      }
+    });
+  });
+}
+
+async function probeStream(entry, timeoutMs, opts = {}) {
   const started = Date.now();
   const result = {
     name: entry.name,
@@ -219,6 +341,10 @@ async function probeStream(entry, timeoutMs) {
     error: null,
     hls: null,
     latencyMs: 0,
+    videoCodec: null,
+    audioCodec: null,
+    resolution: null,
+    bitrate: null,
   };
 
   if (!/^https?:\/\//i.test(entry.url)) {
@@ -238,6 +364,22 @@ async function probeStream(entry, timeoutMs) {
 
   if (!probe.ok) {
     result.error = probe.error || `HTTP ${probe.status}`;
+    if (opts.ffprobe) {
+      const fp = await runFfprobe(entry.url, timeoutMs, opts.ffprobeBin);
+      Object.assign(result, {
+        videoCodec: fp.videoCodec,
+        audioCodec: fp.audioCodec,
+        resolution: fp.resolution,
+        bitrate: fp.bitrate,
+      });
+      if (fp.ok) {
+        result.ok = true;
+        result.error = null;
+        result.kind = "ffprobe";
+      } else if (!result.error) {
+        result.error = fp.error;
+      }
+    }
     return result;
   }
 
@@ -250,18 +392,15 @@ async function probeStream(entry, timeoutMs) {
         : await fetchUrl(entry.url, { method: "GET", timeoutMs, maxBytes: 131072 });
     if (!manifest.ok) {
       result.error = manifest.error || `Manifest fetch HTTP ${manifest.status}`;
-      return result;
+    } else {
+      result.hls = validateHlsManifest(entry.url, manifest.body);
+      if (!result.hls.valid) {
+        result.error = result.hls.errors.join("; ");
+      } else {
+        result.ok = true;
+      }
     }
-    result.hls = validateHlsManifest(entry.url, manifest.body);
-    if (!result.hls.valid) {
-      result.error = result.hls.errors.join("; ");
-      return result;
-    }
-    result.ok = true;
-    return result;
-  }
-
-  if (/\.ts(\?|$)/i.test(entry.url) || probe.contentType.includes("mp2t")) {
+  } else if (/\.ts(\?|$)/i.test(entry.url) || probe.contentType.includes("mp2t")) {
     result.kind = "mpegts";
     const body = probe.body
       ? { body: probe.body }
@@ -271,17 +410,34 @@ async function probeStream(entry, timeoutMs) {
           maxBytes: 4096,
           headers: { Range: "bytes=0-4095" },
         });
-    const buf = Buffer.from(body.body || "", "utf8");
+    const buf = Buffer.from(body.body || "", "binary");
     if (!looksLikeMpegTs(buf)) {
       result.error = "Response is not MPEG-TS (missing 0x47 sync)";
-      return result;
+    } else {
+      result.ok = true;
     }
+  } else {
+    result.kind = "http";
     result.ok = true;
-    return result;
   }
 
-  result.kind = "http";
-  result.ok = true;
+  if (opts.ffprobe) {
+    const fp = await runFfprobe(entry.url, timeoutMs, opts.ffprobeBin);
+    result.videoCodec = fp.videoCodec;
+    result.audioCodec = fp.audioCodec;
+    result.resolution = fp.resolution;
+    result.bitrate = fp.bitrate;
+    if (!fp.ok) {
+      if (result.ok) {
+        result.ok = false;
+        result.error = fp.error || "ffprobe failed";
+      } else if (!result.error) {
+        result.error = fp.error;
+      }
+    }
+  }
+
+  result.latencyMs = Date.now() - started;
   return result;
 }
 
@@ -310,7 +466,7 @@ async function mapPool(items, concurrency, fn) {
       results[i] = await fn(items[i], i);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length || 1) }, () => worker()));
   return results;
 }
 
@@ -321,6 +477,14 @@ function pct(n, d) {
 
 function isoStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function buildMarkdown({ args, playlistPath, streams, cdn, startedAt, finishedAt }) {
@@ -337,6 +501,8 @@ function buildMarkdown({ args, playlistPath, streams, cdn, startedAt, finishedAt
     `- **Playlist:** \`${playlistPath || "(skipped)"}\``,
     `- **Duration:** ${Math.round((new Date(finishedAt) - new Date(startedAt)) / 1000)}s`,
     `- **Fail threshold:** ${args.failThresholdPct}%`,
+    `- **ffprobe:** ${args.ffprobe ? "on" : "off"}`,
+    `- **Concurrency:** ${args.concurrency} (max ${MAX_CONCURRENCY})`,
     `- **ALERT:** ${alert ? "YES — failure rate above threshold" : "No"}`,
     ``,
     `## Summary`,
@@ -362,7 +528,9 @@ function buildMarkdown({ args, playlistPath, streams, cdn, startedAt, finishedAt
     ]
       .filter(Boolean)
       .join(" ");
-    lines.push(`| ${c.label} | ${c.ok ? "REACHABLE" : "FAIL"} (${c.status || "—"}) | ${c.latencyMs}ms | ${notes || "—"} |`);
+    lines.push(
+      `| ${c.label} | ${c.ok ? "REACHABLE" : "FAIL"} (${c.status || "—"}) | ${c.latencyMs}ms | ${notes || "—"} |`
+    );
   }
 
   const darkcdnStreams = streams.filter((s) => s.darkcdn);
@@ -378,7 +546,13 @@ function buildMarkdown({ args, playlistPath, streams, cdn, startedAt, finishedAt
   if (failures.length) {
     lines.push(``, `## Failed streams (${failures.length})`, ``);
     for (const s of failures.slice(0, 100)) {
-      lines.push(`### ${s.name}`, `- **Group:** ${s.group || "—"}`, `- **URL:** \`${s.url}\``, `- **Error:** ${s.error || "unknown"}`, ``);
+      lines.push(
+        `### ${s.name}`,
+        `- **Group:** ${s.group || "—"}`,
+        `- **URL:** \`${s.url}\``,
+        `- **Error:** ${s.error || "unknown"}`,
+        ``
+      );
     }
     if (failures.length > 100) {
       lines.push(`_… and ${failures.length - 100} more failures_`, ``);
@@ -387,10 +561,96 @@ function buildMarkdown({ args, playlistPath, streams, cdn, startedAt, finishedAt
 
   lines.push(`## Working sample (first 10)`, ``);
   for (const s of streams.filter((x) => x.ok).slice(0, 10)) {
-    lines.push(`- ${s.name} (${s.kind}, ${s.latencyMs}ms)`);
+    const media = [s.videoCodec, s.audioCodec, s.resolution].filter(Boolean).join(" / ");
+    lines.push(`- ${s.name} (${s.kind}, ${s.latencyMs}ms${media ? `, ${media}` : ""})`);
   }
 
   return { markdown: lines.join("\n"), total, working, failed, failureRate, alert };
+}
+
+function buildHtml({ args, playlistPath, streams, cdn, startedAt, finishedAt, summary }) {
+  const rows = streams
+    .map((s) => {
+      const cls = s.ok ? "pass" : "fail";
+      return `<tr class="${cls}">
+  <td>${escapeHtml(s.name)}</td>
+  <td>${escapeHtml(s.group || "")}</td>
+  <td class="${cls}">${s.ok ? "PASS" : "FAIL"}</td>
+  <td>${escapeHtml(s.kind)}</td>
+  <td>${escapeHtml(s.videoCodec || "—")}</td>
+  <td>${escapeHtml(s.audioCodec || "—")}</td>
+  <td>${escapeHtml(s.resolution || "—")}</td>
+  <td>${s.bitrate != null ? escapeHtml(String(s.bitrate)) : "—"}</td>
+  <td>${s.latencyMs}ms</td>
+  <td>${escapeHtml(s.error || "")}</td>
+  <td><code>${escapeHtml(s.url)}</code></td>
+</tr>`;
+    })
+    .join("\n");
+
+  const cdnRows = cdn
+    .map(
+      (c) => `<tr class="${c.ok ? "pass" : "fail"}">
+  <td>${escapeHtml(c.label)}</td>
+  <td>${c.ok ? "REACHABLE" : "FAIL"}</td>
+  <td>${c.status || "—"}</td>
+  <td>${c.latencyMs}ms</td>
+  <td>${escapeHtml(c.error || "")}</td>
+</tr>`
+    )
+    .join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>IPTV Playlist Health ${escapeHtml(finishedAt)}</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 1.5rem; background: #0f1419; color: #e7ecf1; }
+  h1, h2 { color: #fff; }
+  .meta { color: #9aa7b5; margin-bottom: 1rem; }
+  .alert { color: #ff6b6b; font-weight: 700; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 1rem 0; }
+  th, td { border: 1px solid #2a3540; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #1a2330; }
+  tr.pass td.pass, td.pass { color: #3dd68c; }
+  tr.fail td.fail, td.fail { color: #ff6b6b; }
+  code { word-break: break-all; font-size: 11px; }
+  .kpi { display: flex; gap: 1.5rem; margin: 1rem 0; }
+  .kpi div { background: #1a2330; padding: 0.75rem 1rem; border-radius: 8px; }
+</style>
+</head>
+<body>
+  <h1>IPTV Playlist Health</h1>
+  <div class="meta">
+    Generated ${escapeHtml(finishedAt)} · Playlist <code>${escapeHtml(playlistPath || "(skipped)")}</code><br/>
+    ffprobe: ${args.ffprobe ? "on" : "off"} · concurrency ${args.concurrency} (cap ${MAX_CONCURRENCY}) · timeout ${args.timeoutMs}ms
+    ${summary.alert ? `<p class="alert">ALERT: failure rate ${summary.failureRate}% exceeds ${args.failThresholdPct}%</p>` : ""}
+  </div>
+  <div class="kpi">
+    <div>Total <strong>${summary.total}</strong></div>
+    <div>Working <strong style="color:#3dd68c">${summary.working}</strong></div>
+    <div>Failed <strong style="color:#ff6b6b">${summary.failed}</strong></div>
+    <div>Rate <strong>${summary.failureRate}%</strong></div>
+  </div>
+  <h2>CDN probes</h2>
+  <table>
+    <thead><tr><th>Endpoint</th><th>Reachable</th><th>HTTP</th><th>Latency</th><th>Error</th></tr></thead>
+    <tbody>${cdnRows}</tbody>
+  </table>
+  <h2>Streams</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Channel</th><th>Group</th><th>Status</th><th>Kind</th>
+        <th>Video</th><th>Audio</th><th>Resolution</th><th>Bitrate</th>
+        <th>Latency</th><th>Error</th><th>URL</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
 }
 
 async function main() {
@@ -421,8 +681,13 @@ async function main() {
     cdn.push(await probeDarkcdnEndpoint(ep, args.timeoutMs));
   }
 
-  console.log(`Probing ${entries.length} playlist streams (concurrency=${args.concurrency})…`);
-  const streams = await mapPool(entries, args.concurrency, (e) => probeStream(e, args.timeoutMs));
+  const probeOpts = { ffprobe: args.ffprobe, ffprobeBin: args.ffprobeBin };
+  console.log(
+    `Probing ${entries.length} playlist streams (concurrency=${args.concurrency}, max=${MAX_CONCURRENCY}${args.ffprobe ? ", ffprobe=on" : ""})…`
+  );
+  const streams = await mapPool(entries, args.concurrency, (e) =>
+    probeStream(e, args.timeoutMs, probeOpts)
+  );
 
   const finishedAt = new Date().toISOString();
   const summary = buildMarkdown({
@@ -439,8 +704,20 @@ async function main() {
   const stamp = isoStamp();
   const mdPath = path.join(reportDir, `health-${stamp}.md`);
   const jsonPath = path.join(reportDir, `health-${stamp}.json`);
+  const htmlPath = path.join(reportDir, `health-${stamp}.html`);
+
+  const html = buildHtml({
+    args,
+    playlistPath: args.skipPlaylist ? "" : path.resolve(args.playlist),
+    streams,
+    cdn,
+    startedAt,
+    finishedAt,
+    summary,
+  });
 
   fs.writeFileSync(mdPath, summary.markdown, "utf8");
+  fs.writeFileSync(htmlPath, html, "utf8");
   fs.writeFileSync(
     jsonPath,
     JSON.stringify(
@@ -448,8 +725,29 @@ async function main() {
         startedAt,
         finishedAt,
         playlist: args.playlist,
-        ...summary,
+        ffprobe: args.ffprobe,
+        concurrency: args.concurrency,
+        timeoutMs: args.timeoutMs,
+        total: summary.total,
+        working: summary.working,
+        failed: summary.failed,
+        failureRate: summary.failureRate,
+        alert: summary.alert,
         cdn,
+        streams: streams.map((s) => ({
+          url: s.url,
+          name: s.name,
+          ok: s.ok,
+          validityStatus: s.ok ? "valid" : "invalid",
+          videoCodec: s.videoCodec,
+          audioCodec: s.audioCodec,
+          resolution: s.resolution,
+          bitrate: s.bitrate,
+          error: s.error,
+          kind: s.kind,
+          status: s.status,
+          latencyMs: s.latencyMs,
+        })),
         failures: streams.filter((s) => !s.ok).map((s) => ({ name: s.name, url: s.url, error: s.error })),
       },
       null,
@@ -459,11 +757,16 @@ async function main() {
   );
 
   console.log(`\nReport: ${mdPath}`);
+  console.log(`HTML:   ${htmlPath}`);
   console.log(`JSON:   ${jsonPath}`);
-  console.log(`Total: ${summary.total} | Working: ${summary.working} | Failed: ${summary.failed} | Rate: ${summary.failureRate}%`);
+  console.log(
+    `Total: ${summary.total} | Working: ${summary.working} | Failed: ${summary.failed} | Rate: ${summary.failureRate}%`
+  );
 
   if (summary.alert) {
-    console.error(`\nALERT: Failure rate ${summary.failureRate}% exceeds threshold ${args.failThresholdPct}%`);
+    console.error(
+      `\nALERT: Failure rate ${summary.failureRate}% exceeds threshold ${args.failThresholdPct}%`
+    );
     process.exit(2);
   }
   process.exit(0);
@@ -473,3 +776,12 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+module.exports = {
+  parseM3u,
+  runFfprobe,
+  probeStream,
+  mapPool,
+  MAX_CONCURRENCY,
+  buildHtml,
+};

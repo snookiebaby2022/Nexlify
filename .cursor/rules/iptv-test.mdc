@@ -1,29 +1,54 @@
 ---
-description: IPTV comprehensive validation protocol
-globs: ["**/*.m3u", "**/*.m3u8", "**/darkcdn.store", "scripts/iptv-*.cjs"]
+description: IPTV operator validation protocol (scripts/diagnostics — not unit tests)
+globs: ["**/*.m3u", "**/*.m3u8", "**/darkcdn.store", "scripts/iptv-*.cjs", "scripts/diag-*"]
+alwaysApply: false
 ---
 
-When validating IPTV files, ALWAYS:
+# IPTV operator testing
 
-1. Check structural integrity (#EXTM3U header, #EXTINF tags, valid URLs)
-2. Perform HTTP health checks on all stream URLs (expect 200–299)
-3. Validate HLS manifests (segment URIs reachable)
-4. Test darkcdn.store endpoints for CDN availability and response time
-5. Run ffprobe on a sample of streams for H.264/AAC codec support
+Unit tests stay under [`.cursor/rules/testing.mdc`](testing.mdc): **never** hit real networks, real FFmpeg, or production DB from `src/**/*.test.ts`.
+
+Real stream URLs, ffprobe, iperf, and tcpdump belong only in `scripts/` operator diagnostics.
+
+## Conventions
+
+- Prefer async / worker-pool concurrency for probes; expose timeouts via CLI/env (no magic `sleep()` in unit tests).
+- Cap concurrent probes (health-check default ≤ 32). Do not open hundreds of simultaneous ffprobe processes.
+- Before grepping, use graft ask for stream/probe hubs:
+  - `scripts/iptv-playlist-health-check.cjs`
+  - `src/lib/stream-probe-server.ts`
+  - `src/lib/probe-batch-client.ts`
+  - `src/lib/m3u-parser.ts`
+
+## Playlist / CDN validation checklist
+
+When validating IPTV playlists or darkcdn endpoints:
+
+1. Structural integrity (`#EXTM3U`, `#EXTINF`, valid URLs) — `validateM3uPlaylist` / parser tests with fixtures
+2. HTTP health checks on stream URLs (expect 200–299) via operator scripts
+3. HLS manifest checks (segment URIs reachable)
+4. darkcdn.store CDN reachability and latency
+5. Optional ffprobe sample (`--ffprobe`) for codecs / resolution / bitrate
 6. Flag geo-restrictions (403, suspicious redirects)
-7. Detect duplicate channel names across playlists
-8. Verify EPG URL references (url-tvg, xmltv.php)
-9. Generate a Markdown report under `reports/iptv-audit/`
-10. Append timestamps to `.cursor/iptv-test.log`
+7. Detect duplicate channel names when auditing
+8. Verify EPG URL references (`url-tvg`, xmltv.php) when present
+9. Emit JSON + HTML (and Markdown) under `reports/iptv-health/` or `reports/iptv-audit/`
+10. Append timestamps to `.cursor/iptv-test.log` when running full audits
 
-Run the full suite with:
+## Commands
 
 ```bash
+# Full audit suite (if present)
 node scripts/iptv-comprehensive-audit.cjs
-```
 
-For playlist-only scheduled checks:
-
-```bash
+# Playlist health (HTTP/HLS)
 node scripts/iptv-playlist-health-check.cjs --playlist "$IPTV_HEALTH_PLAYLIST"
+
+# Playlist health + ffprobe (operator machine with ffprobe installed)
+node scripts/iptv-playlist-health-check.cjs --playlist "$IPTV_HEALTH_PLAYLIST" --ffprobe --concurrency 12 --timeout 5000
 ```
+
+## Out of scope for this rule
+
+- PHP-FPM pool tuning (this panel is Next.js / Node)
+- External TV MCPs beyond optional `mcp-ffmpeg` in `.cursor/mcp.json`

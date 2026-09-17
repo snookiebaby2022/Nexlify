@@ -27,21 +27,69 @@ export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
 }
 
+/** True when the segment file exists and has been flushed (size > 0). */
+export function isPackagerSegmentReady(filePath: string): boolean {
+  try {
+    const st = statSync(filePath);
+    return st.isFile() && st.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drop playlist entries whose .ts is not ready yet.
+ *
+ * Race (why segments appear "skipped"): ffmpeg often rewrites index.m3u8 to
+ * reference segN.ts a moment before the segment file is fully closed. A naive
+ * existsSync mid-list then punches a hole (MEDIA-SEQUENCE stays put, URI jumps
+ * seg10 → seg12). Clients treat that as a skipped segment / discontinuity.
+ *
+ * Fix: only trim trailing not-ready pairs from the end — never remove a middle
+ * entry while a later one is still listed.
+ */
 export function filterPackagerPlaylistToExisting(playlist: string, lineId: string, streamId: string): string {
   const dir = packagerDir(lineId, streamId);
   const lines = playlist.split("\n");
-  const out: string[] = [];
+  const header: string[] = [];
+  type Entry = { extinf: string; uri: string; uriRaw: string };
+  const entries: Entry[] = [];
+  let pendingExtinf: string | null = null;
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith("#EXT-X-DISCONTINUITY")) continue;
-    const name = trimmed.split(/[\\/]/).pop() ?? "";
-    if (isPackagerSegmentName(name)) {
-      if (!existsSync(join(dir, name))) {
-        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
-        continue;
-      }
+    if (trimmed.startsWith("#EXTINF")) {
+      pendingExtinf = line;
+      continue;
     }
-    out.push(line);
+    const name = trimmed.split(/[\\/]/).pop() ?? "";
+    if (pendingExtinf && isPackagerSegmentName(name)) {
+      entries.push({ extinf: pendingExtinf, uri: name, uriRaw: line });
+      pendingExtinf = null;
+      continue;
+    }
+    if (!entries.length) {
+      if (pendingExtinf) {
+        header.push(pendingExtinf);
+        pendingExtinf = null;
+      }
+      header.push(line);
+    } else if (pendingExtinf) {
+      // Orphan EXTINF without URI — drop it.
+      pendingExtinf = null;
+    }
+  }
+
+  while (entries.length) {
+    const last = entries[entries.length - 1]!;
+    if (isPackagerSegmentReady(join(dir, last.uri))) break;
+    entries.pop();
+  }
+
+  const out = [...header];
+  for (const entry of entries) {
+    out.push(entry.extinf, entry.uriRaw);
   }
   return out.join("\n");
 }

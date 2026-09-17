@@ -104,6 +104,23 @@ async function probeStreamWithFfprobe(url: string): Promise<ProbeResult | null> 
     const latencyMs = Date.now() - start;
     const info = parseFfprobeJson(stdout);
     if (info) {
+      const badCodec =
+        !info.videoCodec && !info.audioCodec
+          ? "no audio/video streams"
+          : info.videoCodec && /^(ansi|png|mjpeg)$/i.test(info.videoCodec)
+            ? `unsupported video codec ${info.videoCodec}`
+            : null;
+      if (badCodec) {
+        return {
+          status: "degraded",
+          message: `ffprobe · invalid codec · ${badCodec}`,
+          failureReason: "error",
+          latencyMs,
+          videoCodec: info.videoCodec,
+          audioCodec: info.audioCodec,
+          format: info.format,
+        };
+      }
       const summary = formatFfprobeSummary(info);
       return {
         status: "online",
@@ -119,18 +136,64 @@ async function probeStreamWithFfprobe(url: string): Promise<ProbeResult | null> 
       };
     }
 
-    const err = stderr.trim() || stdout.trim();
+    const err = (stderr.trim() || stdout.trim()).slice(0, 220);
+    const lower = err.toLowerCase();
+    if (/403|forbidden|access denied/.test(lower)) {
+      return {
+        status: "offline",
+        message: `ffprobe · HTTP 403 Forbidden${err ? ` · ${err}` : ""}`,
+        failureReason: "403",
+        httpStatus: 403,
+        latencyMs,
+      };
+    }
+    if (/401|unauthorized/.test(lower)) {
+      return {
+        status: "offline",
+        message: `ffprobe · HTTP 401 Unauthorized${err ? ` · ${err}` : ""}`,
+        failureReason: "401",
+        httpStatus: 401,
+        latencyMs,
+      };
+    }
+    if (/timed?\s*out|timeout|operation timed out/.test(lower)) {
+      return {
+        status: "offline",
+        message: `ffprobe · network timeout${err ? ` · ${err}` : ""}`,
+        failureReason: "timeout",
+        latencyMs,
+      };
+    }
+    if (/invalid data|could not find codec|unknown codec|unsupported codec/.test(lower)) {
+      return {
+        status: "degraded",
+        message: `ffprobe · invalid codec · ${err || "unrecognized media"}`,
+        failureReason: "error",
+        latencyMs,
+      };
+    }
     if (code !== 0 && err) {
       return {
         status: "degraded",
         message: `ffprobe · ${err.slice(0, 180)}`,
+        failureReason: "error",
         latencyMs,
       };
     }
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "ffprobe failed";
+    const lower = msg.toLowerCase();
+    if (/timed?\s*out|timeout|aborterror/.test(lower)) {
+      return {
+        status: "offline",
+        message: `ffprobe · network timeout · ${msg}`,
+        failureReason: "timeout",
+      };
+    }
     return {
       status: "degraded",
-      message: e instanceof Error ? e.message : "ffprobe failed",
+      message: msg,
+      failureReason: "error",
     };
   }
 

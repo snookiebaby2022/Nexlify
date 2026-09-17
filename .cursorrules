@@ -1,3 +1,10 @@
+## IPTV operator testing
+
+- Unit tests: follow `.cursor/rules/testing.mdc` (no real network / FFmpeg / production DB).
+- Operator diagnostics and playlist/stream probes: follow `.cursor/rules/iptv-test.mdc`.
+- Prefer `scripts/iptv-playlist-health-check.cjs` and existing `scripts/diag-*` / `probe-*` tools over new one-offs.
+- Real stream URLs belong in `scripts/` only — never in `src/**/*.test.ts`.
+
 ## Merge CLI
 
 For any task involving third-party services, use the `merge` CLI.
