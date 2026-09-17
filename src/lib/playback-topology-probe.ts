@@ -105,7 +105,10 @@ export async function getPlaybackTopologyReport(opts?: {
   });
 
   const panelMediaBlockedExpected =
-    topology === "remote-splice" || topology === "multi-lb" || process.env.PANEL_BLOCK_MEDIA_PATHS === "1";
+    topology === "remote-splice" ||
+    topology === "multi-lb" ||
+    topology === "classic-lb" ||
+    process.env.PANEL_BLOCK_MEDIA_PATHS === "1";
 
   if (panelMediaBlockedExpected && opts?.panelOrigin) {
     const origin = opts.panelOrigin.replace(/\/+$/, "");
@@ -124,10 +127,14 @@ export async function getPlaybackTopologyReport(opts?: {
 
   if (opts?.probeEdgeHealth && streamHost) {
     const proto = mediaOrigin.startsWith("https") ? "https" : "http";
-    const edgeHealth = await probeHttp(`${proto}://${streamHost}:${streamPort}/edge/health`, 8000);
+    const healthPath = topology === "classic-lb" ? "/lb/health" : "/edge/health";
+    const edgeHealth = await probeHttp(`${proto}://${streamHost}:${streamPort}${healthPath}`, 8000);
     checks.push({
       id: "edge-health",
-      label: "Edge /edge/health reachable",
+      label:
+        topology === "classic-lb"
+          ? "Classic LB /lb/health reachable"
+          : "Edge /edge/health reachable",
       ok: edgeHealth.ok && edgeHealth.status === 200,
       severity: edgeHealth.status === 200 ? "info" : "warn",
       hint: edgeHealth.detail,

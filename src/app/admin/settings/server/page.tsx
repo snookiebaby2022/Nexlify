@@ -70,7 +70,7 @@ export default function ServerSettingsPage() {
 
       <SettingsPanel
         title="Playback topology"
-        info="How this machine delivers /live/. Updates, rematch, and pm2-start follow this setting — they will not start a local iptv-edge or fuser :8080 on remote-splice / multi-lb."
+        info="How this machine delivers /live/. Updates, rematch, and pm2-start follow this setting — they will not start a local iptv-edge or fuser :8080 on remote-splice / multi-lb / classic-lb."
       >
         <label className="block text-sm w-full">
           <span style={{ color: "var(--muted)" }}>This panel host</span>
@@ -80,14 +80,19 @@ export default function ServerSettingsPage() {
             value={String(data.playbackTopology ?? "local-edge")}
             onChange={(e) => setData({ ...data, playbackTopology: e.target.value })}
           >
-            <option value="local-edge">A — Panel + local edge (owns :8080)</option>
-            <option value="remote-splice">B — Panel only, nginx proxies /live/ to a remote splice</option>
-            <option value="multi-lb">C — Multi-server LB (stream nodes splice; panel does not bind edge)</option>
+            <option value="local-edge">A — Panel + local Node edge (owns :8080)</option>
+            <option value="remote-splice">B — Panel only, remote Node splice (legacy)</option>
+            <option value="multi-lb">C — Multi-server Node splice LBs</option>
+            <option value="classic-lb">D — Classic LB (nginx/PHP + FFmpeg restream; XUI-style)</option>
           </select>
         </label>
-        {String(data.playbackTopology ?? "") === "remote-splice" ? (
+        {["remote-splice", "classic-lb"].includes(String(data.playbackTopology ?? "")) ? (
           <label className="block text-sm w-full mt-3">
-            <span style={{ color: "var(--muted)" }}>Remote live upstream (host:port)</span>
+            <span style={{ color: "var(--muted)" }}>
+              {String(data.playbackTopology) === "classic-lb"
+                ? "Classic LB host (host:port for server_info.url)"
+                : "Remote live upstream (host:port)"}
+            </span>
             <input
               className="mt-1 w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
               style={{ borderColor: "var(--border)" }}
@@ -96,6 +101,32 @@ export default function ServerSettingsPage() {
               onChange={(e) => setData({ ...data, remoteLiveUpstream: e.target.value })}
             />
           </label>
+        ) : null}
+        {String(data.playbackTopology ?? "") === "classic-lb" ? (
+          <>
+            <label className="block text-sm w-full mt-3">
+              <span style={{ color: "var(--muted)" }}>Connection handler</span>
+              <select
+                className="mt-1 w-full rounded border px-3 py-2 bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                value={String(data.connectionHandler ?? "mysql")}
+                onChange={(e) => setData({ ...data, connectionHandler: e.target.value })}
+              >
+                <option value="mysql">MySQL (default) — sync to Open Connections</option>
+                <option value="redis">Redis/KeyDB only — scale mode, limited admin search</option>
+              </select>
+            </label>
+            <label className="block text-sm w-full mt-3">
+              <span style={{ color: "var(--muted)" }}>Classic LB connections URL (optional override)</span>
+              <input
+                className="mt-1 w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
+                style={{ borderColor: "var(--border)" }}
+                placeholder="http://209.x.x.x:8080"
+                value={String(data.classicLbConnectionsUrl ?? "")}
+                onChange={(e) => setData({ ...data, classicLbConnectionsUrl: e.target.value })}
+              />
+            </label>
+          </>
         ) : null}
       </SettingsPanel>
 

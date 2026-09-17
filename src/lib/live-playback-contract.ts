@@ -37,7 +37,7 @@ export async function healPlaybackTopologyFromDisk(): Promise<void> {
   const remote =
     String(server.remoteLiveUpstream ?? "").trim() ||
     String(process.env.NEXLIFY_REMOTE_EDGE ?? "").trim();
-  if (current === "remote-splice" || current === "multi-lb") {
+  if (current === "remote-splice" || current === "multi-lb" || current === "classic-lb") {
     persistPlaybackTopologyFiles({
       topology: current,
       remoteLiveUpstream: remote,
@@ -45,13 +45,15 @@ export async function healPlaybackTopologyFromDisk(): Promise<void> {
     });
     return;
   }
+  const lockedClassic = process.env.NEXLIFY_CLASSIC_LB === "1";
+  const healTo = lockedClassic ? "classic-lb" : "remote-splice";
   await setSettingGroup("server", {
     ...server,
-    playbackTopology: "remote-splice",
+    playbackTopology: healTo,
     ...(remote ? { remoteLiveUpstream: remote } : {}),
   });
   persistPlaybackTopologyFiles({
-    topology: "remote-splice",
+    topology: healTo,
     remoteLiveUpstream: remote,
     repoPath: String(server.repoPath ?? ""),
   });

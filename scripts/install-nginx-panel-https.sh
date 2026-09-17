@@ -154,7 +154,7 @@ if [ -f "$ROOT/scripts/playback-topology.sh" ]; then
   . "$ROOT/scripts/playback-topology.sh"
   TOPO="$(nexlify_playback_topology)"
   case "${TOPO:-}" in
-    remote-splice|multi-lb|remote|split)
+    remote-splice|multi-lb|classic-lb|remote|split|ffmpeg-lb)
       if [ -x "$ROOT/scripts/patch-panel-nginx-live-lock.sh" ]; then
         bash "$ROOT/scripts/patch-panel-nginx-live-lock.sh" || true
       fi

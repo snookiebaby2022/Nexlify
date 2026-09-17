@@ -66,9 +66,10 @@ IPTV_EDGE_SERVER_ID=${serverId}
       <div>
         <h3 className="font-medium">LB-local auth (IPTV edge)</h3>
         <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-          On stream node <strong>{serverName}</strong>, set these in the systemd unit for{" "}
-          <code className="font-mono">iptv-edge-proxy</code>. The edge calls panel live-auth with
-          the agent token instead of the internal secret — faster zap and scoped to this server.
+          On stream node <strong>{serverName}</strong>, set these for{" "}
+          <code className="font-mono">iptv-edge-proxy</code> (legacy Node splice) or{" "}
+          <code className="font-mono">scripts/classic-lb</code> (<code className="font-mono">lb.env</code>{" "}
+          AGENT_TOKEN / LB_SERVER_ID). Classic LB calls panel live-auth with the agent token.
         </p>
       </div>
       {loading ? (

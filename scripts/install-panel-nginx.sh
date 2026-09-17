@@ -55,11 +55,11 @@ if [ -x "$ROOT/scripts/install-nginx-panel-https.sh" ]; then
 fi
 
 case "$TOPO" in
-  remote-splice|multi-lb|remote|split)
+  remote-splice|multi-lb|classic-lb|remote|split|ffmpeg-lb|xui-lb)
     export NEXLIFY_REMOTE_EDGE="${NEXLIFY_REMOTE_EDGE:-$(nexlify_resolve_remote_edge)}"
     if [ -n "$NEXLIFY_REMOTE_EDGE" ]; then
       LIVE_ROUTING_FORCE=1 bash "$ROOT/scripts/restore-live-proxy.sh"
-      log "applied remote-splice live routing (media 502 on panel)"
+      log "applied ${TOPO} live routing (media 502 on panel)"
     else
       bash "$ROOT/scripts/patch-panel-nginx-live-lock.sh" || true
       log "WARN: remote topology but no NEXLIFY_REMOTE_EDGE — patched :80/:443 only"

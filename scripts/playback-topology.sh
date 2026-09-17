@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Source this file. Canonical live topology for apply / rematch / pm2-start.
-# Values: local-edge | remote-splice | multi-lb
+# Values: local-edge | remote-splice | multi-lb | classic-lb
 
 nexlify_playback_topology() {
   local raw=""
@@ -34,6 +34,7 @@ nexlify_playback_topology() {
     a|local|local-edge|panel-edge) echo "local-edge" ;;
     b|remote|remote-splice|remote-edge|split|panel-only) echo "remote-splice" ;;
     c|multi-lb|lb|multi-server) echo "multi-lb" ;;
+    d|classic-lb|ffmpeg-lb|xui-lb|nginx-ffmpeg) echo "classic-lb" ;;
     *) echo "" ;;
   esac
 }
@@ -42,7 +43,7 @@ nexlify_panel_skips_local_iptv_edge() {
   local topo
   topo="$(nexlify_playback_topology)"
   case "$topo" in
-    remote-splice|multi-lb) return 0 ;;
+    remote-splice|multi-lb|classic-lb) return 0 ;;
   esac
   return 1
 }

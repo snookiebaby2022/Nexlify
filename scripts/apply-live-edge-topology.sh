@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Apply playback topology: local-edge | remote-splice | multi-lb.
-# Never fuser :8080. Never start nexlify-iptv-edge on remote-splice / multi-lb.
+# Apply playback topology: local-edge | remote-splice | multi-lb | classic-lb.
+# Never fuser :8080. Never start nexlify-iptv-edge on remote-splice / multi-lb / classic-lb.
 set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
@@ -31,10 +31,14 @@ case "$MODE" in
   remote|split|remote-edge|b) MODE="remote-splice" ;;
   local|a) MODE="local-edge" ;;
   c|lb|multi-server) MODE="multi-lb" ;;
+  d|ffmpeg-lb|xui-lb|nginx-ffmpeg) MODE="classic-lb" ;;
 esac
 
 if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
-  MODE="remote-splice"
+  case "$MODE" in
+    classic-lb) ;;
+    *) MODE="remote-splice" ;;
+  esac
 fi
 
 REMOTE="${NEXLIFY_REMOTE_EDGE:-}"
@@ -68,6 +72,28 @@ case "$MODE" in
     if type nexlify_stop_panel_local_iptv_edge >/dev/null 2>&1; then
       nexlify_stop_panel_local_iptv_edge
     fi
+    ;;
+  classic-lb)
+    # Panel: 502 media paths (same as remote-splice). LB host runs nginx/PHP+FFmpeg.
+    if [ -z "$REMOTE" ]; then
+      echo "WARN: classic-lb without NEXLIFY_REMOTE_EDGE — panel media still locked; set LB host:port"
+      if type nexlify_stop_panel_local_iptv_edge >/dev/null 2>&1; then
+        nexlify_stop_panel_local_iptv_edge
+      fi
+      echo "topology_ok mode=classic-lb nginx_unchanged"
+      exit 0
+    fi
+    export NEXLIFY_REMOTE_EDGE="$REMOTE"
+    export NEXLIFY_CLASSIC_LB=1
+    if [ -x "$PANEL_DIR/scripts/restore-live-proxy.sh" ]; then
+      LIVE_ROUTING_FORCE=1 bash "$PANEL_DIR/scripts/restore-live-proxy.sh"
+    else
+      bash "$PANEL_DIR/scripts/route-live-to-remote-edge.sh"
+    fi
+    if type nexlify_stop_panel_local_iptv_edge >/dev/null 2>&1; then
+      nexlify_stop_panel_local_iptv_edge
+    fi
+    echo "topology_ok mode=classic-lb — install scripts/classic-lb on LB host; stop nexlify-iptv-edge there"
     ;;
   local-edge|*)
     rm -f /etc/nginx/conf.d/nexlify-live-remote-edge.conf 2>/dev/null || true

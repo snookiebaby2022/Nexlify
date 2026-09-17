@@ -37,6 +37,7 @@ export function persistPlaybackTopologyFiles(opts: {
     NEXLIFY_PLAYBACK_TOPOLOGY: opts.topology,
     NEXLIFY_LIVE_EDGE_MODE: opts.topology === "local-edge" ? "local" : "remote",
     NEXLIFY_PANEL_NO_IPTV_EDGE: opts.topology === "local-edge" ? "0" : "1",
+    NEXLIFY_CLASSIC_LB: opts.topology === "classic-lb" ? "1" : "0",
     ...(remote ? { NEXLIFY_REMOTE_EDGE: remote } : {}),
   });
 }

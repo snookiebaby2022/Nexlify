@@ -38,10 +38,18 @@ export async function jobCleanupConnections() {
   try {
     const deleted = await deleteStaleConnections();
     const synced = await syncLiveConnectionsFromRedisViewers(600);
+    let classicSynced = 0;
+    try {
+      const { syncClassicLbConnectionsToPostgres } = await import("./classic-lb-connections-sync");
+      classicSynced = await syncClassicLbConnectionsToPostgres(600);
+    } catch {
+      /* classic LB optional */
+    }
     await listActiveConnections();
     const detail = [
       deleted.count ? `removed ${deleted.count} stale connection(s)` : null,
       synced ? `synced ${synced} from edge viewer keys` : null,
+      classicSynced ? `synced ${classicSynced} from classic LB` : null,
     ]
       .filter(Boolean)
       .join("; ");

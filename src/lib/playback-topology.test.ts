@@ -5,16 +5,20 @@ import { liveTitleExactKey, liveTitleQualityKey } from "./live-title-dedupe";
 import { xtreamOutputFormats } from "./xtream-safe";
 
 describe("playback topology", () => {
-  it("maps A/B/C aliases", () => {
+  it("maps A/B/C/D aliases", () => {
     assert.equal(parsePlaybackTopology("A"), "local-edge");
     assert.equal(parsePlaybackTopology("remote"), "remote-splice");
     assert.equal(parsePlaybackTopology("multi-lb"), "multi-lb");
+    assert.equal(parsePlaybackTopology("classic-lb"), "classic-lb");
+    assert.equal(parsePlaybackTopology("D"), "classic-lb");
+    assert.equal(parsePlaybackTopology("ffmpeg-lb"), "classic-lb");
   });
 
-  it("skips local edge on B and C", () => {
+  it("skips local edge on B, C, and classic-lb", () => {
     assert.equal(panelMustNotRunLocalIptvEdge("local-edge"), false);
     assert.equal(panelMustNotRunLocalIptvEdge("remote-splice"), true);
     assert.equal(panelMustNotRunLocalIptvEdge("multi-lb"), true);
+    assert.equal(panelMustNotRunLocalIptvEdge("classic-lb"), true);
   });
 });
 

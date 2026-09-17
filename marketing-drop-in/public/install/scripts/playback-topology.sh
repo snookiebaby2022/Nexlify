@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Source this file. Canonical live topology for apply / rematch / pm2-start.
-# Values: local-edge | remote-splice | multi-lb
+# Values: local-edge | remote-splice | multi-lb | classic-lb
 
 nexlify_playback_topology() {
   local raw=""
@@ -14,26 +14,13 @@ nexlify_playback_topology() {
     raw="$(head -1 "$(dirname "${BASH_SOURCE[0]}")/../.playback-topology" | tr -d '\r')"
   elif [ -n "${NEXLIFY_LIVE_EDGE_MODE:-}" ]; then
     raw="${NEXLIFY_LIVE_EDGE_MODE}"
-  elif [ -n "${NEXLIFY_PLAYBACK_TOPOLOGY:-}" ]; then
-    raw="${NEXLIFY_PLAYBACK_TOPOLOGY}"
-  fi
-  if [ -z "$raw" ] && [ -f "$(dirname "${BASH_SOURCE[0]}")/live-routing-env.sh" ]; then
-    # shellcheck disable=SC1091
-    . "$(dirname "${BASH_SOURCE[0]}")/live-routing-env.sh"
-    nexlify_load_routing_autodetect
-    remote="$(nexlify_resolve_remote_edge 2>/dev/null || true)"
-    if [ -n "$remote" ]; then
-      ip="${remote%%:*}"
-      if [ -n "$ip" ] && ! hostname -I 2>/dev/null | tr ' ' '\n' | grep -qx "$ip"; then
-        raw="remote-splice"
-      fi
-    fi
   fi
   raw="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
   case "$raw" in
     a|local|local-edge|panel-edge) echo "local-edge" ;;
     b|remote|remote-splice|remote-edge|split|panel-only) echo "remote-splice" ;;
     c|multi-lb|lb|multi-server) echo "multi-lb" ;;
+    d|classic-lb|ffmpeg-lb|xui-lb|nginx-ffmpeg) echo "classic-lb" ;;
     *) echo "" ;;
   esac
 }
@@ -42,7 +29,7 @@ nexlify_panel_skips_local_iptv_edge() {
   local topo
   topo="$(nexlify_playback_topology)"
   case "$topo" in
-    remote-splice|multi-lb) return 0 ;;
+    remote-splice|multi-lb|classic-lb) return 0 ;;
   esac
   return 1
 }

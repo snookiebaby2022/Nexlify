@@ -233,6 +233,10 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     panelUpdateAutoApplyDefaultOffV1: false,
     playbackTopology: "local-edge",
     remoteLiveUpstream: "",
+    /** classic-lb only: mysql (default) | redis */
+    connectionHandler: "mysql",
+    /** HTTP base for classic LB connection export (e.g. http://lb:8080) */
+    classicLbConnectionsUrl: "",
     streamAgentUpgradeNotes:
       "Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.",
   },
