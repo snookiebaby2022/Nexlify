@@ -68,8 +68,9 @@ export default function StreamLogsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Stream logs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Freezes, stutters, and upstream playback failures (not deletes), plus agent ffmpeg and HLS relay
-          errors (last 24 hours). Direct-source channels do not run ffmpeg — use Live viewers below.{" "}
+          Freezes, stutters, and upstream playback failures (not deletes), plus agent ffmpeg / HLS relay
+          errors and classic-LB packager origin issues (last 24 hours). Classic-LB FFmpeg logs are synced
+          once a minute from the LB host.{" "}
           <Link href="/admin/content/streams?status=offline" style={{ color: "var(--accent)" }}>
             Failed probes
           </Link>

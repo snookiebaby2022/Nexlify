@@ -12,11 +12,13 @@ tmp="$(mktemp)"
   | grep -v nexlify-watchdog.sh \
   | grep -v scale-panel-workers-live \
   | grep -v nexlify-streaming-guard \
-  | grep -v nexlify-resource-guard > "$tmp" || true
+  | grep -v nexlify-resource-guard \
+  | grep -v sync-classic-lb-packager-errors > "$tmp" || true
 
 cat >> "$tmp" <<CRON
 # $MARK
 * * * * * $PANEL/scripts/prune-stale-live-connections.sh >> /var/log/nexlify-prune-conn.log 2>&1
+* * * * * cd $PANEL && /usr/bin/node scripts/sync-classic-lb-packager-errors.cjs >> /var/log/nexlify-lb-packager-errors.log 2>&1
 */2 * * * * PANEL_DIR=$PANEL $PANEL/scripts/nexlify-worker-wedge-guard.sh
 */5 * * * * $PANEL/scripts/nexlify-watchdog.sh >> /var/log/nexlify-watchdog.log 2>&1
 */10 * * * * PANEL_DIR=$PANEL $PANEL/scripts/scale-panel-workers-live.sh >> /var/log/nexlify-scale-workers.log 2>&1
