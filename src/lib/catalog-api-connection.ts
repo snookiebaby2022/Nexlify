@@ -1,9 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
-import {
-  invalidateConnectionCaches,
-  normalizeConnectionIp,
-} from "@/lib/connections";
+import { invalidateConnectionCaches } from "@/lib/connections";
 import { notifyLiveConnectionsChanged } from "@/lib/connection-live-bus";
 
 import { CATALOG_API_CHANNEL_MARKER } from "@/lib/catalog-api-channel";
@@ -46,75 +43,33 @@ export function catalogApiActivityLabel(userAgent?: string | null): string | nul
   return ua.slice(4).trim() || "Xtream API";
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  login: "Login / user_info",
-  get_live_categories: "Live categories",
-  get_live_streams: "Live playlist",
-  get_vod_categories: "VOD categories",
-  get_vod_streams: "VOD playlist",
-  get_series_categories: "Series categories",
-  get_series: "Series catalog",
-  get_vod_info: "VOD metadata",
-  get_series_info: "Series metadata",
-  get_short_epg: "EPG",
-  get_epg: "EPG",
-};
-
-function labelForAction(action: string | null | undefined): string {
-  const key = String(action ?? "").trim().toLowerCase();
-  if (!key) return "Xtream API";
-  return ACTION_LABELS[key] ?? key.replace(/_/g, " ");
+/** Remove leftover catalog/API LiveConnection rows (throttled). */
+export async function purgeCatalogApiLiveConnections(): Promise<void> {
+  const throttleKey = "catalog_api:purge_done";
+  if (await cacheGet(throttleKey)) return;
+  await cacheSet(throttleKey, 1, 3600);
+  try {
+    const result = await prisma.liveConnection.deleteMany({
+      where: { stream: { channelId: CATALOG_API_CHANNEL_MARKER } },
+    });
+    if (result.count > 0) {
+      invalidateConnectionCaches();
+      notifyLiveConnectionsChanged();
+    }
+  } catch {
+    // ignore — stream marker may not exist yet
+  }
 }
 
-/** Refresh Live Connections for catalog/API use — does not consume max_connections slots. */
-export async function pulseXtreamCatalogActivity(opts: {
+/**
+ * Catalog/API polls (player_api / get.php) must not create LiveConnection rows.
+ * Kept as a no-op so any remaining call sites stay safe.
+ */
+export async function pulseXtreamCatalogActivity(_opts: {
   lineId: string;
   ip?: string | null;
   userAgent?: string | null;
   action?: string | null;
 }): Promise<void> {
-  const lineId = opts.lineId?.trim();
-  if (!lineId) return;
-  const clientIp = normalizeConnectionIp(opts.ip) || "";
-  const actionKey = String(opts.action ?? "login").trim().toLowerCase() || "login";
-  const throttleKey = `catalog_pulse:${lineId}:${clientIp}:${actionKey}`;
-  if (await cacheGet(throttleKey)) return;
-  await cacheSet(throttleKey, 1, 20);
-
-  const streamId = await getCatalogApiStreamId();
-  const label = labelForAction(actionKey);
-  const uaTag = `api|${label}`;
-  const now = new Date();
-
-  try {
-    await prisma.liveConnection.upsert({
-      where: {
-        lineId_streamId_ip: { lineId, streamId, ip: clientIp },
-      },
-      create: {
-        lineId,
-        streamId,
-        ip: clientIp,
-        userAgent: uaTag,
-      },
-      update: {
-        lastSeenAt: now,
-        userAgent: uaTag,
-      },
-    });
-  } catch (err) {
-    if ((err as { code?: string })?.code !== "P2002") {
-      console.error("[pulseXtreamCatalogActivity]", err);
-      return;
-    }
-    await prisma.liveConnection
-      .updateMany({
-        where: { lineId, streamId, ip: clientIp },
-        data: { lastSeenAt: now, userAgent: uaTag },
-      })
-      .catch(() => undefined);
-  }
-
-  invalidateConnectionCaches({ lineId });
-  notifyLiveConnectionsChanged();
+  // intentionally no-op
 }

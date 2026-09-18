@@ -5,7 +5,7 @@ ENV_FILE="${NEXLIFY_LB_ENV:-/etc/nexlify-lb/lb.env}"
 # shellcheck disable=SC1090
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
 ROOT="${STREAM_ROOT:-/var/lib/nexlify-lb}"
-IDLE="${FFMPEG_IDLE_SECS:-90}"
+IDLE="${FFMPEG_IDLE_SECS:-300}"
 NOW="$(date +%s)"
 shopt -s nullglob
 for viewer in "$ROOT"/viewers/*; do

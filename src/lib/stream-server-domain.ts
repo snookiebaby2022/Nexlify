@@ -222,17 +222,17 @@ function normalizeAdvertiseHost(raw: string | null | undefined): string {
 }
 
 /**
- * Advertised media hostname for a sticky LB assignment (XUI-style direct edge):
- * Only advertise a hostname when its A/AAAA records include the LB IP.
- * Otherwise advertise the LB IP so players never hairpin through the panel
- * (panel proxy NIC ≈1G wall). Multi-domain still works when DNS points at the LB.
- * Never returns the main panel IP while an LB host exists.
+ * Advertised media hostname for a sticky LB assignment (XUI-style):
+ * Co-located classic-lb (panel IP === LB IP): prefer login domain / Main Domain Name
+ * so apps play on the same DNS as player_api (:80/:443/:8080 proxied to classic-lb).
+ * Optional LB Domain Name still wins when set.
+ * Remote LB: only advertise a hostname when DNS A/AAAA includes the LB IP (else LB IP).
  *
  * Preference (XUI.ONE-style):
- * 1) Login Host (player_api DNS) when it resolves to this LB
+ * 1) Login Host (player_api DNS) — always on co-located; when DNS→LB on remote
  * 2) NEXLIFY_MEDIA_ORIGIN when DNS→LB
- * 3) LB Domain Name when DNS→LB
- * 4) Main Domain Name / DNS rotator pool when DNS→LB
+ * 3) LB Domain Name (optional dedicated stream DNS)
+ * 4) Main Domain Name / DNS rotator pool
  * 5) LB IP
  */
 export async function resolveAdvertisedMediaHostname(opts: {
@@ -255,7 +255,8 @@ export async function resolveAdvertisedMediaHostname(opts: {
   }
 
   const panelHost = normalizeAdvertiseHost(opts.panelHost);
-  // Monolith: panel IP === LB IP — domains that resolve there are valid media hosts.
+  // Monolith / co-located classic-lb: panel IP === LB IP — Main nginx proxies
+  // /live on :80/:443/:8080, so the login domain works without a separate LB DNS.
   const panelIsSeparateFromLb = Boolean(panelHost && panelHost !== lbIp);
 
   const rejectIfPanel = (host: string | null): string | null => {
@@ -266,6 +267,10 @@ export async function resolveAdvertisedMediaHostname(opts: {
   };
 
   const loginHost = normalizeAdvertiseHost(opts.loginHost);
+  // XUI co-located: always prefer the hostname the app used to login (domain or IP).
+  if (!panelIsSeparateFromLb && loginHost && rejectIfPanel(loginHost) && !isIpHost(loginHost)) {
+    return loginHost;
+  }
   if (
     loginHost &&
     rejectIfPanel(loginHost) &&
@@ -299,9 +304,11 @@ export async function resolveAdvertisedMediaHostname(opts: {
   }
 
   const lbDomain = mediaHostnameFromServerDomain(opts.lb.domain);
-  if (lbDomain && rejectIfPanel(lbDomain) && (await hostnameResolvesToTarget(lbDomain, lbIp))) {
-    if (!(panelIsSeparateFromLb && (await hostnameResolvesToTarget(lbDomain, panelHost)))) {
-      return lbDomain;
+  if (lbDomain && rejectIfPanel(lbDomain)) {
+    if (!panelIsSeparateFromLb || (await hostnameResolvesToTarget(lbDomain, lbIp))) {
+      if (!(panelIsSeparateFromLb && (await hostnameResolvesToTarget(lbDomain, panelHost)))) {
+        return lbDomain;
+      }
     }
   }
 
@@ -315,6 +322,8 @@ export async function resolveAdvertisedMediaHostname(opts: {
         continue;
       }
       if (!rejectIfPanel(candidate)) continue;
+      // Co-located: Main domain is valid media host (proxied to classic-lb).
+      if (!panelIsSeparateFromLb) return candidate;
       // Skip hostnames that resolve to the panel (hairpin / ~1G wall).
       if (panelIsSeparateFromLb && (await hostnameResolvesToTarget(candidate, panelHost))) continue;
       if (await hostnameResolvesToTarget(candidate, lbIp)) {

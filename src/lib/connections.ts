@@ -18,6 +18,18 @@ export const STALE_MS = 10 * 60 * 1000; // cron — MPEG-TS pipes often go minut
 export const LIVE_STALE_MS = 10 * 60 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
+
+/** Prisma where: real playback only (keep null channelId — SQL `<>` drops NULLs). */
+export function nonCatalogLiveConnectionWhere(): {
+  OR: Array<{ stream: { channelId: null } } | { stream: { channelId: { not: string } } }>;
+} {
+  return {
+    OR: [
+      { stream: { channelId: null } },
+      { stream: { channelId: { not: CATALOG_API_CHANNEL_MARKER } } },
+    ],
+  };
+}
 /**
  * Capacity enforcement window — shorter than the UI list TTL so abandoned
  * live-auth / prefetch rows do not block a second device for 10 minutes.
@@ -457,10 +469,8 @@ async function countCapacitySessions(lineId: string, staleMs: number = CAPACITY_
     where: {
       lineId,
       lastSeenAt: { gte: staleBefore },
-      NOT: [
-        anonymousIpNotFilter(),
-        { stream: { channelId: CATALOG_API_CHANNEL_MARKER } },
-      ],
+      NOT: [anonymousIpNotFilter()],
+      ...nonCatalogLiveConnectionWhere(),
     },
   });
   return result.length;
@@ -557,10 +567,8 @@ async function lineHasConnectionCapacityDb(
         lineId,
         ...connectionIpPrismaFilter(clientIp),
         lastSeenAt: { gte: staleBefore },
-        NOT: [
-          anonymousIpNotFilter(),
-          { stream: { channelId: CATALOG_API_CHANNEL_MARKER } },
-        ],
+        NOT: [anonymousIpNotFilter()],
+        ...nonCatalogLiveConnectionWhere(),
       },
       select: { streamId: true },
       take: 50,
@@ -1118,18 +1126,27 @@ export async function listLiveConnections(ownerId?: string | string[], take = 50
   const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
   const cacheKey = `conn:live:${ownerCacheSuffix(ownerId)}:${gen}`;
   const rows = await cacheGetOrSet(cacheKey, 1, async () => {
+    void import("./catalog-api-connection")
+      .then((m) => m.purgeCatalogApiLiveConnections())
+      .catch(() => undefined);
     await cacheGetOrSet("conn:viewer_sync_ts", 15, () => syncLiveConnectionsFromRedisViewers(400));
     const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
     const found = await prisma.liveConnection.findMany({
       where: {
         ...lineOwnerWhere(ownerId),
         lastSeenAt: { gte: staleBefore },
+        ...nonCatalogLiveConnectionWhere(),
       },
       include: connectionInclude,
       orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
       take: 5000,
     });
-    const live = found.filter((row) => row.streamId && !isTestConnectionIp(row.ip));
+    const live = found.filter(
+      (row) =>
+        row.streamId &&
+        !isTestConnectionIp(row.ip) &&
+        !isCatalogApiChannelId(row.stream?.channelId)
+    );
     return pickCanonicalLiveConnectionRows(live).slice(0, 5000);
   });
   return rows.slice(0, cap);

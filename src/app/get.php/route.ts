@@ -7,7 +7,6 @@ import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from 
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText } from "@/lib/iptv-cors";
 import { xtreamM3uFilename } from "@/lib/xtream-safe";
-import { pulseXtreamCatalogActivity } from "@/lib/catalog-api-connection";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,12 +66,6 @@ export async function GET(req: NextRequest) {
   const auth = await authorizeGetPhp(req);
   if (auth.error) return auth.error;
   const { line, username } = auth;
-  void pulseXtreamCatalogActivity({
-    lineId: line.id,
-    ip: getClientIp(req),
-    userAgent: req.headers.get("user-agent"),
-    action: "get_live_streams",
-  });
   void warmXtreamCatalogsNow(line).catch(() => undefined);
   const type = req.nextUrl.searchParams.get("type") ?? "m3u_plus";
   const outputRaw = (req.nextUrl.searchParams.get("output") ?? "ts").toLowerCase();

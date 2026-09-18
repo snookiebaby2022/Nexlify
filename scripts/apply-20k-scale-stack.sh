@@ -22,6 +22,7 @@ fi
 
 run "$ROOT/scripts/ensure-panel-env.sh"
 run "$ROOT/scripts/tune-kernel-20k.sh"
+run "$ROOT/scripts/tune-capacity-50k.sh"
 run "$ROOT/scripts/tune-streaming-host.sh"
 run "$ROOT/scripts/install-redis-production.sh"
 run "$ROOT/scripts/install-streaming-stability-cron.sh"

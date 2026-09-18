@@ -50,7 +50,8 @@ if [ -n "$INTERNAL_API_SECRET" ]; then
 fi
 
 bash "$ROOT/scripts/tune-streaming-host.sh"
-bash "$ROOT/scripts/tune-kernel-20k.sh" 2>/dev/null || bash "$ROOT/scripts/tune-streaming-host.sh"
+bash "$ROOT/scripts/tune-kernel-20k.sh" 2>/dev/null || true
+bash "$ROOT/scripts/tune-capacity-50k.sh" 2>/dev/null || bash "$ROOT/scripts/tune-streaming-host.sh"
 
 if [ ! -d node_modules ]; then
   log "installing minimal node deps for edge..."

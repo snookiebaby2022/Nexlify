@@ -225,6 +225,9 @@ Target capacity (rule of thumb):
 | 1 edge (32 core) | 2k–4k (depends on upstream) |
 | 2–3 edges + LB | 5k–10k |
 | 4–6 edges + LB + PgBouncer | 15k–20k+ |
+| **50k lines** | Horizontal **classic-lb** nodes (`scripts/classic-lb/install.sh` on each) + `bash scripts/tune-capacity-50k.sh` on Main |
+
+50k **subscribers** is catalog + auth on Main (PHP-FPM panel pool) and MPEG-TS on LBs (one FPM worker per live `.ts` client). Install already applies that profile. Do not expect 50k concurrent streams on a single 8 GB VPS.
 
 Windows: `windows/scripts/deploy-20k-stack-45.ps1 -Force`
 

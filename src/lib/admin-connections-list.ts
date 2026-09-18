@@ -8,10 +8,6 @@ import {
 } from "@/lib/connection-playback-output";
 import { streamServerDisplayName } from "@/lib/stream-server-display";
 import { ownerLineOwnerIds } from "@/lib/owner-scope";
-import {
-  CATALOG_API_CHANNEL_MARKER,
-  catalogApiActivityLabel,
-} from "@/lib/catalog-api-connection";
 
 export type AdminConnectionRow = {
   id: string;
@@ -67,13 +63,10 @@ export async function listAdminConnections(
       live: null,
     });
     const cachedOutput = c.streamId ? cachedOutputs[i] : null;
-    const apiLabel = catalogApiActivityLabel(c.userAgent);
-    const output = apiLabel
-      ? "API"
-      : resolvePlaybackOutputLabel({
-          cached: cachedOutput,
-          userAgent: c.userAgent,
-        });
+    const output = resolvePlaybackOutputLabel({
+      cached: cachedOutput,
+      userAgent: c.userAgent,
+    });
     const streamStarted = c.streamId ? (processStartedById.get(c.streamId) ?? null) : null;
     const srv = c.stream?.server;
     const serverName = srv
@@ -88,11 +81,8 @@ export async function listAdminConnections(
       stream: c.stream
         ? {
             id: c.stream.id,
-            name:
-              c.stream.channelId === CATALOG_API_CHANNEL_MARKER && apiLabel
-                ? apiLabel
-                : c.stream.name,
-            type: c.stream.channelId === CATALOG_API_CHANNEL_MARKER ? "API" : c.stream.type,
+            name: c.stream.name,
+            type: c.stream.type,
             serverId: c.stream.serverId,
           }
         : null,

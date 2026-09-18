@@ -57,21 +57,21 @@ if ($lineId !== '') {
 }
 
 $hlsDir = ensure_ffmpeg($streamId, $sourceUrl);
-$deadline = microtime(true) + 8;
-while (!hls_index_ready($hlsDir) && microtime(true) < $deadline) {
-    usleep(150000);
-}
-if (!hls_index_ready($hlsDir)) {
-    http_response_code(503);
-    exit;
-}
-
-$safe = safe_stream_id($streamId);
 if ($wantM3u8) {
+    $deadline = microtime(true) + 4;
+    while (!hls_index_ready($hlsDir) && microtime(true) < $deadline) {
+        usleep(40000);
+    }
+    if (!hls_index_ready($hlsDir)) {
+        http_response_code(503);
+        exit;
+    }
+    $safe = safe_stream_id($streamId);
     header('X-Accel-Redirect: /lb/hls-static/' . $safe . '/index.m3u8');
     header('Content-Type: application/vnd.apple.mpegurl');
     exit;
 }
 
+$safe = safe_stream_id($streamId);
 $_GET['safe'] = $safe;
 require __DIR__ . '/mpegts.php';

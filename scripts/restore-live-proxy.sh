@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Panel MUST NOT proxy media (kills panel-proxy bandwidth wall).
-# Clients play on the remote LB from server_info.url — NEVER return 302 for /live/.
+# Live routing for panel nginx.
+# - classic-lb (XUI co-located): :8080 proxies media to classic-lb (same as :80/:443)
+# - remote splice / other: :8080 returns 502 for media (clients use server_info LB URL)
+# Never return 302 for /live/ (Xtream apps ignore redirects).
 # Immutable after: bash scripts/lock-live-routing.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,10 +25,54 @@ fi
 REMOTE_IP="${REMOTE%%:*}"
 PANEL_LISTEN="$(nexlify_resolve_panel_listen)"
 
+# XUI classic-lb on this host: proxy media locally (Main + LB both play).
+CLASSIC_LOCAL=0
+if [ "${NEXLIFY_CLASSIC_LB:-0}" = "1" ] || [ "${NEXLIFY_PLAYBACK_TOPOLOGY:-}" = "classic-lb" ]; then
+  CLASSIC_LOCAL=1
+fi
+case "$REMOTE_IP" in
+  127.0.0.1|localhost) CLASSIC_LOCAL=1 ;;
+esac
+if [ -f /etc/nexlify-lb/lb.env ] && ss -lntp 2>/dev/null | grep -qE ':8090\b'; then
+  CLASSIC_LOCAL=1
+fi
+LB_UPSTREAM="${NEXLIFY_CLASSIC_LB_UPSTREAM:-127.0.0.1:8090}"
+
 pm2 stop nexlify-iptv-edge 2>/dev/null || true
 
+if [ "$CLASSIC_LOCAL" = "1" ]; then
+  MEDIA_BLOCK="    location ~ ^/(live|timeshift|movie|series)/ {
+        # XUI Main+LB: proxy to classic-lb FFmpeg (never Next.js)
+        proxy_pass http://${LB_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection \"\";
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_max_temp_file_size 0;
+        proxy_cache off;
+        tcp_nodelay on;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }"
+  FOOTER_MSG="XUI_CLASSIC_LB — Main :80/:443/:8080 and LB ${LB_UPSTREAM} both serve media"
+else
+  MEDIA_BLOCK="    location ~ ^/(live|timeshift|movie|series)/ {
+        default_type text/plain;
+        return 502 'use load balancer ${REMOTE_IP} for media';
+    }"
+  FOOTER_MSG="PANEL_MEDIA_PROXY_DISABLED — clients must use ${REMOTE}"
+fi
+
+chattr -i /etc/nginx/conf.d/nexlify-live-remote-edge.conf \
+  /etc/nginx/conf.d/nexlify-panel-http.conf \
+  /etc/nginx/conf.d/nexlify-panel-https.conf 2>/dev/null || true
+
 cat > /etc/nginx/conf.d/nexlify-live-remote-edge.conf <<EOF
-# Panel :8080 — API/auth to Next; media DISABLED (direct LB only).
+# Panel :8080 — API to Next; media → classic-lb (XUI) or 502 (remote LB only).
 upstream nexlify_remote_edge {
     server ${REMOTE};
 }
@@ -76,10 +122,7 @@ server {
         proxy_read_timeout 300s;
     }
 
-    location ~ ^/(live|timeshift|movie|series)/ {
-        default_type text/plain;
-        return 502 'use load balancer ${REMOTE_IP} for media';
-    }
+${MEDIA_BLOCK}
 
     location ~ ^/(player_api\\.php|get\\.php|xmltv\\.php|c/|stalker_portal/|api/) {
         proxy_pass http://nexlify_panel_backend;
@@ -109,9 +152,10 @@ server {
 }
 EOF
 
+export NEXLIFY_CLASSIC_LB="${NEXLIFY_CLASSIC_LB:-$CLASSIC_LOCAL}"
 bash "$ROOT/scripts/patch-panel-nginx-live-lock.sh"
 
 rm -f /etc/nginx/conf.d/nexlify-stream-edge.conf /etc/nginx/conf.d/nexlify-stream-extra.conf
 nginx -t
 systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || service nginx reload 2>/dev/null || true
-echo "PANEL_MEDIA_PROXY_DISABLED — clients must use ${REMOTE}"
+echo "$FOOTER_MSG"

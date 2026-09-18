@@ -399,7 +399,7 @@ export async function syncWatchFolderM3u(folder: WatchFolderM3uOpts) {
     defaultOnDemand: folder.onDemand !== false ? true : false,
     updateNamesOnSync: folder.updateNames !== false,
     overwriteCategories: folder.overwriteCategories !== false,
-    autoBouquetFromGroup: folder.autoBouquet !== false,
+    autoBouquetFromGroup: folder.autoBouquet === true,
     bouquetIds: parseWatchBouquetIds(folder.bouquetIds),
     groupFilter: parseGroupFilter(folder.groupFilter),
     createMissing: folder.createMissing !== false,

@@ -211,7 +211,7 @@ export async function resolveStreamIdParam(
   return resolveXtreamNumericStreamId((abs ^ XTREAM_RECENT_ALIAS_XOR) >>> 0, opts);
 }
 
-async function resolveXtreamNumericStreamId(
+export async function resolveXtreamNumericStreamId(
   numericId: number,
   opts?: { username?: string; lineId?: string }
 ): Promise<string | null> {

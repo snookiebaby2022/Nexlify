@@ -27,15 +27,18 @@ fi
 # Persist if sysctl.d available
 if [ -d /etc/sysctl.d ]; then
   cat > /etc/sysctl.d/99-nexlify-iptv.conf <<'SYSCTL'
-# Nexlify IPTV 20k tuning
+# Nexlify IPTV 50k tuning
 net.core.somaxconn = 65535
 net.ipv4.tcp_max_syn_backlog = 65535
-net.core.netdev_max_backlog = 65535
+net.core.netdev_max_backlog = 250000
 net.ipv4.ip_local_port_range = 1024 65535
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_slow_start_after_idle = 0
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
 fs.file-max = 2097152
 SYSCTL
   sysctl --system >/dev/null 2>&1 || true
@@ -56,8 +59,8 @@ LIMITS
 fi
 
 # nginx worker_connections hint
-if [ -f /etc/nginx/nginx.conf ] && ! grep -q 'worker_connections[[:space:]]\+16384' /etc/nginx/nginx.conf 2>/dev/null; then
-  log "TIP: set worker_connections 16384 in /etc/nginx/nginx.conf events {}"
+if [ -f /etc/nginx/nginx.conf ] && ! grep -q 'worker_connections[[:space:]]\+65535' /etc/nginx/nginx.conf 2>/dev/null; then
+  log "TIP: set worker_connections 65535 in /etc/nginx/nginx.conf events {} (tune-capacity-50k.sh)"
 fi
 
 log "OK"

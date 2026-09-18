@@ -71,7 +71,8 @@ export default function M3uReviewPage() {
 
   const [opts, setOpts] = useState<ImportOptions>({
     autoCategory: true,
-    autoBouquetFromGroup: true,
+    // group-title = Xtream categories, not packages. Off by default (XUI-style).
+    autoBouquetFromGroup: false,
     autoAssignEpg: true,
     useLogos: true,
     onDemand: false,
@@ -403,14 +404,18 @@ export default function M3uReviewPage() {
           <div className="rounded-lg border p-4 space-y-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
             <h2 className="text-sm font-semibold">Automatic setup (recommended)</h2>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              These options run when you import. Categories are created from group-title; bouquets mirror groups; EPG is
-              auto-matched; channel logos come from tvg-logo in the M3U.
+              Categories come from M3U group-title (what apps show as folders). Bouquets are packages you assign to
+              lines — pick them below; do not turn group-titles into bouquets unless you really want one package per
+              folder. EPG auto-match and tvg-logo icons apply when enabled.
             </p>
 
             <div className="grid md:grid-cols-2 gap-3 text-sm">
               {[
-                { key: "autoCategory" as const, label: "Create categories from group-title" },
-                { key: "autoBouquetFromGroup" as const, label: "Create/link bouquets from groups" },
+                { key: "autoCategory" as const, label: "Create categories from group-title (app folders)" },
+                {
+                  key: "autoBouquetFromGroup" as const,
+                  label: "Also create bouquets named like groups (usually off)",
+                },
                 { key: "autoAssignEpg" as const, label: "Auto-match EPG after import" },
                 { key: "useLogos" as const, label: "Apply channel icons from playlist" },
                 { key: "onDemand" as const, label: "On-demand — start only when a viewer watches" },

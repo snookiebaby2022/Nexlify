@@ -1,6 +1,6 @@
 import { PanelRole, Prisma, LineStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { LIVE_STALE_MS } from "@/lib/connections";
+import { LIVE_STALE_MS, nonCatalogLiveConnectionWhere } from "@/lib/connections";
 import type { SessionUser } from "@/lib/auth";
 import type { ManageLineRow } from "@/components/manage-lines-table";
 import { applyOwnerFilter, lineOwnerIdsForSession } from "@/lib/line-owner-filter";
@@ -56,7 +56,10 @@ function lineWhereForSession(
       where.expiresAt = { gte: farFuture };
     } else if (statusFilter === "ONLINE") {
       where.liveConnections = {
-        some: { lastSeenAt: { gte: new Date(Date.now() - LIVE_STALE_MS) } },
+        some: {
+          lastSeenAt: { gte: new Date(Date.now() - LIVE_STALE_MS) },
+          ...nonCatalogLiveConnectionWhere(),
+        },
       };
     } else {
       const status =
@@ -158,14 +161,18 @@ export async function listManageLinesPage(opts: {
   ]);
 
   const lineIds = lines.map((l) => l.id);
-  const [activeConnections, activeCounts] = lineIds.length
+  // Exclude catalog/API marker only — keep null channelId (SQL <> drops NULLs).
+  const playbackConnWhere: Prisma.LiveConnectionWhereInput = {
+    lastSeenAt: { gte: staleBefore },
+    lineId: { in: lineIds },
+    ...nonCatalogLiveConnectionWhere(),
+  };
+  // Fetch all page playback rows and pick the latest per line in JS.
+  // Prisma `distinct: ["lineId"]` + orderBy is unreliable for "latest heartbeat".
+  const [playbackConnections, activeSessionRows] = lineIds.length
     ? await Promise.all([
         prisma.liveConnection.findMany({
-          where: {
-            lastSeenAt: { gte: staleBefore },
-            lineId: { in: lineIds },
-          },
-          distinct: ["lineId"],
+          where: playbackConnWhere,
           select: {
             lineId: true,
             ip: true,
@@ -174,31 +181,36 @@ export async function listManageLinesPage(opts: {
             lastSeenAt: true,
           },
           orderBy: { lastSeenAt: "desc" },
+          take: Math.min(5000, Math.max(200, lineIds.length * 8)),
         }),
+        // Capacity-style count: one session per (lineId, ip, streamId)
         prisma.liveConnection.groupBy({
-          by: ["lineId"],
-          where: {
-            lastSeenAt: { gte: staleBefore },
-            lineId: { in: lineIds },
-          },
-          _count: { _all: true },
+          by: ["lineId", "ip", "streamId"],
+          where: playbackConnWhere,
         }),
       ])
     : [[], []];
 
-  const activeConnByLineId = new Map<string, (typeof activeConnections)[number]>();
+  type PlaybackConn = (typeof playbackConnections)[number];
+  const activeConnByLineId = new Map<string, PlaybackConn>();
   const activeConnCountByLineId = new Map<string, number>();
-  for (const conn of activeConnections) {
-    activeConnByLineId.set(conn.lineId, conn);
+  for (const conn of playbackConnections) {
+    if (!activeConnByLineId.has(conn.lineId)) {
+      activeConnByLineId.set(conn.lineId, conn);
+    }
   }
-  for (const row of activeCounts) {
-    activeConnCountByLineId.set(row.lineId, row._count._all);
+  for (const row of activeSessionRows) {
+    activeConnCountByLineId.set(row.lineId, (activeConnCountByLineId.get(row.lineId) ?? 0) + 1);
   }
 
   return {
     lines: lines.map((line, index) => {
       const active = activeConnByLineId.get(line.id);
       const activeCount = activeConnCountByLineId.get(line.id) ?? 0;
+      const watchingName =
+        active?.stream?.name?.trim() ||
+        line.lastWatchedStream?.name?.trim() ||
+        null;
       return {
         ...line,
         password: listedLinePassword(line.password),
@@ -210,7 +222,7 @@ export async function listManageLinesPage(opts: {
         activeConnection: active
           ? {
               ip: active.ip,
-              streamName: active.stream?.name ?? null,
+              streamName: watchingName,
               userAgent: active.userAgent,
               lastSeenAt: active.lastSeenAt.toISOString(),
             }

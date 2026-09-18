@@ -14,6 +14,8 @@ function load_env(): array
     if (is_array($cache)) {
         return $cache;
     }
+    // Keep connection timestamps in UTC so panel/Prisma uptime is correct.
+    date_default_timezone_set('UTC');
     $path = env_path();
     $out = [];
     if (is_readable($path)) {
@@ -127,6 +129,7 @@ function connection_handler(): string
 function touch_connection(string $lineId, string $streamId, string $ip, ?string $ua = null, int $bytes = 0): void
 {
     $handler = connection_handler();
+    $ttl = max(120, min(3600, (int) cfg('CONN_TTL_SECS', '600')));
     if ($handler === 'redis') {
         $redis = redis_client();
         if (!$redis) {
@@ -134,16 +137,17 @@ function touch_connection(string $lineId, string $streamId, string $ip, ?string 
         }
         $key = "lb:conn:{$lineId}:{$streamId}:" . ($ip !== '' ? $ip : '_');
         $started = $redis->hGet($key, 'startedAt') ?: (string) (int) (microtime(true) * 1000);
+        $prevBytes = (int) ($redis->hGet($key, 'bytes') ?: 0);
         $redis->hMSet($key, [
             'lineId' => $lineId,
             'streamId' => $streamId,
             'ip' => $ip,
             'userAgent' => $ua ?? '',
-            'bytes' => (string) $bytes,
+            'bytes' => (string) max($prevBytes, $bytes),
             'lastSeenAt' => (string) (int) (microtime(true) * 1000),
             'startedAt' => $started,
         ]);
-        $redis->expire($key, 120);
+        $redis->expire($key, $ttl);
         $redis->sAdd('lb:conn:index', $key);
         return;
     }
@@ -161,8 +165,64 @@ function touch_connection(string $lineId, string $streamId, string $ip, ?string 
     $stmt->execute([$lineId, $streamId, $ip, $ua, max(0, $bytes)]);
 }
 
-function list_connections(int $staleSecs = 90): array
+/**
+ * Bind line/stream/ip to a safe id so mpegts/hls can heartbeat without re-auth.
+ * Written beside sources/{safe}.url so it survives across FPM workers.
+ */
+function bind_viewer(string $safe, string $lineId, string $streamId, string $ip, ?string $ua = null): void
 {
+    $safe = safe_stream_id($safe);
+    if ($safe === '' || $safe === 'x' || $lineId === '' || $streamId === '') {
+        return;
+    }
+    $dir = stream_root() . '/sources';
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    @file_put_contents(
+        $dir . '/' . $safe . '.viewer',
+        (string) json_encode([
+            'lineId' => $lineId,
+            'streamId' => $streamId,
+            'ip' => $ip,
+            'ua' => $ua ?? '',
+            'boundAt' => time(),
+        ], JSON_UNESCAPED_SLASHES)
+    );
+}
+
+/** @return array{lineId:string,streamId:string,ip:string,ua:string}|null */
+function viewer_for_safe(string $safe): ?array
+{
+    $path = stream_root() . '/sources/' . safe_stream_id($safe) . '.viewer';
+    if (!is_readable($path)) {
+        return null;
+    }
+    $j = json_decode((string) file_get_contents($path), true);
+    if (!is_array($j) || empty($j['lineId']) || empty($j['streamId'])) {
+        return null;
+    }
+    return [
+        'lineId' => (string) $j['lineId'],
+        'streamId' => (string) $j['streamId'],
+        'ip' => (string) ($j['ip'] ?? ''),
+        'ua' => (string) ($j['ua'] ?? ''),
+    ];
+}
+
+/** Refresh lastSeen while a client is actively pulling media for $safe. */
+function heartbeat_viewer(string $safe, int $bytes = 0): void
+{
+    $v = viewer_for_safe($safe);
+    if ($v === null) {
+        return;
+    }
+    touch_connection($v['lineId'], $v['streamId'], $v['ip'], $v['ua'] !== '' ? $v['ua'] : null, $bytes);
+}
+
+function list_connections(int $staleSecs = 300): array
+{
+    $staleSecs = max(60, min(3600, $staleSecs));
     $handler = connection_handler();
     if ($handler === 'redis') {
         $redis = redis_client();
@@ -190,8 +250,8 @@ function list_connections(int $staleSecs = 90): array
                 'ip' => $h['ip'] ?? '',
                 'userAgent' => $h['userAgent'] ?? null,
                 'bytes' => (int) ($h['bytes'] ?? 0),
-                'startedAt' => isset($h['startedAt']) ? date('c', (int) floor(((int) $h['startedAt']) / 1000)) : null,
-                'lastSeenAt' => $last ? date('c', (int) floor($last / 1000)) : null,
+                'startedAt' => isset($h['startedAt']) ? gmdate('c', (int) floor(((int) $h['startedAt']) / 1000)) : null,
+                'lastSeenAt' => $last ? gmdate('c', (int) floor($last / 1000)) : null,
             ];
         }
         return $out;
@@ -218,11 +278,63 @@ function list_connections(int $staleSecs = 90): array
  * Panel live-auth with Redis hot cache (avoids panel round-trip on zap storms).
  * @return array{ok:bool,lineId?:string,deny?:string,sourceUrl?:string}
  */
-function panel_live_auth(string $username, string $password, string $streamId, string $ip, ?string $ua): array
+function prune_stale_connections(int $staleSecs = 600): int
 {
-    $cacheTtl = max(5, (int) cfg('AUTH_CACHE_SECS', '25'));
+    $staleSecs = max(60, min(3600, $staleSecs));
+    $pruned = 0;
+    $handler = connection_handler();
+    if ($handler === 'redis') {
+        $redis = redis_client();
+        if (!$redis) {
+            return 0;
+        }
+        $keys = $redis->sMembers('lb:conn:index') ?: [];
+        $now = (int) (microtime(true) * 1000);
+        foreach ($keys as $key) {
+            $h = $redis->hGetAll($key);
+            if (!$h) {
+                $redis->sRem('lb:conn:index', $key);
+                $pruned++;
+                continue;
+            }
+            $last = (int) ($h['lastSeenAt'] ?? 0);
+            if ($last <= 0 || ($now - $last) > ($staleSecs * 1000)) {
+                $redis->del($key);
+                $redis->sRem('lb:conn:index', $key);
+                $pruned++;
+            }
+        }
+        return $pruned;
+    }
+    $pdo = mysql_pdo();
+    if (!$pdo) {
+        return 0;
+    }
+    $stmt = $pdo->prepare(
+        'DELETE FROM live_connections WHERE last_seen_at < (NOW(3) - INTERVAL ? SECOND)'
+    );
+    $stmt->execute([$staleSecs]);
+    return (int) $stmt->rowCount();
+}
+
+/**
+ * Panel live-auth with Redis hot cache (avoids panel round-trip on zap storms).
+ * @return array{ok:bool,lineId?:string,deny?:string,sourceUrl?:string,streamId?:string,mode?:string}
+ */
+function panel_live_auth(
+    string $username,
+    string $password,
+    string $streamId,
+    string $ip,
+    ?string $ua,
+    ?string $originalPath = null
+): array {
+    $cacheTtl = max(5, (int) cfg('AUTH_CACHE_SECS', '90'));
     $redis = redis_client();
-    $cacheKey = 'lb:auth:' . hash('sha256', strtolower($username) . "\0" . $password . "\0" . $streamId);
+    // Normalize stream id (drop extension) for cache key stability across .ts/.m3u8
+    $streamIdNorm = (string) preg_replace('/\.(ts|m3u8|mp4)$/i', '', $streamId);
+    $pathKey = $originalPath !== null && $originalPath !== '' ? $originalPath : $streamIdNorm;
+    $cacheKey = 'lb:auth:' . hash('sha256', strtolower($username) . "\0" . $password . "\0" . $pathKey);
     if ($redis) {
         $cached = $redis->get($cacheKey);
         if (is_string($cached) && $cached !== '') {
@@ -232,6 +344,8 @@ function panel_live_auth(string $username, string $password, string $streamId, s
                     'ok' => true,
                     'lineId' => (string) $j['lineId'],
                     'sourceUrl' => (string) $j['sourceUrl'],
+                    'streamId' => (string) ($j['streamId'] ?? $streamIdNorm),
+                    'mode' => (string) ($j['mode'] ?? 'live'),
                 ];
             }
         }
@@ -243,7 +357,12 @@ function panel_live_auth(string $username, string $password, string $streamId, s
     if ($panel === '' || ($token === '' && $internal === '')) {
         return ['ok' => false, 'deny' => 'misconfigured'];
     }
-    $uri = '/live/' . rawurlencode($username) . '/' . rawurlencode($password) . '/' . rawurlencode($streamId) . '.ts';
+    $uri = $originalPath !== null && $originalPath !== ''
+        ? $originalPath
+        : '/live/' . rawurlencode($username) . '/' . rawurlencode($password) . '/' . rawurlencode($streamIdNorm) . '.ts';
+    if ($uri !== '' && $uri[0] !== '/') {
+        $uri = '/' . $uri;
+    }
     $headerList = [
         'X-Original-Uri: ' . $uri,
         'X-Original-Method: GET',
@@ -270,8 +389,8 @@ function panel_live_auth(string $username, string $password, string $streamId, s
         CURLOPT_HTTPHEADER => $headerList,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HEADER => true,
-        CURLOPT_CONNECTTIMEOUT => 2,
-        CURLOPT_TIMEOUT => 4,
+        CURLOPT_CONNECTTIMEOUT => 1,
+        CURLOPT_TIMEOUT => 3,
         CURLOPT_HEADERFUNCTION => static function ($ch, $header) use (&$headers) {
             $len = strlen($header);
             $parts = explode(':', $header, 2);
@@ -292,6 +411,11 @@ function panel_live_auth(string $username, string $password, string $streamId, s
     }
     $lineId = (string) ($headers['x-nexlify-line-id'] ?? '');
     $sourceUrl = (string) ($headers['x-nexlify-upstream'] ?? '');
+    $resolvedStreamId = (string) ($headers['x-nexlify-stream-id'] ?? '');
+    $mode = strtolower((string) ($headers['x-nexlify-mode'] ?? 'live'));
+    if (!in_array($mode, ['live', 'vod', 'timeshift'], true)) {
+        $mode = 'live';
+    }
     if ($sourceUrl === '' || $lineId === '') {
         return ['ok' => false, 'deny' => 'missing_upstream'];
     }
@@ -299,6 +423,8 @@ function panel_live_auth(string $username, string $password, string $streamId, s
         'ok' => true,
         'lineId' => $lineId,
         'sourceUrl' => $sourceUrl,
+        'streamId' => $resolvedStreamId !== '' ? $resolvedStreamId : $streamIdNorm,
+        'mode' => $mode,
     ];
     if ($redis) {
         $redis->setex($cacheKey, $cacheTtl, json_encode($ok));
@@ -306,6 +432,30 @@ function panel_live_auth(string $username, string $password, string $streamId, s
     return $ok;
 }
 
+/** Persist upstream + delivery mode for mpegts.php (vod/timeshift skip shared HLS). */
+function remember_source(string $streamId, string $sourceUrl, string $mode = 'live'): string
+{
+    $root = stream_root();
+    $safe = safe_stream_id($streamId);
+    $srcDir = $root . '/sources';
+    if (!is_dir($srcDir)) {
+        @mkdir($srcDir, 0755, true);
+    }
+    @file_put_contents($srcDir . '/' . $safe . '.url', $sourceUrl);
+    $mode = in_array($mode, ['live', 'vod', 'timeshift'], true) ? $mode : 'live';
+    @file_put_contents($srcDir . '/' . $safe . '.mode', $mode);
+    return $safe;
+}
+
+function mode_for_safe(string $safe): string
+{
+    $path = stream_root() . '/sources/' . safe_stream_id($safe) . '.mode';
+    if (!is_file($path)) {
+        return 'live';
+    }
+    $m = strtolower(trim((string) @file_get_contents($path)));
+    return in_array($m, ['live', 'vod', 'timeshift'], true) ? $m : 'live';
+}
 function stream_root(): string
 {
     return rtrim(cfg('STREAM_ROOT', '/var/lib/nexlify-lb'), '/');
@@ -317,6 +467,24 @@ function safe_stream_id(string $streamId): string
     return $safe;
 }
 
+function ffmpeg_copy_input_args(bool $vod = false): string
+{
+    // Live: ~0.8s probe so cold zap is not stuck in analyzeduration=5s.
+    // VOD: a bit more so MP4/AC3 still maps, still well under the old 5s.
+    $probe = $vod ? 1500000 : 800000;
+    $analyze = $vod ? 1500000 : 800000;
+    $rw = $vod ? 30000000 : 12000000;
+    return sprintf(
+        '-fflags +genpts+nobuffer+discardcorrupt+flush_packets -flags low_delay ' .
+        '-probesize %d -analyzeduration %d -fpsprobesize 0 -avioflags direct ' .
+        '-reconnect 1 -reconnect_streamed 1 -reconnect_at_eof 1 -reconnect_delay_max 2 ' .
+        '-rw_timeout %d',
+        $probe,
+        $analyze,
+        $rw
+    );
+}
+
 /** One FFmpeg HLS packager per channel (multi-viewer safe). Returns HLS dir. */
 function ensure_ffmpeg(string $streamId, string $sourceUrl): string
 {
@@ -326,7 +494,8 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
     $pidDir = $root . '/pids';
     $logDir = $root . '/logs';
     $viewDir = $root . '/viewers';
-    foreach ([$hlsDir, $pidDir, $logDir, $viewDir] as $d) {
+    $srcDir = $root . '/sources';
+    foreach ([$hlsDir, $pidDir, $logDir, $viewDir, $srcDir] as $d) {
         if (!is_dir($d)) {
             mkdir($d, 0755, true);
         }
@@ -334,7 +503,17 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
     $pidFile = $pidDir . '/' . $safe . '.pid';
     $logFile = $logDir . '/' . $safe . '.log';
     $indexPath = $hlsDir . '/index.m3u8';
+    $srcFile = $srcDir . '/' . $safe . '.url';
+    $lockFile = $pidDir . '/' . $safe . '.lock';
     $ffmpeg = cfg('FFMPEG_BIN', '/usr/local/bin/ffmpeg');
+
+    // Persist upstream for cold-start direct MPEG-TS remux (instant zap before HLS ready).
+    @file_put_contents($srcFile, $sourceUrl);
+
+    $lockFh = @fopen($lockFile, 'c');
+    if ($lockFh) {
+        flock($lockFh, LOCK_EX);
+    }
 
     $running = false;
     if (is_file($pidFile)) {
@@ -348,20 +527,45 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
         }
     }
     if (!$running) {
+        if (!is_dir($hlsDir)) {
+            mkdir($hlsDir, 0755, true);
+        }
+        // Drop stale segments so we never remux a dead window as "ready".
+        foreach (glob($hlsDir . '/seg*.ts') ?: [] as $old) {
+            @unlink($old);
+        }
+        @unlink($indexPath);
         $segPattern = $hlsDir . '/seg%d.ts';
+        // Instant zap: short segments. break_non_keyframes so GOP~10s sources still
+        // split near HLS_TIME — otherwise mpegts passthrough stalls at the live edge.
+        $hlsTime = max(1, min(4, (int) cfg('HLS_TIME', '1')));
+        $hlsList = max(4, min(16, (int) cfg('HLS_LIST_SIZE', '8')));
+        $initTime = max(0.4, min(2.0, (float) $hlsTime * 0.5));
         $cmd = sprintf(
-            'nohup %s -hide_banner -loglevel warning -fflags +genpts+nobuffer+discardcorrupt -flags low_delay ' .
-            '-reconnect 1 -reconnect_streamed 1 -reconnect_at_eof 1 -reconnect_delay_max 2 -rw_timeout 20000000 ' .
-            '-i %s -map 0:v:0? -map 0:a:0? -c copy -f hls -hls_time 2 -hls_list_size 6 ' .
-            '-hls_flags delete_segments+append_list+omit_endlist -hls_segment_filename %s %s > %s 2>&1 & echo $! > %s',
+            'nohup %s -hide_banner -loglevel warning ' .
+            '%s ' .
+            '-i %s -map 0:v:0? -map 0:a:0? -c copy ' .
+            '-muxdelay 0 -muxpreload 0 -flush_packets 1 -max_delay 0 ' .
+            '-f hls -hls_time %d -hls_init_time %.1f -hls_list_size %d ' .
+            '-hls_flags delete_segments+append_list+omit_endlist+program_date_time+split_by_time ' .
+            '-break_non_keyframes 1 ' .
+            '-hls_segment_filename %s %s > %s 2>&1 & echo $! > %s',
             escapeshellarg($ffmpeg),
+            ffmpeg_copy_input_args(false),
             escapeshellarg($sourceUrl),
+            $hlsTime,
+            $initTime,
+            $hlsList,
             escapeshellarg($segPattern),
             escapeshellarg($indexPath),
             escapeshellarg($logFile),
             escapeshellarg($pidFile)
         );
         exec($cmd);
+    }
+    if ($lockFh) {
+        flock($lockFh, LOCK_UN);
+        fclose($lockFh);
     }
     @file_put_contents($viewDir . '/' . $safe, (string) time());
 
@@ -376,8 +580,177 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
     return $hlsDir;
 }
 
+function source_url_for_safe(string $safe): ?string
+{
+    $path = stream_root() . '/sources/' . safe_stream_id($safe) . '.url';
+    if (!is_readable($path)) {
+        return null;
+    }
+    $url = trim((string) file_get_contents($path));
+    if ($url === '' || !preg_match('#^https?://#i', $url)) {
+        return null;
+    }
+    return $url;
+}
+
 function hls_index_ready(string $hlsDir): bool
 {
     $index = $hlsDir . '/index.m3u8';
-    return is_file($index) && filesize($index) > 16;
+    if (!is_file($index) || filesize($index) < 24) {
+        return false;
+    }
+    // Need a fresh segment (written in the last 15s) with a few TS packets.
+    $now = time();
+    $segs = glob($hlsDir . '/seg*.ts') ?: [];
+    foreach ($segs as $seg) {
+        if (!is_file($seg) || filesize($seg) < 940) {
+            continue;
+        }
+        $mtime = (int) filemtime($seg);
+        if (($now - $mtime) <= 15) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function packager_started(string $streamId): bool
+{
+    $safe = safe_stream_id($streamId);
+    $pidFile = stream_root() . '/pids/' . $safe . '.pid';
+    if (!is_file($pidFile)) {
+        return false;
+    }
+    $pid = (int) trim((string) file_get_contents($pidFile));
+    if ($pid < 2) {
+        return false;
+    }
+    if (function_exists('posix_kill')) {
+        return @posix_kill($pid, 0);
+    }
+    return is_dir('/proc/' . $pid);
+}
+
+/** HMAC secret for public HLS segment URLs (packager stays localhost-only). */
+function hls_sign_secret(): string
+{
+    $s = cfg('HLS_SIGN_SECRET', '');
+    if ($s !== '') {
+        return $s;
+    }
+    $s = cfg('AGENT_TOKEN', '');
+    return $s !== '' ? $s : 'nexlify-hls-dev';
+}
+
+function hls_sign(string $safe, string $seg, int $exp): string
+{
+    return hash_hmac('sha256', safe_stream_id($safe) . '|' . $seg . '|' . $exp, hls_sign_secret());
+}
+
+function hls_sign_ok(string $safe, string $seg, string $token, int $exp): bool
+{
+    if ($exp < time() - 30) {
+        return false;
+    }
+    if ($exp > time() + 86400) {
+        return false;
+    }
+    $seg = basename($seg);
+    if (!preg_match('/^seg\d+\.ts$/', $seg)) {
+        return false;
+    }
+    return hash_equals(hls_sign($safe, $seg, $exp), $token);
+}
+
+/** TTL for signed segment links (seconds). */
+function hls_sign_ttl(): int
+{
+    return max(60, min(7200, (int) cfg('HLS_SIGN_TTL', '900')));
+}
+
+/** HMAC secret for XUI-style /live|{token}/… and /play/{token} URLs. */
+function play_token_secret(): string
+{
+    $s = cfg('PLAY_TOKEN_SECRET', '');
+    if ($s !== '') {
+        return $s;
+    }
+    $s = cfg('PANEL_INTERNAL_SECRET', '');
+    if ($s !== '') {
+        return $s;
+    }
+    $s = cfg('AGENT_TOKEN', '');
+    return $s !== '' ? $s : 'nexlify-play-dev';
+}
+
+function play_token_b64e(string $raw): string
+{
+    return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+}
+
+function play_token_b64d(string $s): string|false
+{
+    $pad = strlen($s) % 4;
+    if ($pad > 0) {
+        $s .= str_repeat('=', 4 - $pad);
+    }
+    return base64_decode(strtr($s, '-_', '+/'), true);
+}
+
+/**
+ * Mint opaque play token. Payload: u, p, optional s (stream), e (exp unix).
+ * Format: base64url(json).base64url(hmac-sha256 raw).
+ */
+function mint_play_token(string $username, string $password, ?string $streamId = null, int $ttl = 86400): string
+{
+    $payload = [
+        'u' => $username,
+        'p' => $password,
+        'e' => time() + max(60, $ttl),
+    ];
+    if ($streamId !== null && $streamId !== '') {
+        $payload['s'] = $streamId;
+    }
+    $body = play_token_b64e((string) json_encode($payload, JSON_UNESCAPED_SLASHES));
+    $sig = play_token_b64e(hash_hmac('sha256', $body, play_token_secret(), true));
+    return $body . '.' . $sig;
+}
+
+/** @return array{username:string,password:string,streamId:string}|null */
+function parse_play_token(string $token): ?array
+{
+    $token = trim($token);
+    if ($token === '' || !str_contains($token, '.')) {
+        return null;
+    }
+    $parts = explode('.', $token, 2);
+    if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+        return null;
+    }
+    [$body, $sig] = $parts;
+    $expect = play_token_b64e(hash_hmac('sha256', $body, play_token_secret(), true));
+    if (!hash_equals($expect, $sig)) {
+        return null;
+    }
+    $raw = play_token_b64d($body);
+    if ($raw === false) {
+        return null;
+    }
+    $j = json_decode($raw, true);
+    if (!is_array($j) || empty($j['u']) || empty($j['p'])) {
+        return null;
+    }
+    if (isset($j['e']) && (int) $j['e'] < time() - 30) {
+        return null;
+    }
+    return [
+        'username' => (string) $j['u'],
+        'password' => (string) $j['p'],
+        'streamId' => isset($j['s']) ? (string) $j['s'] : '',
+    ];
+}
+
+function looks_like_play_token(string $s): bool
+{
+    return (bool) preg_match('/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $s);
 }
