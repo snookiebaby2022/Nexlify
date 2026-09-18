@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # E2E license sync test: nexlify.live admin -> customer panel (no customer SSH).
 set -euo pipefail
-CUSTOMER="http://75.119.137.174"
-EMAIL="snookiebaby2022@gmail.com"
+CUSTOMER="${CUSTOMER_URL:?Set CUSTOMER_URL (e.g. https://customer-panel.example)}"
+EMAIL="${LICENSE_TEST_EMAIL:?Set LICENSE_TEST_EMAIL for license sync e2e}"
 ROOT="/var/www/nexlify"
 SECRET="$(grep '^PANEL_API_SECRET=' "$ROOT/.env" | cut -d= -f2- | tr -d '\r')"
 
