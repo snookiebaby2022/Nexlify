@@ -80,7 +80,7 @@ test("computeConnectionQualityWithLive marks disconnected sessions poor", () => 
   const now = Date.now();
   const q = computeConnectionQualityWithLive({
     startedAt: new Date(now - 60_000),
-    lastSeenAt: new Date(now - 310_000),
+    lastSeenAt: new Date(now - 700_000),
     now,
     live: {
       bytesPerSec: 400_000,
@@ -93,6 +93,26 @@ test("computeConnectionQualityWithLive marks disconnected sessions poor", () => 
     },
   });
   assert.equal(q.level, "poor");
+});
+
+test("computeConnectionQualityWithLive — fresher lastByteAt offsets stale lastSeen", () => {
+  const now = Date.now();
+  const q = computeConnectionQualityWithLive({
+    startedAt: new Date(now - 120_000),
+    lastSeenAt: new Date(now - 40_000),
+    now,
+    live: {
+      bytesPerSec: 400_000,
+      lastByteAt: now - 2_000,
+      totalBytes: 10_000_000,
+      stallSec: 2,
+      stallCount: 0,
+      firstByteAt: now - 119_000,
+      hasSamples: true,
+    },
+  });
+  assert.equal(q.level, "excellent");
+  assert.ok(q.score >= 95);
 });
 
 test("computeConnectionQualityWithLive treats fresh lastSeen as active when no byte samples", () => {

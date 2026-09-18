@@ -1,0 +1,28 @@
+{
+  "recommendations": [
+    "bmewburn.vscode-intelephense-client",
+    "xdebug.php-debug",
+    "ikappas.composer",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "prisma.prisma",
+    "bradlc.vscode-tailwindcss",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "ms-azuretools.vscode-docker",
+    "anysphere.remote-ssh",
+    "hangxingliu.vscode-nginx-conf-hint",
+    "lch.nginx-beautifier",
+    "mikestead.dotenv",
+    "redhat.vscode-yaml",
+    "foxundermoon.shell-format",
+    "timonwong.shellcheck",
+    "rangav.vscode-thunder-client",
+    "eamodio.gitlens",
+    "mhutchie.git-graph",
+    "usernamehw.errorlens",
+    "gruntfuggly.todo-tree",
+    "christian-kohler.path-intellisense"
+  ],
+  "unwantedRecommendations": ["ms-vscode-remote.remote-ssh"]
+}

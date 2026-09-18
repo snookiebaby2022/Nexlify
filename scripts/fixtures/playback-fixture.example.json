@@ -1,0 +1,7 @@
+{
+  "username": "smoke_line_username",
+  "password": "smoke_line_password_from_vault_not_git",
+  "streamId": 12345,
+  "xtreamId": 12345,
+  "name": "Example live stream (probed ok on host)"
+}

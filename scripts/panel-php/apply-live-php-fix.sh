@@ -19,6 +19,11 @@ set -a
 source .env
 set +a
 
+# shellcheck source=../lib/load-playback-fixture.sh
+. /opt/nexlify-panel/scripts/lib/load-playback-fixture.sh
+load_playback_fixture || true
+export NEXLIFY_SMOKE_LINE_USERNAME="${PLAYBACK_U:-${NEXLIFY_SMOKE_LINE_USERNAME:-}}"
+
 node <<'NODE'
 const { PrismaClient } = require("@prisma/client");
 const fs = require("fs");
@@ -31,10 +36,13 @@ const p = new PrismaClient();
     WHERE "startedAt" > NOW() + INTERVAL '30 minutes'
   `);
   console.log("rewound_skewed_rows", n);
-  const line = await p.line.findFirst({
-    where: { username: { equals: "test75", mode: "insensitive" } },
-    select: { id: true },
-  });
+  const smokeUser = String(process.env.NEXLIFY_SMOKE_LINE_USERNAME || "").trim();
+  const line = smokeUser
+    ? await p.line.findFirst({
+        where: { username: { equals: smokeUser, mode: "insensitive" } },
+        select: { id: true },
+      })
+    : null;
   if (line) {
     const rows = await p.liveConnection.findMany({
       where: { lineId: line.id },
@@ -42,7 +50,7 @@ const p = new PrismaClient();
     });
     const now = Date.now();
     console.log(
-      "test75",
+      smokeUser,
       rows.map((r) => ({
         startedAt: r.startedAt,
         ageSec: Math.floor((now - new Date(r.startedAt).getTime()) / 1000),

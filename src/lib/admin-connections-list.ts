@@ -1,7 +1,11 @@
 import type { SessionUser } from "@/lib/auth";
 import { listLiveConnections } from "@/lib/connections";
 import { prisma } from "@/lib/prisma";
-import { computeConnectionQualityWithLive } from "@/lib/connection-quality-live";
+import {
+  batchGetLiveQualitySamples,
+  computeConnectionQualityWithLive,
+} from "@/lib/connection-quality-live";
+import { refreshClassicLbConnectionsForLiveList } from "@/lib/classic-lb-connections-sync";
 import {
   batchGetConnectionPlaybackOutputs,
   resolvePlaybackOutputLabel,
@@ -34,6 +38,7 @@ export async function listAdminConnections(
   session: SessionUser,
   _opts?: { includeQoe?: boolean }
 ): Promise<AdminConnectionRow[]> {
+  await refreshClassicLbConnectionsForLiveList();
   const connections = await listLiveConnections(await ownerLineOwnerIds(session));
   const streamIds = [...new Set(connections.map((c) => c.streamId).filter((id): id is string => Boolean(id)))];
   const processStartedById = new Map<string, Date>();
@@ -55,12 +60,23 @@ export async function listAdminConnections(
     ip: c.ip,
   }));
   const cachedOutputs = await batchGetConnectionPlaybackOutputs(outputItems);
+  const includeQoe = _opts?.includeQoe !== false;
+  const liveSamples = includeQoe
+    ? await batchGetLiveQualitySamples(
+        connections.map((c) => ({
+          lineId: c.lineId,
+          streamId: c.streamId ?? "",
+          ip: c.ip,
+        })),
+        now
+      )
+    : connections.map(() => null);
   return connections.map((c, i) => {
     const quality = computeConnectionQualityWithLive({
       startedAt: c.startedAt,
       lastSeenAt: c.lastSeenAt,
       now,
-      live: null,
+      live: liveSamples[i] ?? null,
     });
     const cachedOutput = c.streamId ? cachedOutputs[i] : null;
     const output = resolvePlaybackOutputLabel({

@@ -148,6 +148,30 @@ export async function fetchClassicLbConnections(opts?: {
   }
 }
 
+let lastLiveListSyncAt = 0;
+const LIVE_LIST_SYNC_MIN_MS = Math.max(
+  3_000,
+  Number(process.env.CLASSIC_LB_LIVE_LIST_SYNC_MS || 4_000)
+);
+
+/** True when panel should pull /lb/connections.json into Postgres for Live Connections. */
+export async function isClassicLbConnectionsSyncEnabled(): Promise<boolean> {
+  const server = await getSettingGroup("server");
+  return Boolean(resolveClassicLbExportBase(server));
+}
+
+/**
+ * Refresh LB heartbeats before Live Connections list/API (cron alone leaves lastSeen ~30s+ stale → 82% quality).
+ */
+export async function refreshClassicLbConnectionsForLiveList(): Promise<void> {
+  const server = await getSettingGroup("server");
+  if (!resolveClassicLbExportBase(server)) return;
+  const now = Date.now();
+  if (now - lastLiveListSyncAt < LIVE_LIST_SYNC_MIN_MS) return;
+  lastLiveListSyncAt = now;
+  await syncClassicLbConnectionsToPostgres();
+}
+
 export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<number> {
   const server = await getSettingGroup("server");
   const base = resolveClassicLbExportBase(server);

@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "graft": {
+      "command": "npx",
+      "args": ["-y", "@nanonets/graft", "mcp", "${workspaceFolder}"],
+      "cwd": "${workspaceFolder}"
+    },
+    "ffmpeg": {
+      "command": "npx",
+      "args": ["-y", "mcp-ffmpeg"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${workspaceFolder}"
+      ]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "${env:TEST_DATABASE_URL}"
+      ]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

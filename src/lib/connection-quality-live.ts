@@ -278,12 +278,20 @@ export function computeConnectionQualityWithLive(opts: {
 }): ConnectionQuality {
   const now = opts.now ?? Date.now();
   const lastSeenMs = new Date(opts.lastSeenAt).getTime();
-  const staleSec = Math.max(0, (now - lastSeenMs) / 1000);
+  const lastSeenStaleSec = Math.max(0, (now - lastSeenMs) / 1000);
+  let staleSec = lastSeenStaleSec;
+  const live = opts.live;
+  if (live?.hasSamples && live.lastByteAt > 0 && lastSeenStaleSec <= 120) {
+    const byteStaleSec = Math.max(0, (now - live.lastByteAt) / 1000);
+    // Postgres lastSeen can lag LB export; trust media bytes only when heartbeats look laggy, not dead.
+    if (byteStaleSec + 12 < lastSeenStaleSec) {
+      staleSec = Math.min(lastSeenStaleSec, byteStaleSec);
+    }
+  }
 
   let score = scoreFromLastSeen(staleSec);
 
-  const live = opts.live;
-  if (live?.hasSamples && staleSec <= LIVE_STALE_SEC) {
+  if (live?.hasSamples && staleSec <= LIVE_STALE_SEC && lastSeenStaleSec <= 90) {
     // XUI-style: active row stays green; throughput can only boost, never downgrade.
     if (live.bytesPerSec >= 120_000) {
       score = Math.max(score, 98);
