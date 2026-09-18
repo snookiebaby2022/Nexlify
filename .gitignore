@@ -35,6 +35,7 @@ __pycache__/
 build-out.txt
 lint-out.txt
 .smoke-*
+scripts/panel-nodes.env
 
 # Build / publish artifacts (generate locally or on VPS)
 public/downloads/*.tar.gz
