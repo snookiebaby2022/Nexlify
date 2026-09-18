@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.94",
+  "latestVersion": "2.0.95",
   "releases": [
+    {
+      "version": "2.0.95",
+      "date": "2026-09-18",
+      "channel": "stable",
+      "summary": "Playback stability, classic LB topology, Live Connections quality sync, and 50k-scale LB tuning.",
+      "changelog": [
+        "Reduce IPTV buffering from control-plane thrash and prefer HLS-first client paths where appropriate",
+        "Classic LB: restream on panel host without MPEG-TS fan-out; PHP/nginx tuning for large line counts",
+        "Live Connections: fix quality metric sync with edge sessions",
+        "Ops: IPTV health-check and probe tooling; remove hard-coded production node IPs from repo"
+      ],
+      "fixes": [
+        "Live Connections quality column could drift from actual edge playback quality"
+      ],
+      "notes": [
+        "After update, hard-refresh Admin. Classic LB cutover may require scripts/classic-lb/ install on stream nodes per your topology."
+      ]
+    },
     {
       "version": "2.0.94",
       "date": "2026-09-16",

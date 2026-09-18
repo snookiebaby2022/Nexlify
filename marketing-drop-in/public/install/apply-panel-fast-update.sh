@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v2.0.92}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v2.0.95}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -813,6 +813,8 @@ cmd_restart() {
 
   if [ -f "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" ]; then
     echo "Starting background Xtream catalog warm (post-restart) …"
+    mkdir -p "$ROOT/logs"
+    chown nexlify:nexlify "$ROOT/logs" 2>/dev/null || true
     nohup node "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" >>"$ROOT/logs/warm-xtream-catalogs.log" 2>&1 &
   fi
 

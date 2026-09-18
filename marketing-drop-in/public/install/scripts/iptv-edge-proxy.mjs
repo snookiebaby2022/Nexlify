@@ -3179,7 +3179,8 @@ async function authLiveCached(clientReq) {
     }
     if (hit.data?.upstream) {
       touchHlsDaemon(hit.data.streamId);
-      return enforceEdgeConnSlot(sanitizeAuthUpstream(hit.data), clientReq);
+      // Slot was acquired when this cache entry was created — re-acquire on every seg/zap causes false max-conn.
+      return sanitizeAuthUpstream(hit.data);
     }
   }
   if (edgeRedisEnabled()) {
@@ -3188,7 +3189,7 @@ async function authLiveCached(clientReq) {
       const clean = sanitizeAuthUpstream(redisHit);
       authCache.set(key, { expires: now + authPositiveTtlMs(clean), data: clean });
       if (clean.streamId) touchHlsDaemon(clean.streamId);
-      return enforceEdgeConnSlot(clean, clientReq);
+      return clean;
     }
   }
   try {

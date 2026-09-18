@@ -171,11 +171,21 @@ nexlify_only_restart() {
     bash scripts/ensure-nginx-panel-hold.sh >>"$LOG_FILE" 2>&1 || true
   fi
 
+  if [ -d .next/static ] && [ ! -d .next/standalone/.next/static/css ]; then
+    log "Ensuring static assets present in standalone/.next/ ..."
+    mkdir -p .next/standalone/.next
+    cp -a .next/static .next/standalone/.next/ 2>/dev/null || true
+    cp -a public .next/standalone/ 2>/dev/null || true
+  fi
+
   log "Restarting nexlify only (preserving nexlify-cron) ..."
   start_nexlify_without_delete
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then
+    if [ -f scripts/verify-playback-topology.mjs ]; then
+      npx tsx scripts/verify-playback-topology.mjs >>"$LOG_FILE" 2>&1 || log "WARN: playback topology probe reported issues"
+    fi
     warmup_playback_routes
     # shellcheck disable=SC1091
     if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then

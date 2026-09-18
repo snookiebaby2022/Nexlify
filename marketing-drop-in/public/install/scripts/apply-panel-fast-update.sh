@@ -813,6 +813,8 @@ cmd_restart() {
 
   if [ -f "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" ]; then
     echo "Starting background Xtream catalog warm (post-restart) …"
+    mkdir -p "$ROOT/logs"
+    chown nexlify:nexlify "$ROOT/logs" 2>/dev/null || true
     nohup node "$ROOT/scripts/warm-xtream-catalogs-post-restart.cjs" >>"$ROOT/logs/warm-xtream-catalogs.log" 2>&1 &
   fi
 

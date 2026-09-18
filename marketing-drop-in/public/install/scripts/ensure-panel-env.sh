@@ -186,7 +186,11 @@ if [ "$(read_env NEXLIFY_USE_IPTV_EDGE)" = "1" ]; then
   fi
   set_kv NEXLIFY_STREAMING_OPTIMIZED 1
   set_kv NEXLIFY_CONN_STALE_SEC "${NEXLIFY_CONN_STALE_SEC:-60}"
-  set_kv NEXLIFY_MAX_MEMORY_RESTART "${NEXLIFY_MAX_MEMORY_RESTART:-1800M}"
+  # 1800M caused nightly max-memory SIGKILL storms (nginx 502 on player_api / "login failed").
+  # Prefer process env, then existing .env, then 3500M default (panel has 64GB+ RAM headroom).
+  _mem_existing="$(read_env NEXLIFY_MAX_MEMORY_RESTART 2>/dev/null || true)"
+  set_kv NEXLIFY_MAX_MEMORY_RESTART "${NEXLIFY_MAX_MEMORY_RESTART:-${_mem_existing:-3500M}}"
+  unset _mem_existing
   final_inst="$(read_env PANEL_INSTANCES)"
   set_kv NEXLIFY_PANEL_WORKER_SPARE 0
   set_kv NEXLIFY_PANEL_INSTANCES_MAX "${final_inst:-2}"

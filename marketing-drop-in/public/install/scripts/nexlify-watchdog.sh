@@ -256,4 +256,8 @@ if [ "${DISK_PCT:-0}" -gt 90 ] 2>/dev/null; then
   find /root/.pm2/logs -name "*.log" -mtime +3 -delete 2>/dev/null || true
 fi
 
+if [ -x "$PANEL_DIR/scripts/lb-edge-watchdog-from-panel.sh" ]; then
+  bash "$PANEL_DIR/scripts/lb-edge-watchdog-from-panel.sh" "$LOG" >>"$LOG" 2>&1 || true
+fi
+
 log "OK: Watchdog check complete (upstream=$HEALTH_URL HTTP=${HTTP_CODE:-?} disk=${DISK_PCT:-?}%)"
