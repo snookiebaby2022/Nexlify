@@ -10,9 +10,19 @@ removed() { echo "  removed: $*"; FREED=$((FREED + 1)); }
 echo "=== Nexlify VPS cleanup ==="
 
 # Temp staging dirs
-for d in /tmp/nexlify-publish-* /tmp/marketing-full-drop-in /tmp/mk-bundle.tgz; do
+for d in /tmp/nexlify-publish-* /tmp/nexlify-rebuild-* /tmp/nexlify-streaming-* \
+  /tmp/nexlify-marketing-src-* /tmp/marketing-full-drop-in /tmp/mk-bundle.tgz \
+  /tmp/next-rebuild.out; do
   [ -e "$d" ] && rm -rf "$d" && removed "$d"
 done
+
+LOCK="/tmp/nexlify-panel-build.lock"
+if [ -f "$LOCK" ] && ! pgrep -f 'next build' >/dev/null 2>&1; then
+  rm -f "$LOCK" && removed "$LOCK (stale)"
+fi
+
+find /var/log -maxdepth 1 -type f \( -name 'nexlify-*-deploy.log' -o -name 'nexlify-[0-9]*-*.log' \) -mtime +14 -print0 2>/dev/null |
+  while IFS= read -r -d '' f; do rm -f "$f" && removed "$f"; done
 
 # Old .env backups (keep newest 2 per app)
 for envdir in /var/www/nexlify /home/nexlify-panel /opt/nexlify-panel; do

@@ -8,6 +8,11 @@ const { randomBytes } = require("crypto");
 
 const p = new PrismaClient();
 
+function logLine(level, msg, extra) {
+  const base = `[${new Date().toISOString()}] classic-lb-sync ${msg}`;
+  console.log(extra && Object.keys(extra).length ? `${base} ${JSON.stringify(extra)}` : base);
+}
+
 function newId() {
   return `c${Date.now().toString(36)}${randomBytes(10).toString("hex")}`;
 }
@@ -29,7 +34,7 @@ async function main() {
     process.env.NEXLIFY_CLASSIC_LB !== "1" &&
     !colocated
   ) {
-    console.log("skip: topology", topo || "(unset)");
+    logLine("info", "skip topology_not_classic_lb", { topology: topo || "(unset)", colocated });
     return;
   }
   const base =
@@ -57,12 +62,16 @@ async function main() {
     },
   });
   if (!res.ok) {
-    console.log("export_http", res.status);
+    logLine("warn", "export_http_error", { status: res.status, url });
     return;
   }
   const j = await res.json();
   const connections = Array.isArray(j.connections) ? j.connections : [];
-  console.log("export_count", connections.length, "handler", j.handler);
+  logLine("info", "export_fetched", {
+    count: connections.length,
+    handler: j.handler ?? null,
+    url,
+  });
 
   let synced = 0;
   const now = new Date();
@@ -107,10 +116,10 @@ async function main() {
       );
       synced += 1;
     } catch (e) {
-      console.log("row_skip", e.message);
+      logLine("warn", "row_skip", { lineId, streamId, error: e.message });
     }
   }
-  console.log("synced", synced);
+  logLine("info", "sync_complete", { synced, exportCount: connections.length });
 }
 
 main()

@@ -45,9 +45,26 @@ if [ -d "$BACKUP_DIR" ]; then
     done
 fi
 
-for d in /tmp/nexlify-publish-* /tmp/nexlify-rebuild-* /tmp/nexlify-streaming-*; do
+for d in /tmp/nexlify-publish-* /tmp/nexlify-rebuild-* /tmp/nexlify-streaming-* \
+  /tmp/nexlify-marketing-src-* /tmp/nexlify-panel-build-* /tmp/next-rebuild.out; do
   [ -e "$d" ] && rm -rf "$d" && removed "$d"
 done
+
+# Stale build lock (no live next build / fast-update)
+LOCK="/tmp/nexlify-panel-build.lock"
+if [ -f "$LOCK" ] && ! pgrep -f 'next build' >/dev/null 2>&1 && ! pgrep -f 'apply-panel-fast-update' >/dev/null 2>&1; then
+  rm -f "$LOCK" && removed "$LOCK (stale)"
+fi
+
+# Old one-off deploy logs (keep last 7 days)
+find /var/log -maxdepth 1 -type f -name 'nexlify-*-deploy.log' -mtime +7 -print0 2>/dev/null |
+  while IFS= read -r -d '' f; do rm -f "$f" && removed "$f"; done
+find /var/log -maxdepth 1 -type f -name 'nexlify-[0-9]*-*.log' -mtime +14 -print0 2>/dev/null |
+  while IFS= read -r -d '' f; do rm -f "$f" && removed "$f"; done
+
+# Nested .next backups from failed swaps
+find "$ROOT" -maxdepth 3 -type d -name '.next.backup.*' -mtime +3 -print0 2>/dev/null |
+  while IFS= read -r -d '' d; do rm -rf "$d" && removed "$d"; done
 
 for envdir in "$ROOT" /var/www/nexlify; do
   [ -d "$envdir" ] || continue
