@@ -18,6 +18,7 @@ use function Nexlify\ClassicLb\{
     client_ip,
     panel_live_auth,
     touch_connection,
+    prune_line_connections,
     ensure_ffmpeg,
     hls_index_ready,
     packager_started,
@@ -153,6 +154,12 @@ if ($sourceUrl === '') {
 
 if ($lineId !== '') {
     touch_connection($lineId, $connStreamId, $ip, $ua, 0);
+    // Zap reclaim — same as panel-php: max=1 drops prior channels so Live Connections
+    // does not keep Sky/BBC/ITV ghosts for 10 minutes after a channel change.
+    $maxConn = max(0, (int) ($auth['maxConnections'] ?? 0));
+    if ($maxConn > 0) {
+        prune_line_connections($lineId, $connStreamId, $ip, $maxConn);
+    }
 }
 
 $wantM3u8 = str_ends_with(strtolower($path), '.m3u8');

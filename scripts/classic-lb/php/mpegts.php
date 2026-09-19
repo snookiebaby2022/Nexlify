@@ -94,7 +94,7 @@ $streamHlsSegments = static function () use ($hlsDir, $touchViewer, &$lastTouch,
     $lastSeg = '';
     $offset = 0;
     $idleRounds = 0;
-    $maxIdleRounds = 80; // ~3s of 40ms waits at live edge (stay on HLS, no remux hop)
+    $maxIdleRounds = 150; // ~6s at live edge before giving up this HLS pass
 
     while (!connection_aborted()) {
         if (!hls_index_ready($hlsDir)) {
@@ -104,6 +104,11 @@ $streamHlsSegments = static function () use ($hlsDir, $touchViewer, &$lastTouch,
         if (!$segs) {
             usleep(40000);
             $idleRounds++;
+            $nowIdle = time();
+            if (($nowIdle - $lastTouch) >= 5) {
+                $touchViewer();
+                $lastTouch = $nowIdle;
+            }
             if ($idleRounds > $maxIdleRounds) {
                 break;
             }
@@ -191,11 +196,21 @@ $streamHlsSegments = static function () use ($hlsDir, $touchViewer, &$lastTouch,
             }
             usleep(40000);
             $idleRounds++;
+            $nowIdle = time();
+            if (($nowIdle - $lastTouch) >= 5) {
+                $touchViewer();
+                $lastTouch = $nowIdle;
+            }
             if ($idleRounds > $maxIdleRounds) {
                 break;
             }
         } else {
             usleep(25000);
+            $nowIdle = time();
+            if (($nowIdle - $lastTouch) >= 5) {
+                $touchViewer();
+                $lastTouch = $nowIdle;
+            }
         }
     }
     return $sentAny;
@@ -209,7 +224,8 @@ $openDirect = static function () use ($ffmpeg, $directUrl, $safe, $directOnly) {
         '%s -hide_banner -loglevel error ' .
         '%s ' .
         '-i %s -map 0:v:0? -map 0:a:0? -c copy ' .
-        '-flush_packets 1 -muxdelay 0 -muxpreload 0 -max_delay 0 -max_interleave_delta 0 ' .
+        '-flush_packets 1 -muxdelay 0 -muxpreload 0 -max_delay 500000 -max_interleave_delta 0 ' .
+        '-avoid_negative_ts make_zero ' .
         '-f mpegts -mpegts_flags +resend_headers pipe:1',
         escapeshellarg($ffmpeg),
         ffmpeg_copy_input_args($directOnly),
@@ -253,7 +269,14 @@ while (!connection_aborted() && $restarts <= $maxRestarts) {
             break;
         }
         if ($hlsSession) {
-            // Packager hiccup — wait for the next segment, do not remux-hop.
+            // Packager hiccup — wait for the next segment; try respawn if stuck.
+            if (!hls_index_ready($hlsDir) && $directUrl) {
+                try {
+                    \Nexlify\ClassicLb\ensure_ffmpeg($safe, $directUrl);
+                } catch (\Throwable $e) {
+                    // ignore — next loop retries
+                }
+            }
             usleep(200000);
             $restarts++;
             $touchViewer();

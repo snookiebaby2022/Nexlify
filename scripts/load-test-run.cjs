@@ -265,6 +265,11 @@ async function cleanupLoadTestConnections() {
   }
 
   async function worker(slot) {
+    // Stagger admit so auth/media FPM are not hit by all workers in the same ms
+    // (real viewers never connect on the same tick).
+    if (delayMs > 0 && slot > 0) {
+      await sleep(Math.min(slot * Math.max(20, Math.floor(delayMs / 4)), delayMs * 8));
+    }
     const { username, password } = credentialsForSlot(slot, linePoolSize);
     while (Date.now() < endAt) {
       const sid = streamIds[slot % streamIds.length];

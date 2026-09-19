@@ -54,9 +54,16 @@ function mergeConnectionRows(prev: ConnectionRow[], incoming: ConnectionRow[]): 
   const merged = incoming.map((row) => {
     const old = prevByKey.get(connectionRowKey(row));
     if (!old) return row;
+    // Prefer newer startedAt after stall/reconnect reset; otherwise keep earliest
+    // to avoid UI flicker from clock skew on heartbeat sync.
+    const oldStart = new Date(old.startedAt).getTime();
+    const newStart = new Date(row.startedAt).getTime();
+    const sessionReset = Number.isFinite(oldStart) && Number.isFinite(newStart) && newStart > oldStart + 5_000;
     return {
       ...row,
-      startedAt: earlierIso(old.startedAt, row.startedAt) ?? row.startedAt,
+      startedAt: sessionReset
+        ? row.startedAt
+        : earlierIso(old.startedAt, row.startedAt) ?? row.startedAt,
       streamStartedAt: earlierIso(old.streamStartedAt, row.streamStartedAt) ?? row.streamStartedAt ?? null,
     };
   });
@@ -75,9 +82,15 @@ function dedupeConnectionRows(rows: ConnectionRow[]): ConnectionRow[] {
     const cNewer = new Date(c.lastSeenAt).getTime() > new Date(prev.lastSeenAt).getTime();
     const keep = cNewer ? c : prev;
     const other = keep === c ? prev : c;
+    const keepStart = new Date(keep.startedAt).getTime();
+    const otherStart = new Date(other.startedAt).getTime();
+    const sessionReset =
+      Number.isFinite(keepStart) && Number.isFinite(otherStart) && keepStart > otherStart + 5_000;
     map.set(key, {
       ...keep,
-      startedAt: earlierIso(keep.startedAt, other.startedAt) ?? keep.startedAt,
+      startedAt: sessionReset
+        ? keep.startedAt
+        : earlierIso(keep.startedAt, other.startedAt) ?? keep.startedAt,
       streamStartedAt: earlierIso(keep.streamStartedAt, other.streamStartedAt),
     });
   }

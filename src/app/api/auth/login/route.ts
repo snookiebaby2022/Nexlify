@@ -28,6 +28,7 @@ import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { licenseCheckHost } from "@/lib/domains-host";
 
 import { parseJsonBody } from "@/lib/parse-json-body";
+import { isPanelLicenseExempt } from "@/lib/panel-demo-host";
 /**
  * If the panel is licensed, build the license-session cookie descriptor so the
  * caller can drop it on the response. This lets an admin land directly on the
@@ -78,6 +79,16 @@ async function buildLicenseCookie(
     console.error("[auth/login] buildLicenseCookie failed:", err);
     return null;
   }
+}
+
+/** Match middleware: exempt host or NEXLIFY_LICENSE_VALID → treat as licensed. */
+function adminPostLoginPath(req: NextRequest, hasLicenseCookie: boolean): string {
+  if (hasLicenseCookie) return "/admin/dashboard";
+  const host = licenseCheckHost(req.headers.get("host") ?? "localhost");
+  if (isPanelLicenseExempt(host) || process.env.NEXLIFY_LICENSE_VALID === "1") {
+    return "/admin/dashboard";
+  }
+  return "/admin/license/add";
 }
 
 export async function GET() {
@@ -213,9 +224,7 @@ export async function POST(req: NextRequest) {
     const licenseCookie = await buildLicenseCookie(req);
     const redirect =
       user.role === "ADMIN"
-        ? licenseCookie
-          ? "/admin/dashboard"
-          : "/admin/license/add"
+        ? adminPostLoginPath(req, Boolean(licenseCookie))
         : "/reseller/dashboard";
 
     const res = NextResponse.json({ ok: true, redirect, role: user.role });

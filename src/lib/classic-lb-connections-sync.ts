@@ -188,6 +188,7 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
   let synced = 0;
   const now = new Date();
   const streamIdCache = new Map<string, string | null>();
+  const activeByLine = new Map<string, Set<string>>();
   for (const row of rows) {
     if (synced >= limit) break;
     const lineId = String(row.lineId ?? "").trim();
@@ -209,6 +210,14 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
       streamId = resolved;
     }
     const ip = normalizeIp(row.ip);
+    // Smoke / load-test RFC5737 ranges must never enter Live Connections.
+    if (
+      ip.startsWith("203.0.113.") ||
+      ip.startsWith("198.51.100.") ||
+      ip.startsWith("192.0.2.")
+    ) {
+      continue;
+    }
     const lastSeen = row.lastSeenAt ? new Date(row.lastSeenAt) : now;
     const startedRaw = row.startedAt ? new Date(row.startedAt) : null;
     const startedAt =
@@ -221,7 +230,11 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
          VALUES ($1, $2, $3, $4, $5, $6::timestamp, $7::timestamp)
          ON CONFLICT ("lineId", "streamId", ip)
          DO UPDATE SET "lastSeenAt" = EXCLUDED."lastSeenAt",
-           "startedAt" = LEAST("LiveConnection"."startedAt", EXCLUDED."startedAt"),
+           "startedAt" = CASE
+             WHEN "LiveConnection"."lastSeenAt" < EXCLUDED."lastSeenAt" - INTERVAL '45 seconds'
+               THEN EXCLUDED."startedAt"
+             ELSE LEAST("LiveConnection"."startedAt", EXCLUDED."startedAt")
+           END,
            "userAgent" = COALESCE(EXCLUDED."userAgent", "LiveConnection"."userAgent")`,
         newLiveConnectionId(),
         lineId,
@@ -241,6 +254,8 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
         lineId
       );
       synced += 1;
+      if (!activeByLine.has(lineId)) activeByLine.set(lineId, new Set());
+      activeByLine.get(lineId)!.add(`${streamId}\0${ip}`);
     } catch {
       try {
         await prisma.liveConnection.upsert({
@@ -264,9 +279,37 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
           },
         });
         synced += 1;
+        if (!activeByLine.has(lineId)) activeByLine.set(lineId, new Set());
+        activeByLine.get(lineId)!.add(`${streamId}\0${ip}`);
       } catch {
         /* skip bad row */
       }
+    }
+  }
+
+  // Zap ghosts: drop Postgres rows for lines we just synced that left the LB export.
+  let prunedGhosts = 0;
+  for (const [lineId, keep] of activeByLine) {
+    try {
+      const existing = await prisma.liveConnection.findMany({
+        where: { lineId },
+        select: { id: true, streamId: true, ip: true, lastSeenAt: true },
+      });
+      const dropIds = existing
+        .filter((r) => {
+          if (keep.has(`${r.streamId || ""}\0${r.ip || ""}`)) return false;
+          const age = Date.now() - new Date(r.lastSeenAt).getTime();
+          if (Number.isFinite(age) && age < 120_000) return false;
+          return true;
+        })
+        .map((r) => r.id);
+      if (dropIds.length) {
+        prunedGhosts += (
+          await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } })
+        ).count;
+      }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -280,7 +323,35 @@ export async function syncClassicLbConnectionsToPostgres(limit = 2000): Promise<
     pruned = 0;
   }
 
-  if (synced > 0 || pruned > 0) {
+  // Hard cap vs Line.maxConnections (keep newest).
+  try {
+    const over = await prisma.$queryRawUnsafe<
+      { lineId: string; maxConnections: number }[]
+    >(`
+      SELECT l.id AS "lineId", l."maxConnections"
+      FROM "LiveConnection" lc
+      JOIN "Line" l ON l.id = lc."lineId"
+      WHERE lc."streamId" IS NOT NULL
+      GROUP BY l.id
+      HAVING count(lc.id) > GREATEST(l."maxConnections", 0)
+    `);
+    for (const row of over) {
+      const keepN = Math.max(0, Number(row.maxConnections) || 0);
+      const conns = await prisma.liveConnection.findMany({
+        where: { lineId: row.lineId, streamId: { not: null } },
+        orderBy: { lastSeenAt: "desc" },
+        select: { id: true },
+      });
+      const ids = conns.slice(keepN).map((c) => c.id);
+      if (ids.length) {
+        await prisma.liveConnection.deleteMany({ where: { id: { in: ids } } });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (synced > 0 || pruned > 0 || prunedGhosts > 0) {
     invalidateConnectionCaches();
     notifyLiveConnectionsChanged();
   }

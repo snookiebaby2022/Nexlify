@@ -48,4 +48,14 @@ if [ -f scripts/verify-panel-ports.sh ]; then
   bash scripts/verify-panel-ports.sh || log "WARN: port verification reported issues"
 fi
 
+# Auto-size media/auth/panel FPM + IPTV harden (cron, classic-LB resilience).
+# Safe to re-run; without this, one-click installs keep default/hand-tuned pools.
+if [ -x scripts/harden-iptv-install.sh ]; then
+  log "Hardening IPTV + auto-sizing capacity…"
+  bash scripts/harden-iptv-install.sh || log "WARN: harden-iptv-install reported issues"
+elif [ -x scripts/tune-capacity-50k.sh ]; then
+  log "Auto-sizing capacity…"
+  bash scripts/tune-capacity-50k.sh || log "WARN: tune-capacity-50k reported issues"
+fi
+
 log "Port finalize complete."

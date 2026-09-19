@@ -8,6 +8,7 @@ PANEL="${PANEL_DIR:-/opt/nexlify-panel}"
 MARK="nexlify-streaming-stability"
 tmp="$(mktemp)"
 (crontab -l 2>/dev/null || true) | grep -v "$MARK" | grep -v prune-stale-live-connections \
+  | grep -v enforce-max-connections \
   | grep -v nexlify-worker-wedge-guard \
   | grep -v nexlify-watchdog.sh \
   | grep -v scale-panel-workers-live \
@@ -18,6 +19,7 @@ tmp="$(mktemp)"
 cat >> "$tmp" <<CRON
 # $MARK
 * * * * * $PANEL/scripts/prune-stale-live-connections.sh >> /var/log/nexlify-prune-conn.log 2>&1
+* * * * * cd $PANEL && /usr/bin/node scripts/enforce-max-connections-fast.cjs >> /var/log/nexlify-enforce-conn.log 2>&1
 * * * * * cd $PANEL && /usr/bin/node scripts/sync-classic-lb-packager-errors.cjs >> /var/log/nexlify-lb-packager-errors.log 2>&1
 */2 * * * * PANEL_DIR=$PANEL $PANEL/scripts/nexlify-worker-wedge-guard.sh
 */5 * * * * $PANEL/scripts/nexlify-watchdog.sh >> /var/log/nexlify-watchdog.log 2>&1

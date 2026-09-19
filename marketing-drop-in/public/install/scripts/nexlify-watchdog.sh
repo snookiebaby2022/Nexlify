@@ -11,7 +11,7 @@ PM2_APP="nexlify"
 CRON_APP="nexlify-cron"
 LICENSE_APP="nexlify-license"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
+log() { echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] watchdog $*" >> "$LOG"; }
 
 # Rotate log if > 5MB
 if [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ]; then

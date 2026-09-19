@@ -22,6 +22,11 @@ function utcSql(d) {
   return d.toISOString().replace("T", " ").replace(/Z$/, "");
 }
 
+function isTestConnectionIp(ip) {
+  const n = String(ip || "").trim();
+  return n.startsWith("203.0.113.") || n.startsWith("198.51.100.") || n.startsWith("192.0.2.");
+}
+
 async function main() {
   const colocated =
     require("fs").existsSync("/opt/nexlify-lb/php/connections_export.php") ||
@@ -75,6 +80,8 @@ async function main() {
 
   let synced = 0;
   const now = new Date();
+  /** @type {Map<string, Set<string>>} lineId -> "streamId\0ip" */
+  const activeByLine = new Map();
   for (const c of connections) {
     const lineId = String(c.lineId || "").trim();
     let streamId = String(c.streamId || "").trim();
@@ -94,6 +101,8 @@ async function main() {
       streamId = found.id;
     }
     const ip = String(c.ip || "").trim();
+    // Smoke / load-test RFC5737 ranges must never enter Live Connections.
+    if (isTestConnectionIp(ip)) continue;
     const lastSeen = c.lastSeenAt ? new Date(c.lastSeenAt) : now;
     const startedRaw = c.startedAt ? new Date(c.startedAt) : null;
     const startedAt =
@@ -104,7 +113,11 @@ async function main() {
          VALUES ($1,$2,$3,$4,$5,$6::timestamp,$7::timestamp)
          ON CONFLICT ("lineId","streamId",ip)
          DO UPDATE SET "lastSeenAt"=EXCLUDED."lastSeenAt",
-           "startedAt"=LEAST("LiveConnection"."startedAt", EXCLUDED."startedAt"),
+           "startedAt"=CASE
+             WHEN "LiveConnection"."lastSeenAt" < EXCLUDED."lastSeenAt" - INTERVAL '45 seconds'
+               THEN EXCLUDED."startedAt"
+             ELSE LEAST("LiveConnection"."startedAt", EXCLUDED."startedAt")
+           END,
            "userAgent"=COALESCE(EXCLUDED."userAgent","LiveConnection"."userAgent")`,
         newId(),
         lineId,
@@ -115,11 +128,69 @@ async function main() {
         utcSql(lastSeen)
       );
       synced += 1;
+      if (!activeByLine.has(lineId)) activeByLine.set(lineId, new Set());
+      activeByLine.get(lineId).add(`${streamId}\0${ip}`);
     } catch (e) {
       logLine("warn", "row_skip", { lineId, streamId, error: e.message });
     }
   }
-  logLine("info", "sync_complete", { synced, exportCount: connections.length });
+
+  // Drop zap ghosts: for every line we just saw on the LB, remove Postgres rows
+  // that are no longer in the export (prior channels after maxConnections=1 zap).
+  let prunedGhosts = 0;
+  for (const [lineId, keep] of activeByLine) {
+    const rows = await p.liveConnection.findMany({
+      where: { lineId },
+      select: { id: true, streamId: true, ip: true },
+    });
+    const dropIds = rows
+      .filter((r) => {
+        if (keep.has(`${r.streamId || ""}\0${r.ip || ""}`)) return false;
+        // Retain freshly heartbeating rows missing from a partial export snapshot
+        // (buffering / auth stampede) so Live Connections does not go empty.
+        const age = Date.now() - new Date(r.lastSeenAt).getTime();
+        if (Number.isFinite(age) && age < 120_000) return false;
+        return true;
+      })
+      .map((r) => r.id);
+    if (dropIds.length) {
+      prunedGhosts += (await p.liveConnection.deleteMany({ where: { id: { in: dropIds } } })).count;
+    }
+  }
+
+  // Hard cap: keep newest N per line.maxConnections
+  let droppedExtras = 0;
+  const over = await p.$queryRawUnsafe(`
+    SELECT l.id AS "lineId", l."maxConnections", count(lc.id)::int AS open_conns
+    FROM "LiveConnection" lc
+    JOIN "Line" l ON l.id = lc."lineId"
+    WHERE lc."streamId" IS NOT NULL
+    GROUP BY l.id
+    HAVING count(lc.id) > GREATEST(l."maxConnections", 0)
+  `);
+  for (const row of over) {
+    const keepN = Math.max(0, Number(row.maxConnections) || 0);
+    const conns = await p.liveConnection.findMany({
+      where: { lineId: row.lineId, streamId: { not: null } },
+      orderBy: { lastSeenAt: "desc" },
+      select: { id: true },
+    });
+    const ids = conns.slice(keepN).map((c) => c.id);
+    if (!ids.length) continue;
+    droppedExtras += (await p.liveConnection.deleteMany({ where: { id: { in: ids } } })).count;
+  }
+
+  const stale = await p.liveConnection.deleteMany({
+    where: { lastSeenAt: { lt: new Date(Date.now() - 10 * 60 * 1000) } },
+  });
+
+  logLine("info", "sync_complete", {
+    synced,
+    exportCount: connections.length,
+    prunedGhosts,
+    droppedExtras,
+    droppedStale10m: stale.count,
+  });
 }
 
 main()

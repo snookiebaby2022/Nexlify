@@ -130,21 +130,28 @@ function touch_connection(string $lineId, string $streamId, string $ip, ?string 
 {
     $handler = connection_handler();
     $ttl = max(120, min(3600, (int) cfg('CONN_TTL_SECS', '600')));
+    // After a long stall / buffer / reconnect, treat as a new viewer session so
+    // Live Connections duration resets (XUI-style) instead of climbing forever.
+    $resetGapMs = max(30_000, (int) cfg('CONN_SESSION_RESET_MS', '45000'));
+    $nowMs = (int) (microtime(true) * 1000);
     if ($handler === 'redis') {
         $redis = redis_client();
         if (!$redis) {
             return;
         }
         $key = "lb:conn:{$lineId}:{$streamId}:" . ($ip !== '' ? $ip : '_');
-        $started = $redis->hGet($key, 'startedAt') ?: (string) (int) (microtime(true) * 1000);
-        $prevBytes = (int) ($redis->hGet($key, 'bytes') ?: 0);
+        $prevLast = (int) ($redis->hGet($key, 'lastSeenAt') ?: 0);
+        $prevStarted = (int) ($redis->hGet($key, 'startedAt') ?: 0);
+        $resetSession = $prevLast <= 0 || ($nowMs - $prevLast) >= $resetGapMs;
+        $started = $resetSession || $prevStarted <= 0 ? (string) $nowMs : (string) $prevStarted;
+        $prevBytes = $resetSession ? 0 : (int) ($redis->hGet($key, 'bytes') ?: 0);
         $redis->hMSet($key, [
             'lineId' => $lineId,
             'streamId' => $streamId,
             'ip' => $ip,
             'userAgent' => $ua ?? '',
             'bytes' => (string) max($prevBytes, $bytes),
-            'lastSeenAt' => (string) (int) (microtime(true) * 1000),
+            'lastSeenAt' => (string) $nowMs,
             'startedAt' => $started,
         ]);
         $redis->expire($key, $ttl);
@@ -156,13 +163,106 @@ function touch_connection(string $lineId, string $streamId, string $ip, ?string 
     if (!$pdo) {
         return;
     }
+    // Reset started_at when the prior heartbeat is older than the stall gap.
     $stmt = $pdo->prepare(
         'INSERT INTO live_connections (line_id, stream_id, ip, user_agent, bytes, started_at, last_seen_at)
          VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))
-         ON DUPLICATE KEY UPDATE last_seen_at = NOW(3), user_agent = COALESCE(VALUES(user_agent), user_agent),
-           bytes = GREATEST(bytes, VALUES(bytes))'
+         ON DUPLICATE KEY UPDATE
+           user_agent = COALESCE(VALUES(user_agent), user_agent),
+           bytes = IF(last_seen_at < (NOW(3) - INTERVAL ? SECOND), VALUES(bytes), GREATEST(bytes, VALUES(bytes))),
+           started_at = IF(last_seen_at < (NOW(3) - INTERVAL ? SECOND), NOW(3), started_at),
+           last_seen_at = NOW(3)'
     );
-    $stmt->execute([$lineId, $streamId, $ip, $ua, max(0, $bytes)]);
+    $gapSec = max(30, (int) round($resetGapMs / 1000));
+    $stmt->execute([$lineId, $streamId, $ip, $ua, max(0, $bytes), $gapSec, $gapSec]);
+}
+
+/**
+ * XUI-style zap reclaim: maxConnections=1 drops every other channel for the line;
+ * higher caps keep the newest N sessions (preferring the active stream+ip).
+ */
+function prune_line_connections(string $lineId, string $streamId, string $ip, int $maxConn): void
+{
+    if ($lineId === '' || $streamId === '' || $maxConn <= 0) {
+        return;
+    }
+    $handler = connection_handler();
+    if ($handler === 'redis') {
+        $redis = redis_client();
+        if (!$redis) {
+            return;
+        }
+        $keys = $redis->sMembers('lb:conn:index') ?: [];
+        $prefix = "lb:conn:{$lineId}:";
+        $mine = [];
+        foreach ($keys as $key) {
+            if (!str_starts_with((string) $key, $prefix)) {
+                continue;
+            }
+            $h = $redis->hGetAll($key);
+            if (!$h) {
+                $redis->sRem('lb:conn:index', $key);
+                continue;
+            }
+            $mine[] = [
+                'key' => (string) $key,
+                'streamId' => (string) ($h['streamId'] ?? ''),
+                'ip' => (string) ($h['ip'] ?? ''),
+                'last' => (int) ($h['lastSeenAt'] ?? 0),
+            ];
+        }
+        if ($maxConn <= 1) {
+            foreach ($mine as $row) {
+                if ($row['streamId'] !== $streamId) {
+                    $redis->del($row['key']);
+                    $redis->sRem('lb:conn:index', $row['key']);
+                }
+            }
+            return;
+        }
+        usort($mine, static function ($a, $b) use ($streamId, $ip) {
+            $ap = ($a['streamId'] === $streamId && $a['ip'] === $ip) ? 0 : 1;
+            $bp = ($b['streamId'] === $streamId && $b['ip'] === $ip) ? 0 : 1;
+            if ($ap !== $bp) {
+                return $ap <=> $bp;
+            }
+            return $b['last'] <=> $a['last'];
+        });
+        foreach (array_slice($mine, $maxConn) as $row) {
+            $redis->del($row['key']);
+            $redis->sRem('lb:conn:index', $row['key']);
+        }
+        return;
+    }
+
+    $pdo = mysql_pdo();
+    if (!$pdo) {
+        return;
+    }
+    if ($maxConn <= 1) {
+        $stmt = $pdo->prepare(
+            'DELETE FROM live_connections WHERE line_id = ? AND stream_id <> ?'
+        );
+        $stmt->execute([$lineId, $streamId]);
+        return;
+    }
+    $stmt = $pdo->prepare(
+        'DELETE FROM live_connections WHERE id IN (
+           SELECT id FROM (
+             SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY line_id
+                 ORDER BY
+                   CASE WHEN stream_id = ? AND ip = ? THEN 0 ELSE 1 END,
+                   last_seen_at DESC
+               ) AS rn
+             FROM live_connections
+             WHERE line_id = ?
+           ) ranked
+           WHERE rn > ?
+         )'
+    );
+    $stmt->execute([$streamId, $ip, $lineId, $maxConn]);
 }
 
 /**
@@ -319,7 +419,7 @@ function prune_stale_connections(int $staleSecs = 600): int
 
 /**
  * Panel live-auth with Redis hot cache (avoids panel round-trip on zap storms).
- * @return array{ok:bool,lineId?:string,deny?:string,sourceUrl?:string,streamId?:string,mode?:string}
+ * @return array{ok:bool,lineId?:string,deny?:string,sourceUrl?:string,streamId?:string,mode?:string,maxConnections?:int}
  */
 function panel_live_auth(
     string $username,
@@ -346,6 +446,7 @@ function panel_live_auth(
                     'sourceUrl' => (string) $j['sourceUrl'],
                     'streamId' => (string) ($j['streamId'] ?? $streamIdNorm),
                     'mode' => (string) ($j['mode'] ?? 'live'),
+                    'maxConnections' => max(0, (int) ($j['maxConnections'] ?? 0)),
                 ];
             }
         }
@@ -413,6 +514,7 @@ function panel_live_auth(
     $sourceUrl = (string) ($headers['x-nexlify-upstream'] ?? '');
     $resolvedStreamId = (string) ($headers['x-nexlify-stream-id'] ?? '');
     $mode = strtolower((string) ($headers['x-nexlify-mode'] ?? 'live'));
+    $maxConnections = max(0, (int) ($headers['x-nexlify-max-connections'] ?? 0));
     if (!in_array($mode, ['live', 'vod', 'timeshift'], true)) {
         $mode = 'live';
     }
@@ -425,6 +527,7 @@ function panel_live_auth(
         'sourceUrl' => $sourceUrl,
         'streamId' => $resolvedStreamId !== '' ? $resolvedStreamId : $streamIdNorm,
         'mode' => $mode,
+        'maxConnections' => $maxConnections,
     ];
     if ($redis) {
         $redis->setex($cacheKey, $cacheTtl, json_encode($ok));
@@ -469,20 +572,78 @@ function safe_stream_id(string $streamId): string
 
 function ffmpeg_copy_input_args(bool $vod = false): string
 {
-    // Live: ~0.8s probe so cold zap is not stuck in analyzeduration=5s.
-    // VOD: a bit more so MP4/AC3 still maps, still well under the old 5s.
+    // Live: short probe (zap). Resilience: discard corrupt, ignore bad DTS,
+    // HTTP reconnect on EOF/network/4xx-5xx so brief origin blips don't kill the pipe.
     $probe = $vod ? 1500000 : 800000;
     $analyze = $vod ? 1500000 : 800000;
-    $rw = $vod ? 30000000 : 12000000;
+    $rw = max(5_000_000, (int) cfg('FFMPEG_RW_TIMEOUT_US', $vod ? '30000000' : '20000000'));
+    $reconMax = max(1, min(30, (int) cfg('FFMPEG_RECONNECT_DELAY_MAX', $vod ? '8' : '5')));
     return sprintf(
-        '-fflags +genpts+nobuffer+discardcorrupt+flush_packets -flags low_delay ' .
-        '-probesize %d -analyzeduration %d -fpsprobesize 0 -avioflags direct ' .
-        '-reconnect 1 -reconnect_streamed 1 -reconnect_at_eof 1 -reconnect_delay_max 2 ' .
-        '-rw_timeout %d',
+        '-fflags +genpts+igndts+discardcorrupt+nobuffer+flush_packets -flags low_delay ' .
+        '-err_detect ignore_err -probesize %d -analyzeduration %d -fpsprobesize 0 -avioflags direct ' .
+        '-reconnect 1 -reconnect_streamed 1 -reconnect_at_eof 1 -reconnect_on_network_error 1 ' .
+        '-reconnect_on_http_error 4xx,5xx -reconnect_delay_max %d -rw_timeout %d',
         $probe,
         $analyze,
+        $reconMax,
         $rw
     );
+}
+
+/** True when shared packager PID is alive but segments stopped advancing. */
+function packager_stale(string $streamId, ?int $maxAgeSecs = null): bool
+{
+    $safe = safe_stream_id($streamId);
+    if (!packager_started($safe)) {
+        return false;
+    }
+    $maxAge = $maxAgeSecs ?? max(8, min(60, (int) cfg('FFMPEG_STALE_SECS', '12')));
+    $hlsDir = stream_root() . '/hls/' . $safe;
+    $newest = 0;
+    foreach (glob($hlsDir . '/seg*.ts') ?: [] as $seg) {
+        $mt = @filemtime($seg);
+        if ($mt !== false && $mt > $newest) {
+            $newest = $mt;
+        }
+    }
+    $index = $hlsDir . '/index.m3u8';
+    if (is_file($index)) {
+        $imt = @filemtime($index);
+        if ($imt !== false && $imt > $newest) {
+            $newest = $imt;
+        }
+    }
+    if ($newest <= 0) {
+        // Process up but never produced media — stale after short grace.
+        $pidFile = stream_root() . '/pids/' . $safe . '.pid';
+        $started = is_file($pidFile) ? (int) @filemtime($pidFile) : 0;
+        return $started > 0 && (time() - $started) > max(6, (int) ($maxAge / 2));
+    }
+    return (time() - $newest) > $maxAge;
+}
+
+function kill_packager(string $streamId): void
+{
+    $safe = safe_stream_id($streamId);
+    $pidFile = stream_root() . '/pids/' . $safe . '.pid';
+    if (!is_file($pidFile)) {
+        return;
+    }
+    $pid = (int) trim((string) file_get_contents($pidFile));
+    if ($pid > 1) {
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+            usleep(120000);
+            if (@posix_kill($pid, 0)) {
+                @posix_kill($pid, 9);
+            }
+        } else {
+            @exec('kill -15 ' . $pid . ' 2>/dev/null');
+            usleep(120000);
+            @exec('kill -9 ' . $pid . ' 2>/dev/null');
+        }
+    }
+    @unlink($pidFile);
 }
 
 /** One FFmpeg HLS packager per channel (multi-viewer safe). Returns HLS dir. */
@@ -507,25 +668,21 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
     $lockFile = $pidDir . '/' . $safe . '.lock';
     $ffmpeg = cfg('FFMPEG_BIN', '/usr/local/bin/ffmpeg');
 
-    // Persist upstream for cold-start direct MPEG-TS remux (instant zap before HLS ready).
-    @file_put_contents($srcFile, $sourceUrl);
-
     $lockFh = @fopen($lockFile, 'c');
     if ($lockFh) {
         flock($lockFh, LOCK_EX);
     }
 
-    $running = false;
-    if (is_file($pidFile)) {
-        $pid = (int) trim((string) file_get_contents($pidFile));
-        if ($pid > 1) {
-            if (function_exists('posix_kill')) {
-                $running = @posix_kill($pid, 0);
-            } else {
-                $running = is_dir('/proc/' . $pid);
-            }
-        }
+    $running = packager_started($safe);
+    // Source URL change or stuck packager (alive but no fresh segments) → restart.
+    $prevUrl = is_readable($srcFile) ? trim((string) @file_get_contents($srcFile)) : '';
+    if ($running && (($prevUrl !== '' && $prevUrl !== $sourceUrl) || packager_stale($safe))) {
+        kill_packager($safe);
+        $running = false;
     }
+    // Persist upstream for cold-start direct MPEG-TS remux (instant zap before HLS ready).
+    @file_put_contents($srcFile, $sourceUrl);
+
     if (!$running) {
         if (!is_dir($hlsDir)) {
             mkdir($hlsDir, 0755, true);
@@ -539,13 +696,14 @@ function ensure_ffmpeg(string $streamId, string $sourceUrl): string
         // Instant zap: short segments. break_non_keyframes so GOP~10s sources still
         // split near HLS_TIME — otherwise mpegts passthrough stalls at the live edge.
         $hlsTime = max(1, min(4, (int) cfg('HLS_TIME', '1')));
-        $hlsList = max(4, min(16, (int) cfg('HLS_LIST_SIZE', '8')));
+        $hlsList = max(4, min(24, (int) cfg('HLS_LIST_SIZE', '10')));
         $initTime = max(0.4, min(2.0, (float) $hlsTime * 0.5));
         $cmd = sprintf(
             'nohup %s -hide_banner -loglevel warning ' .
             '%s ' .
             '-i %s -map 0:v:0? -map 0:a:0? -c copy ' .
-            '-muxdelay 0 -muxpreload 0 -flush_packets 1 -max_delay 0 ' .
+            '-muxdelay 0 -muxpreload 0 -flush_packets 1 -max_delay 500000 ' .
+            '-avoid_negative_ts make_zero ' .
             '-f hls -hls_time %d -hls_init_time %.1f -hls_list_size %d ' .
             '-hls_flags delete_segments+append_list+omit_endlist+program_date_time+split_by_time ' .
             '-break_non_keyframes 1 ' .

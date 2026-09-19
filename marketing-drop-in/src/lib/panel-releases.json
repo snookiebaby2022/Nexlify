@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.95",
+  "latestVersion": "2.0.96",
   "releases": [
+    {
+      "version": "2.0.96",
+      "date": "2026-09-19",
+      "channel": "stable",
+      "summary": "Auto-size media FPM on every panel/LB install; Live Connections zap-ghost and session-uptime fixes.",
+      "changelog": [
+        "harden-iptv-install + installer-finalize + production-stack run tune-capacity-50k so media/auth/panel FPM match box RAM+CPU",
+        "Classic LB: prune zap ghosts, reset session uptime after stalls, skip load-test IPs in Live Connections sync",
+        "Capacity: CPU-aware media FPM ceiling to avoid oversubscription buffering"
+      ],
+      "fixes": [
+        "Media FPM could stay hand-oversized after one-click install/update (buffering before true max)",
+        "Live Connections showed ghost rows after channel zap with maxConnections=1"
+      ],
+      "notes": [
+        "Existing boxes: sudo bash scripts/harden-iptv-install.sh once. Hard-refresh Admin after update."
+      ]
+    },
     {
       "version": "2.0.95",
       "date": "2026-09-18",

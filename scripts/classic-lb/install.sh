@@ -272,6 +272,33 @@ echo "* * * * * root NEXLIFY_LB_ENV=${ENV_FILE} bash ${ROOT}/ffmpeg-idle-reaper.
   > /etc/cron.d/nexlify-classic-lb-reaper
 chmod 644 /etc/cron.d/nexlify-classic-lb-reaper
 
+# Stuck-packager watchdog (alive PID, no fresh segments → restart)
+PHP_BIN="$(command -v php8.4 || command -v php8.3 || command -v php || true)"
+if [ -n "$PHP_BIN" ] && [ -f "$INSTALL_ROOT/php/packager_watchdog.php" ]; then
+  echo "* * * * * root NEXLIFY_LB_ENV=${ENV_FILE} ${PHP_BIN} ${INSTALL_ROOT}/php/packager_watchdog.php >> /var/log/nexlify-lb-packager-watchdog.log 2>&1" \
+    > /etc/cron.d/nexlify-classic-lb-watchdog
+  chmod 644 /etc/cron.d/nexlify-classic-lb-watchdog
+fi
+
+# Panel (any install): when panel tree is present, sync packager errors into Stream logs.
+# Remote LBs are polled via /lb/packager-errors.json by the same panel cron.
+PANEL_DIR_CANDIDATES=("/opt/nexlify-panel" "/home/nexlify-panel" "/home/nexlify")
+for pd in "${PANEL_DIR_CANDIDATES[@]}"; do
+  if [ -f "$pd/scripts/sync-classic-lb-packager-errors.cjs" ] && [ -f "$pd/package.json" ]; then
+    if [ -x "$pd/scripts/harden-iptv-install.sh" ]; then
+      bash "$pd/scripts/harden-iptv-install.sh" || true
+    elif [ -x "$pd/scripts/install-streaming-stability-cron.sh" ]; then
+      PANEL_DIR="$pd" bash "$pd/scripts/install-streaming-stability-cron.sh" || true
+    else
+      echo "* * * * * root cd $pd && /usr/bin/node scripts/sync-classic-lb-packager-errors.cjs >> /var/log/nexlify-lb-packager-errors.log 2>&1" \
+        > /etc/cron.d/nexlify-lb-packager-errors
+      chmod 644 /etc/cron.d/nexlify-lb-packager-errors
+    fi
+    echo "Packager→panel Stream logs sync enabled ($pd)"
+    break
+  fi
+done
+
 # Disable conflicting apache if present
 systemctl disable --now apache2 2>/dev/null || true
 

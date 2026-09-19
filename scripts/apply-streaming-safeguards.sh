@@ -34,8 +34,9 @@ install_cron() {
   ( crontab -l 2>/dev/null | grep -v "$tag" || true; echo "$line" ) | crontab -
 }
 install_cron '* * * * * /opt/nexlify-panel/scripts/prune-stale-live-connections.sh >> /var/log/nexlify-prune-conn.log 2>&1' 'prune-stale-live-connections'
+install_cron '* * * * * cd /opt/nexlify-panel && /usr/bin/node scripts/sync-classic-lb-packager-errors.cjs >> /var/log/nexlify-lb-packager-errors.log 2>&1' 'sync-classic-lb-packager-errors'
 install_cron '*/5 * * * * /opt/nexlify-panel/scripts/nexlify-watchdog.sh >> /var/log/nexlify-watchdog.log 2>&1' 'nexlify-watchdog.sh'
-log "cron: prune (1m) + watchdog (5m)"
+log "cron: prune (1m) + lb packager errors (1m) + watchdog (5m)"
 
 # Domain panels: nginx owns :443 — restore HTTPS vhost if release script commented it out.
 if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY" ] && ! echo "$PRIMARY" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
