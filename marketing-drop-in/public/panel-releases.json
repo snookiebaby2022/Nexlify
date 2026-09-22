@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.96",
+  "latestVersion": "2.0.97",
   "releases": [
+    {
+      "version": "2.0.97",
+      "date": "2026-09-22",
+      "channel": "stable",
+      "summary": "Live Connections duration uses UTC timestamps so uptime no longer sticks at 00m 00s on non-UTC hosts.",
+      "changelog": [
+        "Classic LB MySQL connection heartbeats write UTC_TIMESTAMP and force session time_zone=+00:00",
+        "Admin Live Connections duration clamps legacy future startedAt values from local-NOW+Z exports"
+      ],
+      "fixes": [
+        "Live Connections duration stuck at 00m 00s on CEST (and other non-UTC) MySQL hosts"
+      ],
+      "notes": [
+        "Hard-refresh Admin after update. Classic LB nodes need the updated scripts/classic-lb/php/lib.php (included in this tarball)."
+      ]
+    },
     {
       "version": "2.0.96",
       "date": "2026-09-19",

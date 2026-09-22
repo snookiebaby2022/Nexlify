@@ -82,6 +82,8 @@ function mysql_pdo(): ?\PDO
                 \PDO::ATTR_PERSISTENT => cfg('MYSQL_PERSISTENT', '1') === '1',
             ]
         );
+        // Match DATE_FORMAT(...Z) / panel Prisma: session must be UTC (not OS local).
+        $pdo->exec("SET time_zone = '+00:00'");
     } catch (\Throwable $e) {
         $pdo = null;
     }
@@ -163,15 +165,16 @@ function touch_connection(string $lineId, string $streamId, string $ip, ?string 
     if (!$pdo) {
         return;
     }
-    // Reset started_at when the prior heartbeat is older than the stall gap.
+    // UTC only — local NOW() + DATE_FORMAT(...Z) made Live Connections duration
+    // stick at 00m 00s on CEST hosts (panel parsed wall-clock as UTC → future startedAt).
     $stmt = $pdo->prepare(
         'INSERT INTO live_connections (line_id, stream_id, ip, user_agent, bytes, started_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))
+         VALUES (?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))
          ON DUPLICATE KEY UPDATE
            user_agent = COALESCE(VALUES(user_agent), user_agent),
-           bytes = IF(last_seen_at < (NOW(3) - INTERVAL ? SECOND), VALUES(bytes), GREATEST(bytes, VALUES(bytes))),
-           started_at = IF(last_seen_at < (NOW(3) - INTERVAL ? SECOND), NOW(3), started_at),
-           last_seen_at = NOW(3)'
+           bytes = IF(last_seen_at < (UTC_TIMESTAMP(3) - INTERVAL ? SECOND), VALUES(bytes), GREATEST(bytes, VALUES(bytes))),
+           started_at = IF(last_seen_at < (UTC_TIMESTAMP(3) - INTERVAL ? SECOND), UTC_TIMESTAMP(3), started_at),
+           last_seen_at = UTC_TIMESTAMP(3)'
     );
     $gapSec = max(30, (int) round($resetGapMs / 1000));
     $stmt->execute([$lineId, $streamId, $ip, $ua, max(0, $bytes), $gapSec, $gapSec]);
@@ -366,7 +369,7 @@ function list_connections(int $staleSecs = 300): array
                 DATE_FORMAT(started_at, "%Y-%m-%dT%H:%i:%s.%fZ") AS startedAt,
                 DATE_FORMAT(last_seen_at, "%Y-%m-%dT%H:%i:%s.%fZ") AS lastSeenAt
          FROM live_connections
-         WHERE last_seen_at >= (NOW(3) - INTERVAL ? SECOND)
+         WHERE last_seen_at >= (UTC_TIMESTAMP(3) - INTERVAL ? SECOND)
          ORDER BY last_seen_at DESC
          LIMIT 5000'
     );
@@ -411,7 +414,7 @@ function prune_stale_connections(int $staleSecs = 600): int
         return 0;
     }
     $stmt = $pdo->prepare(
-        'DELETE FROM live_connections WHERE last_seen_at < (NOW(3) - INTERVAL ? SECOND)'
+        'DELETE FROM live_connections WHERE last_seen_at < (UTC_TIMESTAMP(3) - INTERVAL ? SECOND)'
     );
     $stmt->execute([$staleSecs]);
     return (int) $stmt->rowCount();

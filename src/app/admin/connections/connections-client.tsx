@@ -104,7 +104,8 @@ function formatConnDuration(
   if (!startedAt) return "—";
   const start = new Date(startedAt).getTime();
   if (!Number.isFinite(start)) return "—";
-  const sec = Math.max(0, Math.floor((nowMs - start) / 1000));
+  // Clamp future startedAt (legacy MySQL local-NOW exported as Z) so duration isn't stuck at 00m 00s.
+  const sec = Math.max(0, Math.floor((nowMs - Math.min(start, nowMs)) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
