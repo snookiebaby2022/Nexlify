@@ -203,15 +203,16 @@ fi
 # --- nginx site + tuning ---
 LISTEN_PORT="${LISTEN_HTTP:-8090}"
 chattr -i /etc/nginx/conf.d/00-nexlify-lb-tuning.conf /etc/nginx/conf.d/nexlify-classic-lb.conf 2>/dev/null || true
-sed -e "s|php8.4-fpm-lb-auth|php${PHP_VER}-fpm-lb-auth|g" \
-    -e "s|php8.4-fpm-lb-media|php${PHP_VER}-fpm-lb-media|g" \
-    "$ROOT/nginx-tuning.conf" > /etc/nginx/conf.d/00-nexlify-lb-tuning.conf
 
 CONF_OUT=/etc/nginx/conf.d/nexlify-classic-lb.conf
 HLS_STATIC_PORT="${HLS_STATIC_PORT:-8092}"
+# Strip UTF-8 BOM (Windows editors) — nginx treats BOM as an unknown directive.
 sed -e "s|__LISTEN_PORT__|${LISTEN_PORT}|g" \
     -e "s|__HLS_STATIC_PORT__|${HLS_STATIC_PORT}|g" \
-    "$ROOT/nginx-lb.conf" > "$CONF_OUT"
+    "$ROOT/nginx-lb.conf" | sed '1s/^\xEF\xBB\xBF//' > "$CONF_OUT"
+sed -e "s|php8.4-fpm-lb-auth|php${PHP_VER}-fpm-lb-auth|g" \
+    -e "s|php8.4-fpm-lb-media|php${PHP_VER}-fpm-lb-media|g" \
+    "$ROOT/nginx-tuning.conf" | sed '1s/^\xEF\xBB\xBF//' > /etc/nginx/conf.d/00-nexlify-lb-tuning.conf
 # Avoid duplicate server blocks if an older sites-enabled copy exists
 rm -f /etc/nginx/sites-enabled/nexlify-classic-lb.conf \
       /etc/nginx/sites-available/nexlify-classic-lb.conf 2>/dev/null || true
