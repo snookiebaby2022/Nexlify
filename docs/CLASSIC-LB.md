@@ -37,6 +37,8 @@ export LB_SERVER_ID="<StreamServer id>"
 sudo bash scripts/classic-lb/install.sh
 ```
 
+Install copies nginx/PHP pool templates and **strips a UTF-8 BOM** if present (Windows editors). A BOM makes nginx fail with `unknown directive` on the first line — fixed in `install.sh` so customer installs are safe.
+
 Then: `CLASSIC_LB_HOST=ip:8090 SET_TOPOLOGY=1 node scripts/ensure-classic-lb-server.cjs`
 and `CLASSIC_LB_HOST=ip:8090 bash scripts/cutover-classic-lb.sh`.
 
